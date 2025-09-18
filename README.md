@@ -1,10 +1,12 @@
-# CodeFlowGraph: Cognitive Load Optimized Code Analysis Tool
+# CodeFlow: Cognitive Load Optimized Code Analysis Tool
+
+<img src="logo.png"/>
 
 ## Overview
 
-CodeFlowGraph is a powerful Python-based code analysis tool designed to help developers and autonomous agents understand complex codebases with minimal cognitive overhead. It generates detailed call graphs, identifies critical code elements, and provides semantic search capabilities, all while adhering to principles that prioritize human comprehension.
+CodeFlow is a powerful Python-based code analysis tool designed to help developers and autonomous agents understand complex codebases with minimal cognitive overhead. It generates detailed call graphs, identifies critical code elements, and provides semantic search capabilities, all while adhering to principles that prioritize human comprehension.
 
-By extracting rich metadata from Abstract Syntax Trees (ASTs) and leveraging a persistent vector store (ChromaDB), CodeFlowGraph enables efficient querying and visualization of code structure and behavior.
+By extracting rich metadata from Abstract Syntax Trees (ASTs) and leveraging a persistent vector store (ChromaDB), CodeFlow enables efficient querying and visualization of code structure and behavior.
 
 The tool provides two main interfaces:
 - **CLI Tool**: A command-line interface for direct analysis and querying of codebases.
@@ -58,7 +60,7 @@ The tool provides two main interfaces:
 
 ## Requirements
 
-Before running CodeFlowGraph, ensure you have Python 3.8+ and the following dependencies installed:
+Before running CodeFlow, ensure you have Python 3.8+ and the following dependencies installed:
 
 ```txt
 chromadb
@@ -77,8 +79,8 @@ pydantic
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/yourusername/codeflowgraph.git
-cd codeflowgraph
+git clone https://github.com/yourusername/codeflow.git
+cd codeflow
 pip install -e .
 ```
 
@@ -164,7 +166,7 @@ The `code_analysis_report.json` provides a comprehensive JSON structure includin
 
 ### MCP Server
 
-The MCP server provides programmatic access to CodeFlowGraph's analysis capabilities through the Model Context Protocol. It can be integrated with AI assistants, IDEs, and other MCP-compatible tools.
+The MCP server provides programmatic access to CodeFlow's analysis capabilities through the Model Context Protocol. It can be integrated with AI assistants, IDEs, and other MCP-compatible tools.
 
 #### Starting the Server
 
