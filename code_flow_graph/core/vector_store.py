@@ -5,7 +5,6 @@ This version is type-safe and expects enriched FunctionNode objects.
 
 from typing import List, Dict, Any
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 import uuid
 import json # For serializing complex metadata
@@ -171,7 +170,7 @@ class CodeVectorStore:
         )
         return doc_id
 
-    def query_functions(self, query: str, n_results: int = 10, where_filter: Dict = None) -> List[Dict]:
+    def query_functions(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
         """
         Query for functions using semantic search.
 

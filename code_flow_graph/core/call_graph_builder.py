@@ -4,13 +4,11 @@ Uses explicit data structures to minimize cognitive load.
 """
 
 import os
-from typing import Dict, List, Set, Optional, Tuple, Any
+from typing import Dict, List, Set, Optional, Any
 from dataclasses import dataclass, field
-import re
 from pathlib import Path
 import ast
-from collections import defaultdict
-import sys # For getting the project root
+import sys
 import itertools
 
 from code_flow_graph.core.ast_extractor import CodeElement, FunctionElement
@@ -208,7 +206,7 @@ class CallGraphBuilder:
             # Fallback to regex-based extraction - keep for robustness, but AST is preferred
             # self._extract_calls_regex_fallback(func_element)
 
-    def _find_function_node(self, tree: ast.AST, func_name: str, line_start: int) -> Optional[ast.FunctionDef]:
+    def _find_function_node(self, tree: ast.AST, func_name: str, line_start: int) -> Optional[ast.FunctionDef|ast.AsyncFunctionDef]:
         """Find the specific function node in the AST tree by name and approximate line number."""
         class FunctionFinder(ast.NodeVisitor):
             def __init__(self, target_name: str, target_line: int):
