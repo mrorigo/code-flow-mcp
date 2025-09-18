@@ -5,7 +5,7 @@ Main orchestrator for code graph analysis with corrected pipeline logic.
 from tqdm import tqdm
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import argparse
 
@@ -13,7 +13,7 @@ import argparse
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.ast_extractor import PythonASTExtractor, TypeScriptASTExtractor, FunctionElement, ClassElement
-from core.call_graph_builder import CallGraphBuilder
+from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
 from core.ast_extractor import CodeElement # Import CodeElement for typing hints
 
@@ -33,13 +33,15 @@ class CodeGraphAnalyzer:
         self.language = language.lower()
         self.extractor = self._get_extractor()
         self.graph_builder = CallGraphBuilder()
+        # Pass the root_directory to the graph_builder for consistent FQN generation
+        self.graph_builder.project_root = root_directory
 
         # Vector store path derived from root_directory for project-specific persistence
         vector_store_path = self.root_directory / "code_vectors_chroma"
         try:
             self.vector_store = CodeVectorStore(persist_directory=str(vector_store_path))
         except Exception as e:
-            print(f"Could not start CodeVectorStore at {vector_store_path}. Vector-based features will be disabled. Error: {e}")
+            print(f"Could not start CodeVectorStore at {vector_store_path}. Vector-based features will be disabled. Error: {e}", file=sys.stderr)
             self.vector_store = None
 
         self.all_elements: List[CodeElement] = []
@@ -65,6 +67,7 @@ class CodeGraphAnalyzer:
 
         # Step 1: Extract AST elements
         print("\n📖 Step 1: Extracting AST elements...")
+        self.extractor.project_root = self.root_directory # Set project root for extractor too
         self.all_elements = self.extractor.extract_from_directory(self.root_directory)
         print(f"   Found {len(self.all_elements)} code elements")
 
@@ -97,7 +100,6 @@ class CodeGraphAnalyzer:
         This method uses the CORRECT data type (FunctionNode) after the graph is built.
         """
         if not self.vector_store:
-            # Should not be reached if self.vector_store is checked before call
             raise ValueError("Vector store is not initialized.")
         if not self.graph_builder.functions:
             print("   No functions found in graph builder, skipping vector store population.")
@@ -108,27 +110,25 @@ class CodeGraphAnalyzer:
 
         for node in tqdm(graph_functions, desc="Storing functions"):
             try:
-                # Read source code from the file path associated with the node
                 with open(node.file_path, 'r', encoding='utf-8') as f:
                     source_code = f.read()
                 self.vector_store.add_function_node(node, source_code)
             except FileNotFoundError:
-                print(f"   Warning: Source file for node {node.fully_qualified_name} not found at {node.file_path}. Skipping.")
+                print(f"   Warning: Source file for node {node.fully_qualified_name} not found at {node.file_path}. Skipping.", file=sys.stderr)
             except Exception as e:
-                print(f"   Warning: Could not process/store node {node.fully_qualified_name}: {e}")
+                print(f"   Warning: Could not process/store node {node.fully_qualified_name}: {e}", file=sys.stderr)
 
         for edge in tqdm(self.graph_builder.edges, desc="Storing edges"):
             try:
                 self.vector_store.add_edge(edge)
             except Exception as e:
-                print(f"   Warning: Could not add edge {edge.caller} -> {edge.callee}: {e}")
+                print(f"   Warning: Could not add edge {edge.caller} -> {edge.callee}: {e}", file=sys.stderr)
 
         stats = self.vector_store.get_stats()
         print(f"   Vector store populated. Total documents: {stats.get('total_documents', 'N/A')}")
 
     def _generate_report(self, classes: List[ClassElement]) -> Dict[str, Any]:
         """Generate a comprehensive analysis report using graph data."""
-        # Ensure graph_builder has data, especially if analysis was skipped for some reason
         if not self.graph_builder.functions:
             return {
                 "summary": {"total_functions": 0, "total_edges": 0},
@@ -147,6 +147,7 @@ class CodeGraphAnalyzer:
                     "fully_qualified_name": ep.fully_qualified_name,
                     "file_path": ep.file_path,
                     "line_number": ep.line_start,
+                    "line_end": ep.line_end,
                     "is_method": ep.is_method,
                     "class_name": ep.class_name,
                     "is_async": ep.is_async,
@@ -154,6 +155,13 @@ class CodeGraphAnalyzer:
                     "incoming_connections": len(ep.incoming_edges),
                     "outgoing_connections": len(ep.outgoing_edges),
                     "parameters": ep.parameters,
+                    "complexity": ep.complexity,
+                    "nloc": ep.nloc,
+                    "external_dependencies": ep.external_dependencies,
+                    "decorators": ep.decorators,
+                    "catches_exceptions": ep.catches_exceptions,
+                    "local_variables_declared": ep.local_variables_declared,
+                    "hash_body": ep.hash_body,
                 }
                 for ep in graph_entry_points
             ],
@@ -166,10 +174,17 @@ class CodeGraphAnalyzer:
         }
         return report
 
-    def query(self, question: str, n_results: int = 5) -> None:
-        """Query the vector store for insights and print the results."""
+    def query(self, question: str, n_results: int = 5, generate_mermaid: bool = False, llm_optimized_mermaid: bool = False) -> None: # NEW: llm_optimized_mermaid flag
+        """
+        Query the vector store for insights and print the results.
+        Args:
+            question: The semantic query string.
+            n_results: Number of results to return.
+            generate_mermaid: If True, also generates a Mermaid graph highlighting query results.
+            llm_optimized_mermaid: If True, generates Mermaid graph optimized for LLM token count.
+        """
         if not self.vector_store:
-            print("Vector store is not available. Cannot perform query.")
+            print("Vector store is not available. Cannot perform query.", file=sys.stderr)
             return
 
         print(f"\n🔍 Running semantic search for: '{question}'")
@@ -179,16 +194,44 @@ class CodeGraphAnalyzer:
             print("   No relevant functions found. Try a different query.")
             return
 
-        print(f"\nTop {len(results)} results:")
+        print(f"\n# Top {len(results)} results:")
+        highlight_fqns = []
         for i, result in enumerate(results, 1):
             meta = result['metadata']
-            print("-" * 20)
+            fqn = meta.get('fully_qualified_name')
+            if fqn:
+                highlight_fqns.append(fqn)
+
             print(f"{i}. {meta.get('name')} (Similarity: {1 - result['distance']:.3f})")
-            print(f"   FQN: {meta.get('fully_qualified_name')}")
-            print(f"   Location: {meta.get('file_path')}:{meta.get('line_start')}")
+            print(f"   FQN: {fqn}")
+            print(f"   Location: {meta.get('file_path')}:L{meta.get('line_start')}-{meta.get('line_end')}")
             print(f"   Type: {'Method' if meta.get('is_method') else 'Function'}{' (async)' if meta.get('is_async') else ''}")
-            print(f"   Connections: {meta.get('incoming_degree')} in, {meta.get('outgoing_degree')} out")
+            if meta.get('incoming_degree', 0) > 0:
+                print(f"   Connections in: {meta.get('incoming_degree')}")
+            if meta.get('outgoing_degree', 0) > 0:
+                print(f"   Connections out: {meta.get('outgoing_degree')}")
+            if meta.get('complexity') is not None: print(f"   Complexity: {meta['complexity']}")
+            if meta.get('nloc') is not None: print(f"   NLOC: {meta['nloc']}")
+            if meta.get('external_dependencies'): print(f"   External Deps: {', '.join(meta['external_dependencies'])}")
+            if meta.get('decorators'): print(f"   Decorators: {', '.join([d.get('name', 'unknown') for d in meta['decorators']])}")
+            if meta.get('catches_exceptions'): print(f"   Catches: {', '.join(meta['catches_exceptions'])}")
+            if meta.get('local_variables_declared'): print(f"   Local Vars: {', '.join(meta['local_variables_declared'])}")
         print("-" * 20)
+
+        if generate_mermaid:
+            if not self.graph_builder.functions and not self.graph_builder.edges:
+                print("\n⚠️  Cannot generate Mermaid graph without full analysis data. Please run analysis first or ensure a report was generated.", file=sys.stderr)
+                return
+
+            print(f"\n# Mermaid Call Graph for relevant functions:")
+            print("```mermaid")
+            print(self.graph_builder.export_mermaid_graph(highlight_fqns=highlight_fqns, llm_optimized=llm_optimized_mermaid)) # Pass new flag
+            print("```")
+            if not llm_optimized_mermaid:
+                print("Use a Mermaid viewer (e.g., VS Code, Mermaid.live) to render this graph.")
+            else:
+                print("This Mermaid graph is optimized for LLM token count, visual styling is minimal/removed.")
+
 
     def export_report(self, output_path: str) -> None:
         """Analyze and export the report to a file."""
@@ -198,7 +241,7 @@ class CodeGraphAnalyzer:
                 json.dump(report, f, indent=2, ensure_ascii=False)
             print(f"📄 Report exported to {output_path}")
         except Exception as e:
-            print(f"❌ Error writing report to {output_path}: {e}")
+            print(f"❌ Error writing report to {output_path}: {e}", file=sys.stderr)
 
 def main():
     """Main entry point for the analyzer."""
@@ -206,7 +249,6 @@ def main():
         description="Analyze a codebase to build a call graph and identify entry points. "
                     "Optionally query an existing analysis."
     )
-    # Directory is now a positional argument, not an optional flag
     parser.add_argument("directory", nargs='?', default='.',
                         help="Path to codebase directory (default: current directory). "
                              "This directory is also used to locate the vector store "
@@ -221,39 +263,51 @@ def main():
                         help="Do not perform analysis. Assume the vector store is already populated "
                              "from a previous run in the specified directory. This flag must be "
                              "used with --query.")
+    parser.add_argument("--mermaid", action="store_true",
+                        help="Generate a Mermaid graph for query results (requires --query).")
+    parser.add_argument("--llm-optimized", action="store_true",
+                        help="Generate Mermaid graph optimized for LLM token count (removes styling). Implies --mermaid.")
+
 
     args = parser.parse_args()
 
     root_dir = Path(args.directory).resolve()
 
-    # Validate directory only if analysis is being performed
     if not args.no_analyze and not root_dir.is_dir():
-        print(f"❌ Error: {root_dir} is not a valid directory for analysis.")
+        print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
         sys.exit(1)
 
-    # Enforce --no-analyze with --query
     if args.no_analyze and not args.query:
-        print("❌ Error: The --no-analyze flag must be used with --query.")
+        print("❌ Error: The --no-analyze flag must be used with --query.", file=sys.stderr)
         sys.exit(1)
+
+    # If --llm-optimized is set, implicitly set --mermaid
+    if args.llm_optimized:
+        args.mermaid = True
+
+    if args.mermaid and not args.query:
+        print("❌ Error: The --mermaid flag must be used with --query.", file=sys.stderr)
+        sys.exit(1)
+
 
     try:
         analyzer = CodeGraphAnalyzer(root_dir, args.language)
 
         if args.no_analyze:
             print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")
-            analyzer.query(args.query)
+            analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
         elif args.query:
             # Analyze first to populate/update the store, then query
             analyzer.analyze()
-            analyzer.query(args.query)
+            analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
         else:
             # Just generate the report (implies analysis)
             analyzer.export_report(args.output)
 
     except Exception as e:
-        print(f"\n❌ An unexpected error occurred: {e}")
+        print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
