@@ -1,9 +1,10 @@
 from mcp.server.fastmcp import FastMCP
+import mcp.types as types
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
 
@@ -105,20 +106,21 @@ server = FastMCP("CodeFlowGraphMCP", lifespan=lifespan)
 
 # Tool functions with decorators
 @server.tool(name="ping")
-async def ping_tool(message: str) -> PingResponse:
+async def ping_tool(message: str = Field(description="Message to echo")) -> PingResponse:
     """
     Simple ping tool to echo a message.
-
-    Args:
-        message: The message to echo.
-    Returns:
-        PingResponse with status and echoed message.
     """
     return PingResponse(status="ok", echoed=message)
 
 
 @server.tool(name="semantic_search")
-async def semantic_search(query: str, n_results: int = 5, filters: dict = {}) -> SearchResponse:
+async def semantic_search(query: str = Field(description="Search query string"), 
+                          n_results: int = Field(default=5, description="Number of results to return"),
+                          filters: dict = Field( default_factory=dict, description="Optional filters to apply to the search results")
+                          ) -> SearchResponse:
+    """
+    Perform semantic search in codebase using vector similarity.
+    """
     # Validate parameters
     if n_results < 1:
         raise ValueError("n_results must be positive")
@@ -138,7 +140,12 @@ async def semantic_search(query: str, n_results: int = 5, filters: dict = {}) ->
 
 
 @server.tool(name="get_call_graph")
-async def get_call_graph(fqns: list[str] = [], depth: int = 1, format: str = "json") -> GraphResponse:
+async def get_call_graph(fqns: list[str] = Field(default_factory=list, description="List of fully qualified names to include in the graph"),
+                         depth: int = Field(default=1, description="Depth of the call graph to export"),
+                         format: str = Field(default="json", description="Output format, either 'json' or 'mermaid'")) -> GraphResponse:
+    """
+    Export the call graph in specified format.
+    """
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     graph = server.analyzer.builder.export_graph(format=format if format == "mermaid" else "json")
@@ -146,7 +153,15 @@ async def get_call_graph(fqns: list[str] = [], depth: int = 1, format: str = "js
 
 
 @server.tool(name="get_function_metadata")
-async def get_function_metadata(fqn: str) -> MetadataResponse:
+async def get_function_metadata(fqn: str = Field(description="Fully qualified name of the function")) -> MetadataResponse:
+    """
+    Retrieve metadata for a specific function by its fully qualified name.
+
+    Args:
+        fqn: The fully qualified name of the function to retrieve metadata for.
+    Returns:
+        MetadataResponse containing detailed function metadata.
+    """
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     node = server.analyzer.builder.functions.get(fqn)
@@ -162,148 +177,21 @@ async def get_function_metadata(fqn: str) -> MetadataResponse:
 
 @server.tool(name="query_entry_points")
 async def query_entry_points() -> EntryPointsResponse:
+    """
+    Retrieve all identified entry points in the codebase.
+    """
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     eps = server.analyzer.builder.get_entry_points()
     return EntryPointsResponse(entry_points=[vars(ep) for ep in eps])
 
-
 @server.tool(name="generate_mermaid_graph")
-async def generate_mermaid_graph(fqns: list[str] = [], llm_optimized: bool = False) -> MermaidResponse:
+async def generate_mermaid_graph(fqns: list[str] = Field(default_factory=list, description="List of fully qualified names to highlight in the graph"), 
+                                 llm_optimized: bool = Field(description="Whether to optimize the graph for LLM consumption")) -> MermaidResponse:
+    """
+    Generate a Mermaid diagram for the call graph.
+    """
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     graph = server.analyzer.builder.export_mermaid_graph(highlight_fqns=fqns, llm_optimized=llm_optimized)
     return MermaidResponse(graph=graph)
-
-# Stub for resources
-resources = []
-
-@server.tool()
-async def on_handshake(version: str) -> dict:
-    if version != "2025.6":
-        raise MCPError(4001, "Incompatible version", "Server requires version 2025.6")
-    import uuid
-    trace_id = str(uuid.uuid4())
-    logger.info(f"[{trace_id}] Handshake")
-    # Store trace_id for later use
-    server.trace_id = trace_id
-    return {"version": "2025.6", "capabilities": ["resourceDiscovery", "state"]}
-
-@server.tool()
-async def list_resources() -> list[dict]:
-    # Log trace_id from handshake if available
-    if hasattr(server, 'trace_id'):
-        logger.info(f"[{server.trace_id}] List resources")
-    return [
-        {
-            "name": "ping",
-            "type": "tool",
-            "description": "Echo message",
-            "permissions": ["read"],
-            "schema": {
-                "input": {"type": "object", "properties": {"message": {"type": "string"}}},
-                "output": PingResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "semantic_search",
-            "type": "tool",
-            "description": "Search functions semantically",
-            "permissions": ["read"],
-            "schema": {
-                "input": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "n_results": {"type": "integer", "default": 5},
-                        "filters": {"type": "object", "default": {}}
-                    }
-                },
-                "output": SearchResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "get_call_graph",
-            "type": "tool",
-            "description": "Get call graph in JSON or Mermaid format",
-            "permissions": ["read"],
-            "schema": {
-                "input": {
-                    "type": "object",
-                    "properties": {
-                        "fqns": {"type": "array", "items": {"type": "string"}, "default": []},
-                        "depth": {"type": "integer", "default": 1},
-                        "format": {"type": "string", "default": "json"}
-                    }
-                },
-                "output": GraphResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "get_function_metadata",
-            "type": "tool",
-            "description": "Get metadata for a function by FQN",
-            "permissions": ["read"],
-            "schema": {
-                "input": {"type": "object", "properties": {"fqn": {"type": "string"}}},
-                "output": MetadataResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "query_entry_points",
-            "type": "tool",
-            "description": "Get all identified entry points",
-            "permissions": ["read"],
-            "schema": {
-                "input": {},
-                "output": EntryPointsResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "generate_mermaid_graph",
-            "type": "tool",
-            "description": "Generate Mermaid graph for call graph",
-            "permissions": ["read"],
-            "schema": {
-                "input": {
-                    "type": "object",
-                    "properties": {
-                        "fqns": {"type": "array", "items": {"type": "string"}, "default": []},
-                        "llm_optimized": {"type": "boolean", "default": False}
-                    }
-                },
-                "output": MermaidResponse.model_json_schema()
-            }
-        },
-        {
-            "name": "update_context",
-            "type": "method",
-            "description": "Update session context",
-            "permissions": ["write"],
-            "schema": {
-                "input": {"type": "object", "additionalProperties": True},
-                "output": {"type": "object", "properties": {"version": {"type": "integer"}}}
-            }
-        },
-        {
-            "name": "get_context",
-            "type": "method",
-            "description": "Get session context",
-            "permissions": ["read"],
-            "schema": {
-                "input": {},
-                "output": {"type": "object", "additionalProperties": True}
-            }
-        }
-    ]
-
-@server.tool()
-async def update_context(params: dict):
-    server.context.update(params)
-    return {"version": len(server.context)}
-
-@server.tool()
-async def get_context():
-    return server.context
-
-# Tools are now registered via decorators

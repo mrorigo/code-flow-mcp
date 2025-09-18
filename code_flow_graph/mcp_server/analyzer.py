@@ -6,10 +6,10 @@ import logging
 import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
+
 from code_flow_graph.core.ast_extractor import PythonASTExtractor, CodeElement
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
-
 
 class WatcherHandler(FileSystemEventHandler):
     def __init__(self, analyzer):
@@ -17,7 +17,8 @@ class WatcherHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if event.src_path.endswith('.py'):
-            asyncio.create_task(self.analyzer._incremental_update(event.src_path))
+            logging.info(f"File modified: {event.src_path}")
+            asyncio.run_coroutine_threadsafe(self.analyzer._incremental_update(event.src_path), self.analyzer.loop)
 
 
 class MCPAnalyzer:
@@ -59,6 +60,7 @@ class MCPAnalyzer:
             logging.info("Vector store not available, skipping population")
 
         # Start file watcher
+        self.loop = asyncio.get_running_loop()
         observer = watchdog.observers.Observer()
         observer.schedule(WatcherHandler(analyzer=self), self.config['watch_directories'][0], recursive=True)
         observer.start()
@@ -77,8 +79,10 @@ class MCPAnalyzer:
             self.vector_store.add_edge(edge)
 
     async def _incremental_update(self, file_path: str):
+        logging.info(f"Starting incremental update for {file_path}")
         await asyncio.sleep(1)  # Debounce stub
         elements = await asyncio.to_thread(self.extractor.extract_from_file, Path(file_path))
+        logging.info(f"Extracted {len(elements)} elements from {file_path}")
         # Update builder/store incrementally (add new, skip same hash); if delete, remove by fqn.
         # For simplicity, re-analyze the file and update
         # Assuming elements have hash or something, but for now, just add/update
