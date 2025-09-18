@@ -89,7 +89,7 @@ class CodeGraphAnalyzer:
 
         # Step 4: Generate report
         print("\n📊 Step 4: Generating analysis report...")
-        report = self._generate_report(classes)
+        report = self._generate_report(classes, functions)
 
         print("\n✅ Analysis complete!")
         return report
@@ -127,7 +127,7 @@ class CodeGraphAnalyzer:
         stats = self.vector_store.get_stats()
         print(f"   Vector store populated. Total documents: {stats.get('total_documents', 'N/A')}")
 
-    def _generate_report(self, classes: List[ClassElement]) -> Dict[str, Any]:
+    def _generate_report(self, classes: List[ClassElement], functions: List[FunctionElement]) -> Dict[str, Any]:
         """Generate a comprehensive analysis report using graph data."""
         if not self.graph_builder.functions:
             return {
@@ -169,6 +169,11 @@ class CodeGraphAnalyzer:
                 "total": len(classes),
                 "with_methods": sum(1 for c in classes if c.methods),
                 "with_inheritance": sum(1 for c in classes if c.extends),
+            },
+            "functions_summary": {
+                "total": len(functions),
+                "with_parameters": sum(1 for f in functions if f.parameters),
+                "with_return_type": sum(1 for f in functions if f.return_type),
             },
             "call_graph": self.graph_builder.export_graph(),
         }
