@@ -11,8 +11,9 @@ from pathlib import Path
 import ast
 from collections import defaultdict
 import sys # For getting the project root
+import itertools
 
-from core.ast_extractor import CodeElement, FunctionElement
+from code_flow_graph.core.ast_extractor import CodeElement, FunctionElement
 
 @dataclass
 class CallEdge:
@@ -457,7 +458,7 @@ class CallGraphBuilder:
         """Get all identified entry points."""
         return [f for f in self.functions.values() if f.is_entry_point]
 
-    def export_graph(self, format: str = 'json') -> Optional[Dict]:
+    def export_graph(self, format: str = 'json') -> Optional[Dict | str]:
         """Export the call graph in various formats."""
         if not self.functions:
             print("Warning: No functions in graph to export", file=sys.stderr)
@@ -517,6 +518,8 @@ class CallGraphBuilder:
                 }
             }
             return graph_data
+        elif format == 'mermaid':
+            return self.export_mermaid_graph()
         return None
 
     def _generate_short_alias(self, fqn: str, existing_aliases: Set[str]) -> str:

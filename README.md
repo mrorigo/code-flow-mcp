@@ -2,186 +2,368 @@
 
 ## Overview
 
-CodeFlowGraph is a Python-based code analysis tool that builds call graphs and identifies entry points in codebases, with a strong focus on minimizing cognitive load for developers. This tool is designed to help understand complex code structures by providing a clear, structured view of function and class relationships.
+CodeFlowGraph is a powerful Python-based code analysis tool designed to help developers and autonomous agents understand complex codebases with minimal cognitive overhead. It generates detailed call graphs, identifies critical code elements, and provides semantic search capabilities, all while adhering to principles that prioritize human comprehension.
 
-The implementation follows the Cognitive Load Optimization principles, ensuring that the code is as easy to understand and maintain as possible while still providing powerful analysis capabilities.
+By extracting rich metadata from Abstract Syntax Trees (ASTs) and leveraging a persistent vector store (ChromaDB), CodeFlowGraph enables efficient querying and visualization of code structure and behavior.
+
+The tool provides two main interfaces:
+- **CLI Tool**: A command-line interface for direct analysis and querying of codebases.
+- **MCP Server**: A Model Context Protocol server that integrates with AI assistants and IDEs for real-time code analysis.
 
 ## Features
 
--   **Call Graph Generation** - Visualizes function and class call relationships
--   **Entry Point Detection** - Identifies potential entry points using multiple strategies
--   **Vector Store Integration** - Uses ChromaDB with semantic search capabilities, persisting analysis results for later queries.
--   **Language Support** - Currently supports Python and TypeScript (with Python as the default)
--   **Modular Architecture** - Separates concerns between AST extraction, graph building, and vector storage
+### Core Analysis Capabilities
+- **Deep AST Metadata Extraction (Python):** Gathers comprehensive details about functions and classes including:
+  - Parameters, return types, docstrings
+  - Cyclomatic complexity and Non-Comment Lines of Code (NLOC)
+  - Applied decorators (e.g., `@app.route`, `@transactional`)
+  - Explicitly caught exceptions
+  - Locally declared variables
+  - Inferred external library/module dependencies
+  - Source body hash for efficient change detection
+- **Intelligent Call Graph Generation:**
+  - Builds a graph of function-to-function calls.
+  - Employs multiple heuristics to identify potential entry points in the codebase.
+- **Persistent Vector Store (ChromaDB):**
+  - Stores all extracted code elements and call edges as semantic embeddings.
+  - Enables rapid semantic search and filtered queries over the codebase's functions and their metadata.
+  - Persists analysis results to disk, allowing instant querying of previously analyzed projects without re-parsing.
+
+### Visualization and Output
+- **Mermaid Diagram Visualization:**
+  - Generates text-based Mermaid Flowchart syntax for call graphs.
+  - Highlights functions relevant to a semantic query.
+  - Includes an **LLM-optimized mode** for concise, token-efficient graph representations suitable for Large Language Model ingestion, providing clear aliases and FQN mappings.
+
+### MCP Server Features
+- **Real-time Analysis:** File watching with incremental updates for dynamic codebases.
+- **Tool-based API:** Exposes analysis capabilities through MCP tools for AI assistants.
+- **Session Context:** Maintains per-session state for complex analysis workflows.
+- **Comprehensive Tools:** Semantic search, call graph generation, function metadata retrieval, entry point identification, and Mermaid graph generation.
+
+### CLI Tool Features
+- **Batch Analysis:** Complete codebase analysis with report generation.
+- **Interactive Querying:** Semantic search against analyzed codebases.
+- **Flexible Output:** JSON reports, Mermaid diagrams, and console output.
+- **Incremental Updates:** Query existing analyses without full re-processing.
+
+### Cognitive Load Optimization
+- Designed with principles to make the tool's output and its own codebase easy to understand and use.
+- **Mental Model Simplicity:** Clear, predictable patterns in code and output.
+- **Explicit Behavior:** Favor clarity over brevity, making implicit actions visible (e.g., decorators).
+- **Information Hiding & Locality:** Well-defined modules, keeping related code together.
+- **Minimal Background Knowledge:** Self-describing data, common patterns, reduced need for memorization.
+- **Strategic Abstraction:** Layers introduced only when they genuinely reduce overall complexity.
+- **Linear Understanding:** Code and output structured for easy top-to-bottom reading.
 
 ## Requirements
 
-Before running CodeFlowGraph, make sure you have the following dependencies installed:
+Before running CodeFlowGraph, ensure you have Python 3.8+ and the following dependencies installed:
 
 ```txt
-chromadb==1.1.0
-sentence-transformers==5.1.0
+chromadb
+sentence-transformers
+fastmcp
+pyyaml
+watchdog>=2.0
+pytest
+pytest-asyncio
+pydantic
 ```
 
-You can install all required dependencies using:
+## Installation
 
-```bash
-pip install -r requirements.txt
-```
-
-## Getting Started
-
-### Installation
-
-To install CodeFlowGraph, clone the repository and install the required packages:
+### From Source
+Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/yourusername/codeflowgraph.git
 cd codeflowgraph
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### Basic Usage
+This will install the package in editable mode and make both the CLI tool and MCP server available.
+
+### CLI Tool
+The CLI tool is available as a module:
+
+```bash
+python -m code_flow_graph.cli.code_flow_graph --help
+```
+
+### MCP Server
+The MCP server is available as a script:
+
+```bash
+code_flow_graph_mcp_server --help
+```
+
+## Usage
+
+### CLI Tool
+
+The `code_flow_graph.cli.code_flow_graph` module is the main entry point for command-line analysis. All commands start with:
+
+`python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY]`
+
+Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the current directory (`.`) will be used.
 
 #### 1. Analyze a Codebase and Generate a Report
 
-Run the following command in your codebase directory or specify a target directory:
+This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<YOUR_CODE_DIRECTORY>/code_vectors_chroma/`), and generate a JSON report.
 
 ```bash
 python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --language python --output my_analysis_report.json
 ```
 
--   Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the current directory (`.`) will be used.
--   This will create a `my_analysis_report.json` file and, importantly, a `code_vectors_chroma/` directory within `[YOUR_CODE_DIRECTORY]` (or current directory) containing the persistent vector store.
-
 #### 2. Querying the Codebase (Analysis + Query)
 
-If you want to analyze a directory and immediately run a semantic query:
+Run a full analysis and then immediately perform a semantic search. This will update the vector store if code has changed.
 
 ```bash
 python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --language python --query "functions that handle user authentication"
 ```
 
-This will perform the full analysis, populate/update the vector store, and then execute the query, displaying the top semantic search results.
-
 #### 3. Querying an Existing Analysis (Query Only)
 
-Once you have analyzed a codebase and its vector store has been populated (i.e., the `code_vectors_chroma/` directory exists in the target directory), you can query it directly without re-running the full analysis pipeline. This is much faster for subsequent queries.
+Once a codebase has been analyzed (i.e., the `code_vectors_chroma/` directory exists in `[YOUR_CODE_DIRECTORY]`), you can query it much faster without re-running the full analysis:
 
 ```bash
 python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --no-analyze --query "functions related to data serialization"
 ```
 
--   **`[YOUR_CODE_DIRECTORY]`**: This *must* be the same directory that was previously analyzed, as it tells the tool where to find the `code_vectors_chroma/` persistence directory.
--   **`--no-analyze`**: This flag instructs the tool to skip the AST extraction and call graph building steps, and instead load the existing vector store for querying. It must be used with `--query`.
+#### 4. Generating Mermaid Call Graphs
 
-### Command Line Arguments
+You can generate Mermaid diagrams of the call graph for functions relevant to your query.
 
-The tool accepts the following command line arguments:
+**Standard Mermaid (for visual rendering):**
+```bash
+python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "database connection pooling" --mermaid
+```
+The output is Mermaid syntax, which can be copied into a Mermaid viewer (e.g., VS Code extension, Mermaid.live) for visualization.
 
--   `<directory>`: (Positional, optional) The path to the codebase directory (default: current directory `.` ). This directory is also used as the base for the persistent ChromaDB vector store (`<directory>/code_vectors_chroma/`).
--   `--language`: The programming language to analyze (choices: `python` or `typescript`, default: `python`)
--   `--output`: The file path for the generated analysis report (default: `code_analysis_report.json`). *Only used when performing a full analysis (i.e., without `--no-analyze` and `--query` flags).*
--   `--query <QUESTION>`: Run a semantic query against the analyzed codebase or a previously stored vector store.
--   `--no-analyze`: (Flag) Do not perform analysis. Assume the vector store in the specified `directory` is already populated from a previous run. This flag **must** be used in conjunction with `--query`.
+**LLM-Optimized Mermaid (for AI agents):**
+```bash
+python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "main entry point setup" --llm-optimized
+```
+This output is stripped of visual styling and uses short aliases for node IDs, with explicit `%% Alias: ShortID = Fully.Qualified.Name` comments. This minimizes token count for LLMs while providing all necessary structural information.
 
-### Example Report Output
+#### Command Line Arguments
 
-The generated `code_analysis_report.json` report will contain:
+- `<directory>`: (Positional, optional) Path to the codebase directory (default: current directory `.`). This is also the base for the persistent ChromaDB store (`<directory>/code_vectors_chroma/`).
+- `--language`: Programming language (`python` or `typescript`, default: `python`).
+- `--output`: Output file for the analysis report (default: `code_analysis_report.json`). *Only used during full analysis.*
+- `--query <QUESTION>`: Perform a semantic query.
+- `--no-analyze`: (Flag) Skips AST extraction and graph building. Requires `--query`. Assumes an existing vector store.
+- `--mermaid`: (Flag) Generates a Mermaid graph for query results. Requires `--query`.
+- `--llm-optimized`: (Flag) Generates Mermaid graph optimized for LLM token count (removes styling). Implies `--mermaid`.
 
-1.  A `summary` of the codebase (total functions, edges, modules, etc.)
-2.  A list of identified `entry_points` with detailed metadata.
-3.  A `classes_summary`.
-4.  A `call_graph` object with:
-    -   `functions`: A dictionary where keys are fully qualified names (FQN) and values are detailed metadata for each function (name, file path, line numbers, parameters, docstring, connectivity, etc.).
-    -   `edges`: A list of all identified function calls, specifying caller, callee, file, line number, and confidence.
+#### Example Report Output
 
-This JSON format can be used for further analysis or custom visualization.
+The `code_analysis_report.json` provides a comprehensive JSON structure including a summary, identified entry points, class summaries, and a detailed call graph (functions with all metadata, and edges).
+
+### MCP Server
+
+The MCP server provides programmatic access to CodeFlowGraph's analysis capabilities through the Model Context Protocol. It can be integrated with AI assistants, IDEs, and other MCP-compatible tools.
+
+#### Starting the Server
+
+Start the MCP server with default configuration:
+
+```bash
+python -m code_flow_graph.mcp_server
+```
+
+Or with a custom configuration file:
+
+```bash
+python -m code_flow_graph.mcp_server --config path/to/config.yaml
+```
+
+#### Available Tools
+
+The server exposes the following tools through the MCP protocol:
+
+- **`ping`**: Test server connectivity
+- **`semantic_search`**: Search functions semantically using natural language queries
+- **`get_call_graph`**: Retrieve call graph in JSON or Mermaid format
+- **`get_function_metadata`**: Get detailed metadata for a specific function
+- **`query_entry_points`**: Get all identified entry points in the codebase
+- **`generate_mermaid_graph`**: Generate Mermaid diagram for call graph visualization
+- **`update_context`**: Update session context with key-value pairs
+- **`get_context`**: Retrieve current session context
+
+#### Testing with Client
+
+Use the included client to test server functionality:
+
+```bash
+python client.py
+```
+
+This performs a handshake and tests basic tool functionality.
+
+## Configuration
+
+### MCP Server Configuration
+
+The MCP server uses a YAML configuration file (default: `code_flow_graph/mcp_server/config/default.yaml`):
+
+```yaml
+watch_directories: ["code_flow_graph"]  # Directories to monitor for changes
+ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analysis
+chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
+max_graph_depth: 3  # Maximum depth for graph traversal
+```
+
+Customize these settings by creating your own config file and passing it with `--config`.
+
+## Examples
+
+### CLI Tool Examples
+
+#### Basic Analysis
+```bash
+# Analyze current directory and generate report
+python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
+
+# Analyze a specific project
+python -m code_flow_graph.cli.code_flow_graph /path/to/my/project --language python
+```
+
+#### Semantic Search
+```bash
+# Find authentication functions
+python -m code_flow_graph.cli.code_flow_graph . --query "user authentication login"
+
+# Search for database operations
+python -m code_flow_graph.cli.code_flow_graph . --query "database queries CRUD operations"
+```
+
+#### Visualization
+```bash
+# Generate Mermaid diagram for API endpoints
+python -m code_flow_graph.cli.code_flow_graph . --query "API endpoints" --mermaid
+
+# LLM-optimized graph for AI analysis
+python -m code_flow_graph.cli.code_flow_graph . --query "error handling" --llm-optimized
+```
+
+### MCP Server Examples
+
+#### Semantic Search
+```json
+{
+  "tool": "semantic_search",
+  "input": {
+    "query": "functions that handle user authentication",
+    "n_results": 5,
+    "filters": {}
+  }
+}
+```
+
+#### Get Function Metadata
+```json
+{
+  "tool": "get_function_metadata",
+  "input": {
+    "fqn": "myapp.auth.authenticate_user"
+  }
+}
+```
+
+#### Generate Call Graph
+```json
+{
+  "tool": "get_call_graph",
+  "input": {
+    "fqns": ["myapp.main"],
+    "format": "mermaid"
+  }
+}
+```
+
+#### Update Context
+```json
+{
+  "tool": "update_context",
+  "input": {
+    "current_focus": "authentication_module",
+    "analysis_depth": "detailed"
+  }
+}
+```
+
+## Testing
+
+### MCP Server Tests
+Run the MCP server test suite:
+
+```bash
+pytest tests/mcp_server/
+```
+
+This includes tests for:
+- Server initialization and tool registration
+- Tool functionality (semantic search, call graphs, etc.)
+- Configuration loading
+- File watching and incremental updates
+
+### CLI Tool Testing
+Test the CLI tool by running analysis on the test files:
+
+```bash
+# Test basic functionality
+python -m code_flow_graph.cli.code_flow_graph tests/ --output test_report.json
+
+# Test querying
+python -m code_flow_graph.cli.code_flow_graph tests/ --query "test functions"
+```
+
+### Integration Testing
+Use the client script for end-to-end testing:
+
+```bash
+python client.py
+```
+
+This tests the MCP protocol handshake and basic tool interactions.
 
 ## Architecture
 
-The tool is structured into three main components:
+The tool is structured into three main components, designed for clarity and maintainability:
 
-1.  **AST Extractor** (`core/ast_extractor.py`)
-    -   Parses source code into abstract syntax trees (ASTs).
-    -   Extracts functions and classes with metadata (e.g., parameters, return types, docstrings).
-    -   Handles Python and provides a placeholder for TypeScript.
-2.  **Call Graph Builder** (`core/call_graph_builder.py`)
-    -   Constructs a graph representation of function calls based on AST analysis.
-    -   Identifies potential entry points in the codebase using various heuristics.
-    -   Provides structured data (`FunctionNode`, `CallEdge`) for graph representation.
-3.  **Vector Store** (`core/vector_store.py`)
-    -   Integrates with [ChromaDB](https://www.trychroma.com/) to store function and edge metadata as embeddings.
-    -   Enables semantic search capabilities over the codebase's functions.
-    -   Persists data to disk (`<directory>/code_vectors_chroma/`) for efficient re-loading and querying.
+### Core Components
+1. **AST Extractor** (`core/ast_extractor.py`)
+   - Parses source code into Abstract Syntax Trees.
+   - Extracts rich metadata for `FunctionElement` and `ClassElement` objects (complexity, decorators, dependencies, etc.).
+   - Filters files based on `.gitignore` for relevant analysis.
 
-## Cognitive Load Optimization
+2. **Call Graph Builder** (`core/call_graph_builder.py`)
+   - Constructs a directed graph of function calls based on extracted AST data.
+   - Identifies application entry points using multiple heuristics.
+   - Provides structured `FunctionNode` and `CallEdge` objects, containing the rich metadata.
 
-This tool was specifically designed with the following principles in mind:
+3. **Vector Store** (`core/vector_store.py`)
+   - Integrates with [ChromaDB](https://www.trychroma.com/) for a persistent, queryable knowledge base.
+   - Stores semantic embeddings of functions and edges, along with their detailed metadata.
+   - Enables semantic search (`query_functions`) and efficient updates via source code hashing.
 
-### 1. Mental Model Simplicity
--   Uses predictable patterns and clear interfaces.
--   Avoids complex or obscure language features.
--   Prioritizes explicit code over implicit behavior.
+### MCP Server Architecture
+- **Server** (`mcp_server/server.py`): FastMCP-based server handling MCP protocol and tool registration.
+- **Analyzer** (`mcp_server/analyzer.py`): Core analysis logic with file watching for incremental updates.
+- **Tools** (`mcp_server/tools.py`): MCP tool implementations with request/response models.
+- **Configuration** (`mcp_server/config/`): YAML-based configuration management.
 
-### 2. Conditional Logic Optimization
--   Uses early returns and avoids deep nesting.
--   Makes execution paths easy to follow.
-
-### 3. Information Hiding and Locality
--   Groups related code together.
--   Uses deep modules with simple interfaces.
--   Applies DRY principles where they reduce cognitive load.
-
-### 4. Minimizing Required Background Knowledge
--   Uses self-describing data (e.g., strings instead of numeric codes).
--   Follows common patterns and conventions.
--   Avoids arbitrary mappings.
-
-### 5. Strategic Abstraction
--   Introduces abstractions only when they reduce complexity.
--   Optimizes for API usability over implementation simplicity.
-
-### 6. Linear Reading Support
--   Structures code for top-to-bottom reading.
--   Uses guard clauses and fail-fast approaches.
--   Keeps main logic paths clear.
-
-## Example Use Cases
-
-### 1. Codebase Understanding
--   Quickly identify all entry points in a large Python codebase.
--   Visualize how functions interact with each other (external visualization tools would be needed for the JSON output).
-
-### 2. Documentation Generation
--   Use the extracted function metadata to generate documentation.
--   Identify functions that lack docstrings.
-
-### 3. Code Navigation
--   Semantically query the vector store to find functions related to a specific task (e.g., "functions that handle user authentication" or "code for database transactions").
--   Jump to relevant code locations with rich metadata.
-
-### 4. Code Quality Analysis
--   Identify functions with high incoming/outgoing connectivity (potential high coupling or complexity).
--   Find functions that might be good candidates for refactoring due to being entry points or having many connections.
+### CLI Tool Architecture
+- **CodeGraphAnalyzer** (`cli/code_flow_graph.py`): Main orchestrator for analysis pipeline.
+- Command-line argument parsing and output formatting.
+- Integration with core components for analysis and querying.
 
 ## Contributing
 
-We welcome contributions to improve and expand CodeFlowGraph. Please follow these steps:
-
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/your-feature-name`).
-3.  Make your changes.
-4.  Ensure all tests pass (if any are added/present).
-5.  Submit a pull request with a clear description of your changes.
-
-### Development
-
-To install the project in editable mode for development:
-
-```bash
-pip install -e .
-```
+We welcome contributions! Please refer to the [Contributing Guide](CONTRIBUTING.md) (or similar if you create one) for details on how to get involved.
 
 ## License
 
@@ -189,19 +371,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
--   Add more robust support for TypeScript parsing (currently a placeholder).
--   Implement visualization tools for the call graph (e.g., D3.js, Graphviz export).
--   Enhance entry point detection with more sophisticated heuristics (e.g., framework-specific patterns).
--   Add capabilities to infer more details (e.g., external library calls, data flow).
--   Integrate with popular IDEs for seamless code navigation.
+- Enhanced TypeScript parsing and feature parity with Python.
+- Advanced data flow analysis (beyond simple local variables).
+- Integration with other visualization tools (e.g., Graphviz).
+- More sophisticated entry point detection for various frameworks.
+- Direct IDE integrations for real-time analysis and navigation.
+- Support for other programming languages.
+- Web-based UI for interactive code exploration.
+- Plugin system for custom analysis rules.
 
 ## Acknowledgments
 
-This project was inspired by the Cognitive Load Optimization principles and the importance of human-readable, maintainable code. Special thanks to the developers of:
--   [ChromaDB](https://github.com/chroma-core/chroma)
--   [Sentence Transformers](https://github.com/UKPLab/sentence-transformers)
--   [Python AST module](https://docs.python.org/3/library/ast.html)
-
-## Contact
-
-For questions, suggestions, or to report issues, please open an issue on the GitHub repository.
+This project is built upon the excellent work of:
+- [ChromaDB](https://www.trychroma.com/)
+- [Sentence Transformers](https://github.com/UKPLab/sentence-transformers)
+- [Python AST module](https://docs.python.org/3/library/ast.html)
+- [Mermaid.js](https://mermaid.js.org/) for diagramming.
+- [FastMCP](https://github.com/jlowin/fastmcp) for MCP server framework.
+- [Watchdog](https://github.com/gorakhargosh/watchdog) for file monitoring.

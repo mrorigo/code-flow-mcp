@@ -11,7 +11,7 @@ import uuid
 import json # For serializing complex metadata
 
 # Import the specific, enriched data types from the call graph builder
-from core.call_graph_builder import FunctionNode, CallEdge
+from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
 
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""

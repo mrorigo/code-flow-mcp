@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-flow-graph"
+version = "0.1.0"
+dependencies = [
+    "fastmcp",
+    "pyyaml",
+    "watchdog>=2.0",
+    "pytest",
+    "pytest-asyncio",
+    "pydantic"
+]
+
+[project.scripts]
+code_flow_graph_mcp_server = "code_flow_graph.mcp_server.__main__:main"
+
+[tool.setuptools.packages.find]
+exclude = ["code_vectors_chroma*"]
