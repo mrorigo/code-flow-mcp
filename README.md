@@ -65,7 +65,7 @@ Before running CodeFlow, ensure you have Python 3.8+ and the following dependenc
 ```txt
 chromadb
 sentence-transformers
-fastmcp
+mcp[cli]
 pyyaml
 watchdog>=2.0
 pytest
@@ -353,7 +353,7 @@ The tool is structured into three main components, designed for clarity and main
    - Enables semantic search (`query_functions`) and efficient updates via source code hashing.
 
 ### MCP Server Architecture
-- **Server** (`mcp_server/server.py`): FastMCP-based server handling MCP protocol and tool registration.
+- **Server** (`mcp_server/server.py`): MCP SDK-based server handling MCP protocol and tool registration.
 - **Analyzer** (`mcp_server/analyzer.py`): Core analysis logic with file watching for incremental updates.
 - **Tools** (`mcp_server/tools.py`): MCP tool implementations with request/response models.
 - **Configuration** (`mcp_server/config/`): YAML-based configuration management.
@@ -389,5 +389,5 @@ This project is built upon the excellent work of:
 - [Sentence Transformers](https://github.com/UKPLab/sentence-transformers)
 - [Python AST module](https://docs.python.org/3/library/ast.html)
 - [Mermaid.js](https://mermaid.js.org/) for diagramming.
-- [FastMCP](https://github.com/jlowin/fastmcp) for MCP server framework.
+- [MCP SDK](https://github.com/modelcontextprotocol/sdk) for MCP server framework.
 - [Watchdog](https://github.com/gorakhargosh/watchdog) for file monitoring.
