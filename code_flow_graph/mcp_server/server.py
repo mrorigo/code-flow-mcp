@@ -114,9 +114,9 @@ async def ping_tool(message: str = Field(description="Message to echo")) -> Ping
 
 
 @server.tool(name="semantic_search")
-async def semantic_search(query: str = Field(description="Search query string"), 
+async def semantic_search(query: str = Field(description="Search query string"),
                           n_results: int = Field(default=5, description="Number of results to return"),
-                          filters: dict = Field( default_factory=dict, description="Optional filters to apply to the search results")
+                          filters: dict = Field(default={}, description="Optional filters to apply to the search results")
                           ) -> SearchResponse:
     """
     Perform semantic search in codebase using vector similarity.
@@ -140,7 +140,7 @@ async def semantic_search(query: str = Field(description="Search query string"),
 
 
 @server.tool(name="get_call_graph")
-async def get_call_graph(fqns: list[str] = Field(default_factory=list, description="List of fully qualified names to include in the graph"),
+async def get_call_graph(fqns: list[str] = Field(default=[], description="List of fully qualified names to include in the graph"),
                          depth: int = Field(default=1, description="Depth of the call graph to export"),
                          format: str = Field(default="json", description="Output format, either 'json' or 'mermaid'")) -> GraphResponse:
     """
@@ -186,7 +186,7 @@ async def query_entry_points() -> EntryPointsResponse:
     return EntryPointsResponse(entry_points=[vars(ep) for ep in eps])
 
 @server.tool(name="generate_mermaid_graph")
-async def generate_mermaid_graph(fqns: list[str] = Field(default_factory=list, description="List of fully qualified names to highlight in the graph"), 
+async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description="List of fully qualified names to highlight in the graph"),
                                  llm_optimized: bool = Field(description="Whether to optimize the graph for LLM consumption")) -> MermaidResponse:
     """
     Generate a Mermaid diagram for the call graph.

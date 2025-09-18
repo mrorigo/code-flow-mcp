@@ -168,6 +168,7 @@ async def test_watcher_handler_on_modified(mock_core_components):
     }
 
     analyzer = MCPAnalyzer(config)
+    analyzer.loop = asyncio.get_running_loop()
 
     # Mock the extractor for incremental update
     mock_elements = [

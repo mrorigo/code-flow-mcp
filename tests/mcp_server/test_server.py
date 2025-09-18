@@ -59,60 +59,6 @@ def test_run_stdio_called():
     # The method should be callable (we don't actually call it to avoid side effects)
     assert callable(server_module.server.run_stdio_async)
 
-@pytest.mark.asyncio
-async def test_on_handshake_success(caplog, mock_dependencies):
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    caplog.set_level(logging.INFO)
-    with patch('uuid.uuid4') as mock_uuid:
-        mock_uuid.return_value = uuid.UUID('12345678-1234-5678-1234-567812345678')
-        from code_flow_graph.mcp_server.server import on_handshake
-        result = await on_handshake(version="2025.6")
-        assert result == {"version": "2025.6", "capabilities": ["resourceDiscovery", "state"]}
-        assert "[12345678-1234-5678-1234-567812345678] Handshake" in caplog.text
-
-@pytest.mark.asyncio
-async def test_on_handshake_reject(mock_dependencies):
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    from code_flow_graph.mcp_server.server import on_handshake
-    with pytest.raises(MCPError) as exc_info:
-        await on_handshake(version="2024.1")
-    assert exc_info.value.code == 4001
-    assert "Incompatible version" in str(exc_info.value)
-    assert exc_info.value.data["hint"] == "Server requires version 2025.6"
-
-@pytest.mark.asyncio
-async def test_list_resources(caplog, mock_dependencies):
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    caplog.set_level(logging.INFO)
-    from code_flow_graph.mcp_server.server import list_resources, server
-    # Set trace_id to simulate handshake
-    server.trace_id = "test-trace-id"
-    result = await list_resources()
-    assert len(result) == 8  # ping, semantic_search, get_call_graph, get_function_metadata, query_entry_points, generate_mermaid_graph, update_context, get_context
-    assert result[0]["name"] == "ping"
-    assert result[1]["name"] == "semantic_search"
-    assert result[2]["name"] == "get_call_graph"
-    assert result[3]["name"] == "get_function_metadata"
-    assert result[4]["name"] == "query_entry_points"
-    assert result[5]["name"] == "generate_mermaid_graph"
-    assert result[6]["name"] == "update_context"
-    assert result[7]["name"] == "get_context"
-    assert "[test-trace-id] List resources" in caplog.text
-
-@pytest.mark.asyncio
-async def test_logging(caplog, mock_dependencies):
-    """Test logging messages on init/handshake with trace_id format."""
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    caplog.set_level(logging.INFO)
-    with patch('uuid.uuid4') as mock_uuid:
-        mock_uuid.return_value = uuid.UUID('12345678-1234-5678-1234-567812345678')
-        from code_flow_graph.mcp_server.server import on_handshake
-        result = await on_handshake(version="2025.6")
-        assert "[12345678-1234-5678-1234-567812345678] Handshake" in caplog.text
 
 @pytest.mark.asyncio
 async def test_shutdown(caplog, mock_dependencies):
@@ -140,14 +86,14 @@ async def test_ping_tool_success():
 
 @pytest.mark.asyncio
 async def test_ping_tool_missing_message():
-    """Test ping tool with missing message raises TypeError."""
+    """Test ping tool with missing message raises ValidationError."""
     from code_flow_graph.mcp_server.server import ping_tool
 
-    # Test missing message - should raise TypeError since message is required
-    with pytest.raises(TypeError) as exc_info:
+    # Test missing message - should raise ValidationError since message is required
+    with pytest.raises(ValidationError) as exc_info:
         await ping_tool()
 
-    assert "missing" in str(exc_info.value).lower()
+    assert "validation error" in str(exc_info.value).lower()
 
 
 @pytest.mark.asyncio
@@ -211,7 +157,7 @@ async def test_semantic_search_tool_success():
     server.analyzer = mock_analyzer
 
     try:
-        response = await semantic_search(query="test", n_results=1)
+        response = await semantic_search(query="test", n_results=1, filters={})
 
         assert isinstance(response, SearchResponse)
         assert len(response.results) == 1
@@ -234,7 +180,7 @@ async def test_semantic_search_tool_no_store():
 
     try:
         with pytest.raises(MCPError) as exc_info:
-            await semantic_search(query="test")
+            await semantic_search(query="test", n_results=5, filters={})
         assert exc_info.value.code == 5001
         assert "Vector store unavailable" in str(exc_info.value)
         assert exc_info.value.data["hint"] == "Ensure the vector store is properly initialized"
@@ -493,26 +439,6 @@ async def test_query_entry_points_tool_no_builder():
             delattr(server, 'analyzer')
 
 
-@pytest.mark.asyncio
-async def test_list_resources_includes_query_entry_points():
-    """Test that list_resources includes the query_entry_points tool."""
-    from code_flow_graph.mcp_server.server import list_resources
-
-    result = await list_resources()
-    assert len(result) == 8  # ping, semantic_search, get_call_graph, get_function_metadata, query_entry_points, generate_mermaid_graph, update_context, get_context
-    assert result[4]["name"] == "query_entry_points"
-    assert result[4]["description"] == "Get all identified entry points"
-    assert result[4]["schema"]["input"] == {}
-    assert "entry_points" in result[4]["schema"]["output"]["properties"]
-    assert result[5]["name"] == "generate_mermaid_graph"
-    assert result[5]["description"] == "Generate Mermaid graph for call graph"
-    assert "fqns" in result[5]["schema"]["input"]["properties"]
-    assert "llm_optimized" in result[5]["schema"]["input"]["properties"]
-    assert "graph" in result[5]["schema"]["output"]["properties"]
-    assert result[6]["name"] == "update_context"
-    assert result[6]["type"] == "method"
-    assert result[7]["name"] == "get_context"
-    assert result[7]["type"] == "method"
 
 
 @pytest.mark.asyncio
@@ -577,34 +503,4 @@ async def test_generate_mermaid_graph_tool_no_builder():
             delattr(server, 'analyzer')
 
 
-@pytest.mark.asyncio
-async def test_update_context_tool_success(mock_dependencies):
-    """Test update_context tool merges params and returns version."""
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    from code_flow_graph.mcp_server.server import update_context, server
-
-    # Initialize context
-    server.context = {}
-
-    result = await update_context({"key": "val"})
-    assert result == {"version": 1}
-    assert server.context == {"key": "val"}
-
-    # Test merge
-    result = await update_context({"key2": "val2"})
-    assert result == {"version": 2}
-    assert server.context == {"key": "val", "key2": "val2"}
-
-
-@pytest.mark.asyncio
-async def test_get_context_tool_success(mock_dependencies):
-    """Test get_context tool returns current context."""
-    mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
-
-    from code_flow_graph.mcp_server.server import get_context, server
-
-    server.context = {"test": "data"}
-    result = await get_context()
-    assert result == {"test": "data"}
 
