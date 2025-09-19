@@ -15,7 +15,7 @@ from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""
 
-    def __init__(self, persist_directory: str):
+    def __init__(self, persist_directory: str, embedding_model_name: str = 'all-mpnet-base-v2'):
         """
         Initialize the ChromaDB vector store.
 
@@ -31,7 +31,7 @@ class CodeVectorStore:
             )
             # Consider using a smaller, faster model if performance is critical for embedding
             # e.g., 'all-MiniLM-L6-v2', 'all-distilroberta-v1'
-            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            self.embedding_model = SentenceTransformer(embedding_model_name)
             print(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
         except Exception as e:
             print(f"❌ Failed to initialize ChromaDB or SentenceTransformer at {persist_directory}: {e}")

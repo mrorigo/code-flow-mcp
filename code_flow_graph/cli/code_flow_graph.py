@@ -72,8 +72,8 @@ class CodeGraphAnalyzer:
         print(f"   Found {len(self.all_elements)} code elements")
 
         # Categorize elements for reporting
-        functions = [e for e in self.all_elements if isinstance(e, FunctionElement)]
-        classes = [e for e in self.all_elements if isinstance(e, ClassElement)]
+        functions = [e for e in self.all_elements if hasattr(e, 'kind') and e.kind == 'function']
+        classes = [e for e in self.all_elements if hasattr(e, 'kind') and e.kind == 'class']
         self.classes = {c.name: c for c in classes}
 
         # Step 2: Build call graph

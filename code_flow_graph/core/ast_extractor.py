@@ -367,7 +367,7 @@ class PythonASTExtractor:
             file_imports, import_from_targets = self._extract_file_imports(tree)
 
             self.visitor.source_lines = source.splitlines()
-            self.visitor.current_file = str(file_path)
+            self.visitor.current_file = str(file_path.resolve())
             self.visitor.elements = [] # Reset elements for each file
             self.visitor.file_level_imports = file_imports
             self.visitor.file_level_import_from_targets = import_from_targets
@@ -382,7 +382,7 @@ class PythonASTExtractor:
             return []
 
     def extract_from_directory(self, directory: Path) -> List[CodeElement]:
-        self.project_root = directory # Set project root for consistent FQNs later
+        self.project_root = directory.resolve() # Set project root for consistent FQNs later, resolved to absolute
         elements = []
         python_files = list(directory.rglob('*.py'))
 

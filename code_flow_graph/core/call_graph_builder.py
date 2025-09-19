@@ -141,10 +141,13 @@ class CallGraphBuilder:
         # Note: project_root should be explicitly set by the caller (CLI or MCP analyzer)
         # before calling this method. If not set, _get_module_name will use appropriate fallbacks.
 
+        print(f"Building call graph from {len(elements)} code elements...")
 
-        print("Step 1: Creating function nodes...")
-
-        function_elements = [e for e in elements if isinstance(e, FunctionElement)]
+        for e in elements:
+            print(f" - Element: {e.name} ({type(e).__name__}) in {e.file_path}")
+    
+        function_elements = [e for e in elements if hasattr(e, 'kind') and e.kind == 'function']
+        print(f"Step 1: Creating function nodes... {len(function_elements)} functions found")
         for element in function_elements:
             self.add_function(element)
 

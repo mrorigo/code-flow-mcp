@@ -31,7 +31,7 @@ class MCPAnalyzer:
             config: Configuration dictionary containing watch_directories and chromadb_path
         """
         self.config = config
-        root = Path(config['watch_directories'][0])
+        root = Path(config['watch_directories'][0]).resolve()
         logging.info(f"Initializing MCPAnalyzer with root: {root}")
         self.extractor = PythonASTExtractor()
         self.extractor.project_root = root
