@@ -20,7 +20,7 @@ from core.ast_extractor import CodeElement # Import CodeElement for typing hints
 class CodeGraphAnalyzer:
     """Main analyzer that orchestrates the entire pipeline."""
 
-    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2', max_tokens: int = 256):
         """
         Initialize the analyzer.
 
@@ -39,7 +39,7 @@ class CodeGraphAnalyzer:
         # Vector store path derived from root_directory for project-specific persistence
         vector_store_path = self.root_directory / "code_vectors_chroma"
         try:
-            self.vector_store = CodeVectorStore(persist_directory=str(vector_store_path), embedding_model_name=embedding_model)
+            self.vector_store = CodeVectorStore(persist_directory=str(vector_store_path), embedding_model_name=embedding_model, max_tokens=max_tokens)
         except Exception as e:
             print(f"Could not start CodeVectorStore at {vector_store_path}. Vector-based features will be disabled. Error: {e}", file=sys.stderr)
             self.vector_store = None
@@ -296,6 +296,8 @@ def main():
     parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2",
                         help="SentenceTransformer embedding model to use (default: all-MiniLM-L6-v2). "
                              "See https://www.sbert.net/docs/pretrained_models.html for options.")
+    parser.add_argument("--max-tokens", type=int, default=256,
+                      help="Maximum tokens per chunk for embedding model (default: 256). Adjust based on model.")
 
     args = parser.parse_args()
 
@@ -319,7 +321,7 @@ def main():
 
 
     try:
-        analyzer = CodeGraphAnalyzer(root_dir, args.language, args.embedding_model if 'embedding_model' in args else 'all-MiniLM-L6-v2')
+        analyzer = CodeGraphAnalyzer(root_dir, args.language, args.embedding_model if 'embedding_model' in args else 'all-MiniLM-L6-v2', args.max_tokens if 'max_tokens' in args else 256)
 
         if args.no_analyze:
             print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")

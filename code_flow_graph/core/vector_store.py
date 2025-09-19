@@ -15,7 +15,7 @@ from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""
 
-    def __init__(self, persist_directory: str, embedding_model_name: str = 'all-mpnet-base-v2'):
+    def __init__(self, persist_directory: str, embedding_model_name: str = 'all-mpnet-base-v2', max_tokens: int = 256):
         """
         Initialize the ChromaDB vector store.
 
@@ -33,6 +33,7 @@ class CodeVectorStore:
             # e.g., 'all-MiniLM-L6-v2', 'all-distilroberta-v1'
             self.embedding_model = SentenceTransformer(embedding_model_name)
             self.tokenizer = self.embedding_model.tokenizer
+            self.max_tokens = max_tokens
 
             print(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
         except Exception as e:
@@ -98,7 +99,7 @@ class CodeVectorStore:
         document = self._create_function_document(node, full_file_source)
 
         # Split into chunks
-        chunks = self._split_document(document, max_tokens=256)
+        chunks = self._split_document(document, max_tokens=self.max_tokens)
 
         batch_documents = []
         batch_embeddings = []
@@ -228,7 +229,7 @@ class CodeVectorStore:
                 if not chunks:
                     print(f"WARNING: No chunks created for {node.fully_qualified_name}")
                     continue
-                print(f"Chunks for {node.fully_qualified_name}: {len(chunks)}")
+                # print(f"Chunks for {node.fully_qualified_name}: {len(chunks)}")
 
                 for j, chunk in enumerate(chunks):
                     # Skip empty chunks

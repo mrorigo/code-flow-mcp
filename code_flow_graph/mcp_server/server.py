@@ -25,7 +25,7 @@ class PingResponse(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    results: list[dict]
+    results: list[dict] | str
 
 
 class GraphResponse(BaseModel):
@@ -113,10 +113,52 @@ async def ping_tool(message: str = Field(description="Message to echo")) -> Ping
     return PingResponse(status="ok", echoed=message)
 
 
+def format_search_results_as_markdown(results: list[dict]) -> str:
+    """
+    Helper function to format search results as a markdown string optimized for LLM ingestion.
+    """
+    if not results:
+        return "No results found."
+
+    markdown = "# Semantic Search Results\n\n"
+    for i, result in enumerate(results, 1):
+        metadata = result.get('metadata', {})
+        markdown += f"## Result {i}\n"
+        # markdown += f"- **ID**: {result.get('id', 'N/A')}\n"
+        markdown += f"- **Distance**: {result.get('distance', 'N/A')}\n"
+        markdown += f"- **Fully Qualified Name**: {metadata.get('fully_qualified_name', 'N/A')}\n"
+        markdown += f"- **Name**: {metadata.get('name', 'N/A')}\n"
+        markdown += f"- **Type**: {metadata.get('type', 'N/A')}\n"
+        markdown += f"- **Class**: {metadata.get('class_name', 'N/A')}\n"
+        markdown += f"- **File Path**: {metadata.get('file_path', 'N/A')}\n"
+        markdown += f"- **Line Start**: {metadata.get('line_start', 'N/A')}\n"
+        markdown += f"- **Line End**: {metadata.get('line_end', 'N/A')}\n"
+        # markdown += f"- **Parameters**: {metadata.get('parameter_count', 'N/A')} ({', '.join(metadata.get('parameters', []))})\n"
+        markdown += f"- **Return Type**: {metadata.get('return_type', 'N/A')}\n"
+        markdown += f"- **Is Method**: {metadata.get('is_method', 'N/A')}\n"
+        markdown += f"- **Is Async**: {metadata.get('is_async', 'N/A')}\n"
+        markdown += f"- **Is Entry Point**: {metadata.get('is_entry_point', 'N/A')}\n"
+        markdown += f"- **Access Modifier**: {metadata.get('access_modifier', 'N/A')}\n" if metadata.get('access_modifier') else ""
+        markdown += f"- **Complexity**: {metadata.get('complexity', 'N/A')}\n"
+        # markdown += f"- **NLOC**: {metadata.get('nloc', 'N/A')}\n"
+        markdown += f"- **Incoming Degree**: {metadata.get('incoming_degree', 'N/A')}\n"
+        markdown += f"- **Outgoing Degree**: {metadata.get('outgoing_degree', 'N/A')}\n"
+        markdown += f"- **External Deps**: {', '.join(metadata.get('external_dependencies', []))}\n" if metadata.get('external_dependencies') else ""
+        markdown += f"- **Decorators**: {', '.join(metadata.get('decorators', []))}\n" if metadata.get('decorators') else ""
+        markdown += f"- **Catches**: {', '.join(metadata.get('catches_exceptions', []))}\n" if metadata.get('catches_exceptions') else ""
+        markdown += f"- **Local Variables**: {', '.join(metadata.get('local_variables_declared', []))}\n"
+        markdown += f"- **Has Docstring**: {metadata.get('has_docstring', 'N/A')}\n"
+        # markdown += f"- **Hash Body**: {metadata.get('hash_body', 'N/A')}\n"
+        markdown += f"- **Document**: {result.get('document', 'N/A')}\n"
+        markdown += "\n"
+    return markdown
+
+
 @server.tool(name="semantic_search")
 async def semantic_search(query: str = Field(description="Search query string"),
                           n_results: int = Field(default=5, description="Number of results to return"),
-                          filters: dict = Field(default={}, description="Optional filters to apply to the search results")
+                          filters: dict = Field(default={}, description="Optional filters to apply to the search results"),
+                          format: str = Field(default="markdown", description="Output format: 'markdown' or 'json'")
                           ) -> SearchResponse:
     """
     Perform semantic search in codebase using vector similarity.
@@ -132,7 +174,11 @@ async def semantic_search(query: str = Field(description="Search query string"),
         if len(results) > 10:
             results = results[:10]
             logger.warning(f"Truncated semantic search results from {len(results)} to 10")
-        return SearchResponse(results=results)
+        if format == "markdown":
+            formatted_results = format_search_results_as_markdown(results)
+            return SearchResponse(results=formatted_results)
+        else:
+            return SearchResponse(results=results)
     except Exception as e:
         if "Invalid parameters" in str(e) or isinstance(e, ValueError):
             raise MCPError(4001, "Invalid parameters", "Check parameter values and ensure they are valid") from e
