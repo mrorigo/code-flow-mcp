@@ -108,21 +108,42 @@ class CodeGraphAnalyzer:
         graph_functions = list(self.graph_builder.functions.values())
         print(f"   Storing {len(graph_functions)} functions and {len(self.graph_builder.edges)} edges...")
 
-        for node in tqdm(graph_functions, desc="Storing functions"):
-            try:
-                with open(node.file_path, 'r', encoding='utf-8') as f:
-                    source_code = f.read()
-                self.vector_store.add_function_node(node, source_code)
-            except FileNotFoundError:
-                print(f"   Warning: Source file for node {node.fully_qualified_name} not found at {node.file_path}. Skipping.", file=sys.stderr)
-            except Exception as e:
-                print(f"   Warning: Could not process/store node {node.fully_qualified_name}: {e}", file=sys.stderr)
+        # Read all source files first
+        sources = {}
+        for node in graph_functions:
+            if node.file_path not in sources:
+                try:
+                    with open(node.file_path, 'r', encoding='utf-8') as f:
+                        sources[node.file_path] = f.read()
+                except FileNotFoundError:
+                    print(f"   Warning: Source file for node {node.fully_qualified_name} not found at {node.file_path}. Skipping.", file=sys.stderr)
+                    sources[node.file_path] = ""
+                except Exception as e:
+                    print(f"   Warning: Could not read source file {node.file_path}: {e}", file=sys.stderr)
+                    sources[node.file_path] = ""
 
-        for edge in tqdm(self.graph_builder.edges, desc="Storing edges"):
-            try:
-                self.vector_store.add_edge(edge)
-            except Exception as e:
-                print(f"   Warning: Could not add edge {edge.caller} -> {edge.callee}: {e}", file=sys.stderr)
+        # Batch store functions
+        try:
+            self.vector_store.add_function_nodes_batch(graph_functions, sources, batch_size=100)
+        except Exception as e:
+            print(f"   Warning: Batch function storage failed, falling back to individual: {e}", file=sys.stderr)
+            for node in tqdm(graph_functions, desc="Storing functions individually"):
+                try:
+                    source_code = sources.get(node.file_path, "")
+                    self.vector_store.add_function_node(node, source_code)
+                except Exception as e2:
+                    print(f"   Warning: Could not process/store node {node.fully_qualified_name}: {e2}", file=sys.stderr)
+
+        # Batch store edges
+        try:
+            self.vector_store.add_edges_batch(self.graph_builder.edges, batch_size=100)
+        except Exception as e:
+            print(f"   Warning: Batch edge storage failed, falling back to individual: {e}", file=sys.stderr)
+            for edge in tqdm(self.graph_builder.edges, desc="Storing edges individually"):
+                try:
+                    self.vector_store.add_edge(edge)
+                except Exception as e2:
+                    print(f"   Warning: Could not add edge {edge.caller} -> {edge.callee}: {e2}", file=sys.stderr)
 
         stats = self.vector_store.get_stats()
         print(f"   Vector store populated. Total documents: {stats.get('total_documents', 'N/A')}")

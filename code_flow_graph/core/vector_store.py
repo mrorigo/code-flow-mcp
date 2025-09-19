@@ -102,6 +102,98 @@ class CodeVectorStore:
         )
         return doc_id
 
+    def add_function_nodes_batch(self, nodes: List[FunctionNode], sources: Dict[str, str], batch_size: int = 100) -> List[str]:
+        """
+        Add multiple FunctionNodes to the vector store in batches for improved performance.
+
+        Args:
+            nodes: List of FunctionNode objects from the call graph.
+            sources: Dict mapping file_path to full source code content.
+            batch_size: Number of nodes to process in each batch.
+
+        Returns:
+            List of unique IDs of the stored documents.
+        """
+        doc_ids = []
+        for i in range(0, len(nodes), batch_size):
+            batch_nodes = nodes[i:i + batch_size]
+            batch_documents = []
+            batch_embeddings = []
+            batch_metadatas = []
+            batch_ids = []
+            seen_ids = set()
+
+            for node in batch_nodes:
+                # Use a deterministic ID for idempotency based on FQN
+                doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, node.fully_qualified_name))
+
+                # Skip if we've already seen this ID in the batch (shouldn't happen for functions, but safety check)
+                if doc_id in seen_ids:
+                    continue
+
+                seen_ids.add(doc_id)
+                doc_ids.append(doc_id)
+
+                # Check if an existing document with this FQN has the same hash_body
+                skip_node = False
+                if node.hash_body:
+                    existing_doc = self.collection.get(ids=[doc_id], include=['metadatas'])
+                    if existing_doc and existing_doc['metadatas'] and existing_doc['metadatas'][0].get('hash_body') == node.hash_body:
+                        skip_node = True
+
+                if skip_node:
+                    continue
+
+                # Get source code for this node
+                full_file_source = sources.get(node.file_path, "")
+
+                # Create a descriptive document for this function
+                document = self._create_function_document(node, full_file_source)
+                batch_documents.append(document)
+
+                # Create rich metadata from the FunctionNode
+                metadata = {
+                    "type": "function",
+                    "fully_qualified_name": node.fully_qualified_name,
+                    "name": node.name,
+                    "file_path": node.file_path,
+                    "line_start": node.line_start,
+                    "line_end": node.line_end,
+                    "is_entry_point": node.is_entry_point,
+                    "is_method": node.is_method,
+                    "class_name": node.class_name or "N/A",
+                    "parameter_count": len(node.parameters),
+                    "is_async": node.is_async,
+                    "incoming_degree": len(node.incoming_edges),
+                    "outgoing_degree": len(node.outgoing_edges),
+                    "has_docstring": bool(node.docstring),
+                    "access_modifier": node.access_modifier or "public",
+                    "complexity": node.complexity,
+                    "nloc": node.nloc,
+                    "external_dependencies": json.dumps(node.external_dependencies),
+                    "decorators": json.dumps(node.decorators),
+                    "catches_exceptions": json.dumps(node.catches_exceptions),
+                    "local_variables_declared": json.dumps(node.local_variables_declared),
+                    "hash_body": node.hash_body,
+                }
+                batch_metadatas.append(metadata)
+                batch_ids.append(doc_id)
+
+            # Generate embeddings for the batch
+            if batch_documents:
+                embeddings = self.embedding_model.encode(batch_documents).tolist()
+                batch_embeddings.extend(embeddings)
+
+                # Upsert the batch
+                self.collection.upsert(
+                    documents=batch_documents,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metadatas,
+                    ids=batch_ids
+                )
+
+        return doc_ids
+
     def _create_function_document(self, node: FunctionNode, full_file_source: str) -> str:
         """Create a descriptive document for vector search from a FunctionNode, including new attributes."""
         # Extract relevant source code snippet
@@ -169,6 +261,68 @@ class CodeVectorStore:
             ids=[doc_id]
         )
         return doc_id
+
+    def add_edges_batch(self, edges: List[CallEdge], batch_size: int = 100) -> List[str]:
+        """
+        Add multiple CallEdges to the vector store in batches for improved performance.
+
+        Args:
+            edges: List of CallEdge objects from the call graph.
+            batch_size: Number of edges to process in each batch.
+
+        Returns:
+            List of unique IDs of the stored documents.
+        """
+        doc_ids = []
+        for i in range(0, len(edges), batch_size):
+            batch_edges = edges[i:i + batch_size]
+            batch_documents = []
+            batch_embeddings = []
+            batch_metadatas = []
+            batch_ids = []
+            seen_ids = set()
+
+            for edge in batch_edges:
+                # Use a deterministic ID for idempotency for edges
+                doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{edge.caller}->{edge.callee}@{edge.file_path}@{edge.line_number}"))
+
+                # Skip if we've already seen this ID in the batch (deduplicate)
+                if doc_id in seen_ids:
+                    continue
+
+                seen_ids.add(doc_id)
+                doc_ids.append(doc_id)
+
+                document = f"CALL_EDGE: From {edge.caller} to {edge.callee} at line {edge.line_number}. Call type: {edge.call_type} with parameters {', '.join(edge.parameters)}."
+                batch_documents.append(document)
+
+                metadata = {
+                    "type": "call_edge",
+                    "caller": edge.caller,
+                    "callee": edge.callee,
+                    "file_path": edge.file_path,
+                    "line_number": edge.line_number,
+                    "call_type": edge.call_type,
+                    "parameters": json.dumps(edge.parameters),
+                    "confidence": edge.confidence
+                }
+                batch_metadatas.append(metadata)
+                batch_ids.append(doc_id)
+
+            # Generate embeddings for the batch
+            if batch_documents:
+                embeddings = self.embedding_model.encode(batch_documents).tolist()
+                batch_embeddings.extend(embeddings)
+
+                # Upsert the batch
+                self.collection.upsert(
+                    documents=batch_documents,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metadatas,
+                    ids=batch_ids
+                )
+
+        return doc_ids
 
     def query_functions(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
         """

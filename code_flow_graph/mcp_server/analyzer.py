@@ -7,7 +7,7 @@ import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
 
-from code_flow_graph.core.ast_extractor import PythonASTExtractor, CodeElement
+from code_flow_graph.core.ast_extractor import PythonASTExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
 
@@ -32,6 +32,7 @@ class MCPAnalyzer:
         """
         self.config = config
         root = Path(config['watch_directories'][0])
+        logging.info(f"Initializing MCPAnalyzer with root: {root}")
         self.extractor = PythonASTExtractor()
         self.extractor.project_root = root
         self.builder = CallGraphBuilder()
@@ -68,15 +69,41 @@ class MCPAnalyzer:
 
     def _populate_vector_store(self) -> None:
         """Populate the vector store with functions and edges from the builder."""
-        # Add function nodes
-        for node in self.builder.functions.values():
-            with open(node.file_path, 'r', encoding='utf-8') as f:
-                source = f.read()
-            self.vector_store.add_function_node(node, source)
+        graph_functions = list(self.builder.functions.values())
 
-        # Add edges
-        for edge in self.builder.edges:
-            self.vector_store.add_edge(edge)
+        # Read all source files first
+        sources = {}
+        for node in graph_functions:
+            if node.file_path not in sources:
+                try:
+                    with open(node.file_path, 'r', encoding='utf-8') as f:
+                        sources[node.file_path] = f.read()
+                except Exception as e:
+                    logging.warning(f"Could not read source file {node.file_path}: {e}")
+                    sources[node.file_path] = ""
+
+        # Batch store functions
+        try:
+            self.vector_store.add_function_nodes_batch(graph_functions, sources, batch_size=100)
+        except Exception as e:
+            logging.warning(f"Batch function storage failed, falling back to individual: {e}")
+            for node in graph_functions:
+                try:
+                    source = sources.get(node.file_path, "")
+                    self.vector_store.add_function_node(node, source)
+                except Exception as e2:
+                    logging.warning(f"Could not process/store node {node.fully_qualified_name}: {e2}")
+
+        # Batch store edges
+        try:
+            self.vector_store.add_edges_batch(self.builder.edges, batch_size=100)
+        except Exception as e:
+            logging.warning(f"Batch edge storage failed, falling back to individual: {e}")
+            for edge in self.builder.edges:
+                try:
+                    self.vector_store.add_edge(edge)
+                except Exception as e2:
+                    logging.warning(f"Could not add edge {edge.caller} -> {edge.callee}: {e2}")
 
     async def _incremental_update(self, file_path: str):
         logging.info(f"Starting incremental update for {file_path}")
