@@ -42,7 +42,7 @@ class MCPAnalyzer:
 
         # Initialize vector store if path exists
         if Path(config['chromadb_path']).exists():
-            self.vector_store = CodeVectorStore(persist_directory=config['chromadb_path'])
+            self.vector_store = CodeVectorStore(persist_directory=config['chromadb_path'], embedding_model_name=config['embedding_model'] if config['embedding_model'] else 'all-MiniLM-L6-v2')
         else:
             logging.warning(f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization")
 
@@ -84,7 +84,7 @@ class MCPAnalyzer:
 
         # Batch store functions
         try:
-            self.vector_store.add_function_nodes_batch(graph_functions, sources, batch_size=100)
+            self.vector_store.add_function_nodes_batch(graph_functions, sources, batch_size=512)
         except Exception as e:
             logging.warning(f"Batch function storage failed, falling back to individual: {e}")
             for node in graph_functions:
@@ -96,7 +96,7 @@ class MCPAnalyzer:
 
         # Batch store edges
         try:
-            self.vector_store.add_edges_batch(self.builder.edges, batch_size=100)
+            self.vector_store.add_edges_batch(self.builder.edges, batch_size=512)
         except Exception as e:
             logging.warning(f"Batch edge storage failed, falling back to individual: {e}")
             for edge in self.builder.edges:
