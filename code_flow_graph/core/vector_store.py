@@ -32,13 +32,43 @@ class CodeVectorStore:
             # Consider using a smaller, faster model if performance is critical for embedding
             # e.g., 'all-MiniLM-L6-v2', 'all-distilroberta-v1'
             self.embedding_model = SentenceTransformer(embedding_model_name)
+            self.tokenizer = self.embedding_model.tokenizer
+
             print(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
         except Exception as e:
             print(f"❌ Failed to initialize ChromaDB or SentenceTransformer at {persist_directory}: {e}")
             print("   Please ensure you have run 'pip install chromadb sentence-transformers'")
             raise
 
-    def add_function_node(self, node: FunctionNode, full_file_source: str) -> str:
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens in a text using the model's tokenizer."""
+        tokens = self.tokenizer.encode(text, add_special_tokens=True)
+        return len(tokens)
+
+    def _split_document(self, document: str, max_tokens: int = 256) -> List[str]:
+        """Split document into chunks that fit within max_tokens."""
+        if self._count_tokens(document) <= max_tokens:
+            return [document]
+
+        chunks = []
+        sentences = document.split(' | ')  # Split on your document separators for natural breaks
+        current_chunk = ""
+        
+        for sentence in sentences:
+            potential_chunk = current_chunk + " | " + sentence if current_chunk else sentence
+            if self._count_tokens(potential_chunk) <= max_tokens:
+                current_chunk = potential_chunk
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = sentence
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        return chunks
+
+    def add_function_node(self, node: FunctionNode, full_file_source: str) -> List[str]:
         """
         Add a fully-formed FunctionNode to the vector store.
         Checks for `hash_body` to potentially skip re-embedding unchanged functions.
@@ -48,59 +78,85 @@ class CodeVectorStore:
             full_file_source: The full source code of the file containing the function.
 
         Returns:
-            The unique ID of the stored document.
+            List of unique IDs of the stored documents (one per chunk).
         """
-        # Use a deterministic ID for idempotency based on FQN
-        doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, node.fully_qualified_name))
-
         # Check if an existing document with this FQN has the same hash_body
         if node.hash_body:
-            existing_doc = self.collection.get(ids=[doc_id], include=['metadatas'])
-            if existing_doc and existing_doc['metadatas'] and existing_doc['metadatas'][0].get('hash_body') == node.hash_body:
-                # print(f"   Skipping unchanged function: {node.fully_qualified_name}")
-                return doc_id # No need to re-embed or upsert if body hash is the same
+            # Query for any documents with same FQN and hash_body
+            existing_docs = self.collection.get(
+                where={"$and": [
+                    {"fully_qualified_name": node.fully_qualified_name},
+                    {"hash_body": node.hash_body}
+                ]},
+                include=['metadatas']
+            )
+            if existing_docs and existing_docs['metadatas']:
+                # Skip if any chunk exists with same hash_body
+                return [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{node.fully_qualified_name}_chunk_{i}")) for i in range(len(existing_docs['metadatas']))]
 
         # Create a descriptive document for this function
         document = self._create_function_document(node, full_file_source)
 
-        # Generate embedding
-        embedding = self.embedding_model.encode([document]).tolist()[0]
+        # Split into chunks
+        chunks = self._split_document(document, max_tokens=256)
 
-        # Create rich metadata from the FunctionNode
-        metadata = {
-            "type": "function",
-            "fully_qualified_name": node.fully_qualified_name,
-            "name": node.name,
-            "file_path": node.file_path,
-            "line_start": node.line_start,
-            "line_end": node.line_end, # NEW: Include end line
-            "is_entry_point": node.is_entry_point,
-            "is_method": node.is_method,
-            "class_name": node.class_name or "N/A",
-            "parameter_count": len(node.parameters),
-            "is_async": node.is_async,
-            "incoming_degree": len(node.incoming_edges),
-            "outgoing_degree": len(node.outgoing_edges),
-            "has_docstring": bool(node.docstring),
-            "access_modifier": node.access_modifier or "public",
-            # --- NEW METADATA ATTRIBUTES ---
-            "complexity": node.complexity,
-            "nloc": node.nloc,
-            "external_dependencies": json.dumps(node.external_dependencies), # Store list as JSON string for ChromaDB filtering
-            "decorators": json.dumps(node.decorators), # Store list of dicts as JSON string
-            "catches_exceptions": json.dumps(node.catches_exceptions), # Store list as JSON string
-            "local_variables_declared": json.dumps(node.local_variables_declared), # Store list as JSON string
-            "hash_body": node.hash_body, # Store hash for future comparisons
-        }
+        batch_documents = []
+        batch_embeddings = []
+        batch_metadatas = []
+        batch_ids = []
 
-        # Upsert ensures that if we run the analysis again, we update existing entries
-        self.collection.upsert(
-            documents=[document],
-            embeddings=[embedding],
-            metadatas=[metadata],
-            ids=[doc_id]
-        )
-        return doc_id
+        for i, chunk in enumerate(chunks):
+            # Skip empty chunks
+            if not chunk.strip():
+                print(f"WARNING: Skipping empty chunk {i} for {node.fully_qualified_name}")
+                continue
+
+            # Generate embedding for each chunk
+            embedding = self.embedding_model.encode([chunk]).tolist()[0]
+
+            # Create metadata (add chunk index)
+            metadata = {
+                "type": "function",
+                "fully_qualified_name": node.fully_qualified_name,
+                "name": node.name,
+                "file_path": node.file_path,
+                "line_start": node.line_start,
+                "line_end": node.line_end,
+                "is_entry_point": node.is_entry_point,
+                "is_method": node.is_method,
+                "class_name": node.class_name or "N/A",
+                "parameter_count": len(node.parameters),
+                "is_async": node.is_async,
+                "incoming_degree": len(node.incoming_edges),
+                "outgoing_degree": len(node.outgoing_edges),
+                "has_docstring": bool(node.docstring),
+                "access_modifier": node.access_modifier or "public",
+                "complexity": node.complexity,
+                "nloc": node.nloc,
+                "external_dependencies": json.dumps(node.external_dependencies),
+                "decorators": json.dumps(node.decorators),
+                "catches_exceptions": json.dumps(node.catches_exceptions),
+                "local_variables_declared": json.dumps(node.local_variables_declared),
+                "hash_body": node.hash_body,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+            }
+            doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{node.fully_qualified_name}_chunk_{i}"))
+            batch_documents.append(chunk)
+            batch_embeddings.append(embedding)
+            batch_metadatas.append(metadata)
+            batch_ids.append(doc_id)
+
+        # Upsert all chunks at once
+        if batch_documents:
+            self.collection.upsert(
+                documents=batch_documents,
+                embeddings=batch_embeddings,
+                metadatas=batch_metadatas,
+                ids=batch_ids
+            )
+
+        return batch_ids
 
     def add_function_nodes_batch(self, nodes: List[FunctionNode], sources: Dict[str, str], batch_size: int = 100) -> List[str]:
         """
@@ -112,72 +168,109 @@ class CodeVectorStore:
             batch_size: Number of nodes to process in each batch.
 
         Returns:
-            List of unique IDs of the stored documents.
+            List of unique IDs of the stored documents (one per chunk).
         """
-        doc_ids = []
+        print(f"Adding {len(nodes)} function nodes to vector store in batches of {batch_size}...")
+        all_doc_ids = []
+        doc_sizes = []
         for i in range(0, len(nodes), batch_size):
             batch_nodes = nodes[i:i + batch_size]
             batch_documents = []
             batch_embeddings = []
             batch_metadatas = []
             batch_ids = []
-            seen_ids = set()
+            seen_fqns = set()
 
             for node in batch_nodes:
-                # Use a deterministic ID for idempotency based on FQN
-                doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, node.fully_qualified_name))
-
-                # Skip if we've already seen this ID in the batch (shouldn't happen for functions, but safety check)
-                if doc_id in seen_ids:
+                # Skip if we've already seen this FQN in the batch
+                if node.fully_qualified_name in seen_fqns:
                     continue
-
-                seen_ids.add(doc_id)
-                doc_ids.append(doc_id)
+                seen_fqns.add(node.fully_qualified_name)
 
                 # Check if an existing document with this FQN has the same hash_body
                 skip_node = False
                 if node.hash_body:
-                    existing_doc = self.collection.get(ids=[doc_id], include=['metadatas'])
-                    if existing_doc and existing_doc['metadatas'] and existing_doc['metadatas'][0].get('hash_body') == node.hash_body:
+                    existing_docs = self.collection.get(
+                        where={"$and": [
+                            {"fully_qualified_name": node.fully_qualified_name},
+                            {"hash_body": node.hash_body}
+                        ]},
+                        include=['metadatas']
+                    )
+                    if existing_docs and existing_docs['metadatas']:
                         skip_node = True
 
                 if skip_node:
+                    # Add existing chunk IDs to the list
+                    existing_ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{node.fully_qualified_name}_chunk_{j}")) for j in range(len(existing_docs['metadatas']))]
+                    all_doc_ids.extend(existing_ids)
                     continue
 
                 # Get source code for this node
                 full_file_source = sources.get(node.file_path, "")
 
+                # Debug: Check source availability
+                if not full_file_source or not full_file_source.strip():
+                    print(f"WARNING: No source code available for {node.file_path}")
+
                 # Create a descriptive document for this function
                 document = self._create_function_document(node, full_file_source)
-                batch_documents.append(document)
 
-                # Create rich metadata from the FunctionNode
-                metadata = {
-                    "type": "function",
-                    "fully_qualified_name": node.fully_qualified_name,
-                    "name": node.name,
-                    "file_path": node.file_path,
-                    "line_start": node.line_start,
-                    "line_end": node.line_end,
-                    "is_entry_point": node.is_entry_point,
-                    "is_method": node.is_method,
-                    "class_name": node.class_name or "N/A",
-                    "parameter_count": len(node.parameters),
-                    "is_async": node.is_async,
-                    "incoming_degree": len(node.incoming_edges),
-                    "outgoing_degree": len(node.outgoing_edges),
-                    "has_docstring": bool(node.docstring),
-                    "access_modifier": node.access_modifier or "public",
-                    "complexity": node.complexity,
-                    "nloc": node.nloc,
-                    "external_dependencies": json.dumps(node.external_dependencies),
-                    "decorators": json.dumps(node.decorators),
-                    "catches_exceptions": json.dumps(node.catches_exceptions),
-                    "local_variables_declared": json.dumps(node.local_variables_declared),
-                    "hash_body": node.hash_body,
-                }
-                batch_metadatas.append(metadata)
-                batch_ids.append(doc_id)
+                # Debug: Check document content
+                if not document or not document.strip():
+                    print(f"WARNING: Empty document created for {node.fully_qualified_name}")
+                    continue
+
+                # Split into chunks
+                chunks = self._split_document(document, max_tokens=256)
+
+                # Debug: Check chunks
+                if not chunks:
+                    print(f"WARNING: No chunks created for {node.fully_qualified_name}")
+                    continue
+                print(f"Chunks for {node.fully_qualified_name}: {len(chunks)}")
+
+                for j, chunk in enumerate(chunks):
+                    # Skip empty chunks
+                    if not chunk.strip():
+                        print(f"WARNING: Skipping empty chunk {j} for {node.fully_qualified_name}")
+                        continue
+
+                    # Track actual chunk size
+                    doc_sizes.append(len(chunk))
+
+                    # Create metadata for each chunk
+                    metadata = {
+                        "type": "function",
+                        "fully_qualified_name": node.fully_qualified_name,
+                        "name": node.name,
+                        "file_path": node.file_path,
+                        "line_start": node.line_start,
+                        "line_end": node.line_end,
+                        "is_entry_point": node.is_entry_point,
+                        "is_method": node.is_method,
+                        "class_name": node.class_name or "N/A",
+                        "parameter_count": len(node.parameters),
+                        "is_async": node.is_async,
+                        "incoming_degree": len(node.incoming_edges),
+                        "outgoing_degree": len(node.outgoing_edges),
+                        "has_docstring": bool(node.docstring),
+                        "access_modifier": node.access_modifier or "public",
+                        "complexity": node.complexity,
+                        "nloc": node.nloc,
+                        "external_dependencies": json.dumps(node.external_dependencies),
+                        "decorators": json.dumps(node.decorators),
+                        "catches_exceptions": json.dumps(node.catches_exceptions),
+                        "local_variables_declared": json.dumps(node.local_variables_declared),
+                        "hash_body": node.hash_body,
+                        "chunk_index": j,
+                        "total_chunks": len(chunks),
+                    }
+                    doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{node.fully_qualified_name}_chunk_{j}"))
+                    batch_documents.append(chunk)
+                    batch_metadatas.append(metadata)
+                    batch_ids.append(doc_id)
+                    all_doc_ids.append(doc_id)
 
             # Generate embeddings for the batch
             if batch_documents:
@@ -192,7 +285,9 @@ class CodeVectorStore:
                     ids=batch_ids
                 )
 
-        return doc_ids
+        print(f"   Batch added {len(all_doc_ids)} function chunks with average chunk size {sum(doc_sizes)//len(doc_sizes) if doc_sizes else 0} chars")
+
+        return all_doc_ids
 
     def _create_function_document(self, node: FunctionNode, full_file_source: str) -> str:
         """Create a descriptive document for vector search from a FunctionNode, including new attributes."""
@@ -232,7 +327,11 @@ class CodeVectorStore:
             f"Code Snippet: {func_snippet[:400]}..."
         ]
 
-        return " | ".join([part for part in document_parts if part])
+        # Filter out empty/whitespace-only parts
+        filtered_parts = [part for part in document_parts if part and part.strip() and part.strip() != "None"]
+        result = " | ".join(filtered_parts)
+        
+        return result
 
     def add_edge(self, edge: CallEdge) -> str:
         """Add a call edge to the vector store."""

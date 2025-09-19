@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 code_flow_graph_mcp_server = "code_flow_graph.mcp_server.__main__:main"
+code_flow_graph = "code_flow_graph.cli.code_flow_graph:main"
 
 [tool.setuptools.packages.find]
 exclude = ["code_vectors_chroma*"]

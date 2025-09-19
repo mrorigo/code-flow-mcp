@@ -216,6 +216,7 @@ watch_directories: ["code_flow_graph"]  # Directories to monitor for changes
 ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analysis
 chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
+embedding_model: "all-MiniLM-L6-v2" # Embedding model to use
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
