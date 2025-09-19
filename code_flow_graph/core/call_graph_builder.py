@@ -138,25 +138,8 @@ class CallGraphBuilder:
 
     def build_from_elements(self, elements: List[CodeElement]) -> None:
         """Build the complete call graph from code elements."""
-        # Infer project root from the first element if not set
-        if not self.project_root and elements:
-            # Assume the root directory of the first file is a good candidate for project root
-            # or try to find a common parent directory.
-            # A more robust way would be to get it from the CLI's `directory` argument.
-            self.project_root = Path(elements[0].file_path).parent
-            # Traverse up to find a common root, or the lowest common ancestor
-            # For this simple fix, let's assume `elements` come from a single `root_directory`
-            # passed to the extractor, so `elements[0].file_path`'s parent is okay for now.
-            # Ideally, self.project_root would be explicitly set from cli/CodeGraphAnalyzer.
-            # For now, let's derive it from the main `code_flow_graph` package itself if possible
-            # to make FQN consistent.
-            try:
-                # Find the location of `code_flow_graph` package
-                package_dir = Path(__file__).parent.parent.parent
-                if package_dir.exists():
-                    self.project_root = package_dir.parent # This would be the 'probe' directory in the example
-            except Exception:
-                pass # Fallback to cwd or first file's parent
+        # Note: project_root should be explicitly set by the caller (CLI or MCP analyzer)
+        # before calling this method. If not set, _get_module_name will use appropriate fallbacks.
 
 
         print("Step 1: Creating function nodes...")
