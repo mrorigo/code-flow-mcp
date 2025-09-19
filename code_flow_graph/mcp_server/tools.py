@@ -1,1 +1,0 @@
-# This file has been refactored - all tools and models moved to server.py for proper MCP decorator usage
