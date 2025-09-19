@@ -317,14 +317,14 @@ class CodeVectorStore:
             f"Class: {node.class_name if node.class_name else 'N/A'}",
             f"Entry Point: {node.is_entry_point}",
             f"Connections: {len(node.incoming_edges)} in, {len(node.outgoing_edges)} out",
-            f"Complexity: {node.complexity or 'N/A'}", # NEW
-            f"NLOC: {node.nloc or 'N/A'}", # NEW
-            f"External Dependencies: {ext_deps_str}", # NEW
-            f"Decorators: {decorators_str}", # NEW
-            f"Catches Exceptions: {catches_str}", # NEW
-            f"Local Variables: {local_vars_str}", # NEW
-            f"Docstring: {node.docstring[:150] + '...' if node.docstring and len(node.docstring) > 150 else (node.docstring or 'None')}",
-            f"Code Snippet: {func_snippet[:400]}..."
+            f"Complexity: {node.complexity or 'N/A'}",
+            f"NLOC: {node.nloc or 'N/A'}",
+            f"External Deps: {ext_deps_str}",
+            f"Decorators: {decorators_str}",
+            f"Catches: {catches_str}",
+            f"Locals: {local_vars_str}",
+            f"Doc: {node.docstring[:150] + '...' if node.docstring and len(node.docstring) > 150 else (node.docstring or 'None')}",
+            f"Code: {func_snippet[:400]}..."
         ]
 
         # Filter out empty/whitespace-only parts
