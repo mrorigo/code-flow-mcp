@@ -7,7 +7,7 @@ import ast
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from code_flow_graph.core.python_extractor import PythonASTVisitor
+from code_flow_graph.core.python_extractor import PythonASTVisitor, PythonASTExtractor
 from code_flow_graph.core.models import FunctionElement, ClassElement
 
 
@@ -273,9 +273,9 @@ def file_operation(path: str) -> bool:
         # Set up visitor with file context
         visitor = PythonASTVisitor()
         visitor.source_lines = source.splitlines()
-        visitor.current_file = str(py_file.resolve())
-        visitor.file_level_imports = {}
-        visitor.file_level_import_from_targets = set()
+        visitor.current_file = str(temp_dir / "test.py")
+        visitor.file_level_imports = python_visitor.file_level_imports.copy()
+        visitor.file_level_import_from_targets = python_visitor.file_level_import_from_targets.copy()
 
         # Visit the AST
         visitor.visit(tree)
@@ -322,12 +322,16 @@ class GenericClass:
         # Parse the source into an AST
         tree = ast.parse(source)
 
+        # Extract imports from the source (like the real extractor does)
+        extractor = PythonASTExtractor()
+        file_imports, import_from_targets = extractor._extract_file_imports(tree)
+
         # Set up visitor with file context
         visitor = PythonASTVisitor()
         visitor.source_lines = source.splitlines()
-        visitor.current_file = str(py_file.resolve())
-        visitor.file_level_imports = {}
-        visitor.file_level_import_from_targets = set()
+        visitor.current_file = str(temp_dir / "test.py")
+        visitor.file_level_imports = file_imports
+        visitor.file_level_import_from_targets = import_from_targets
 
         # Visit the AST
         visitor.visit(tree)
@@ -371,8 +375,8 @@ class OuterClass:
         visitor.file_level_import_from_targets = set()
 
         # Visit the AST
-        visitor.visit(tree)
-        elements = visitor.elements
+        test_visitor.visit(tree)
+        elements = test_visitor.elements
 
         outer_class = next((e for e in elements if e.name == 'OuterClass'), None)
         inner_class = next((e for e in elements if e.name == 'InnerClass'), None)
@@ -404,12 +408,16 @@ class DerivedClass(BaseClass):
         # Parse the source into an AST
         tree = ast.parse(source)
 
-        # Set up visitor with file context
-        visitor = PythonASTVisitor()
-        visitor.source_lines = source.splitlines()
-        visitor.current_file = str(py_file.resolve())
-        visitor.file_level_imports = {}
-        visitor.file_level_import_from_targets = set()
+        # Extract imports from the source (like the real extractor does)
+        extractor = PythonASTExtractor()
+        file_imports, import_from_targets = extractor._extract_file_imports(tree)
+
+        # Set up visitor with file context (use a different visitor instance for this test)
+        test_visitor = PythonASTVisitor()
+        test_visitor.source_lines = source.splitlines()
+        test_visitor.current_file = str(temp_dir / "test.py")
+        test_visitor.file_level_imports = file_imports
+        test_visitor.file_level_import_from_targets = import_from_targets
 
         # Visit the AST
         visitor.visit(tree)
@@ -445,10 +453,10 @@ def complex_function(data: list) -> dict:
         # Parse the source into an AST
         tree = ast.parse(source)
 
-        # Set up visitor with file context
+        # Set up visitor with file context (use temp_dir for path)
         visitor = PythonASTVisitor()
         visitor.source_lines = source.splitlines()
-        visitor.current_file = str(py_file.resolve())
+        visitor.current_file = str(temp_dir / "test.py")
         visitor.file_level_imports = {}
         visitor.file_level_import_from_targets = set()
 
@@ -492,12 +500,16 @@ def complex_function(value: int) -> str:
         # Parse the source into an AST
         tree = ast.parse(source)
 
+        # Extract imports from the source (like the real extractor does)
+        extractor = PythonASTExtractor()
+        file_imports, import_from_targets = extractor._extract_file_imports(tree)
+
         # Set up visitor with file context
         visitor = PythonASTVisitor()
         visitor.source_lines = source.splitlines()
-        visitor.current_file = str(py_file.resolve())
-        visitor.file_level_imports = {}
-        visitor.file_level_import_from_targets = set()
+        visitor.current_file = str(temp_dir / "test.py")
+        visitor.file_level_imports = file_imports
+        visitor.file_level_import_from_targets = import_from_targets
 
         # Visit the AST
         visitor.visit(tree)
@@ -750,8 +762,8 @@ def file_function():
         visitor.file_level_import_from_targets = set()
 
         # Visit the AST
-        visitor.visit(tree)
-        elements = visitor.elements
+        test_visitor.visit(tree)
+        elements = test_visitor.elements
 
         api_func = next((e for e in elements if e.name == 'api_function'), None)
         file_func = next((e for e in elements if e.name == 'file_function'), None)

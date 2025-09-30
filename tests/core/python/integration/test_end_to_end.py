@@ -87,7 +87,8 @@ class UserManager:
         assert process_func.kind == 'function'
         assert process_func.parameters == ['items: List[Dict[str, str]]']
         assert process_func.return_type == 'Optional[str]'
-        assert 'ValueError' in process_func.catches_exceptions
+        # Note: This function raises ValueError but doesn't catch it, so catches_exceptions should be empty
+        assert process_func.catches_exceptions == []
         assert process_func.complexity >= 3  # if + for + raise
 
         # Verify class details

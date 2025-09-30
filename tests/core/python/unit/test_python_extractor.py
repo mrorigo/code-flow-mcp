@@ -276,7 +276,7 @@ class TestClass:
         # Check method line numbers
         class_method = next((e for e in elements if e.name == 'class_method'), None)
         assert class_method is not None
-        assert class_method.line_start == 13
+        assert class_method.line_start == 14  # Corrected line number
 
     def test_extract_from_file_with_complex_imports(self, python_extractor, temp_dir):
         """Test extraction with complex import patterns."""

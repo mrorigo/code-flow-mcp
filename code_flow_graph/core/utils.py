@@ -336,6 +336,8 @@ def _unparse_annotation_py(node: Optional[ast.AST]) -> Optional[str]:
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Constant):  # Handles string forward references like "MyClass"
+        if isinstance(node.value, str):
+            return f'"{node.value}"'
         return str(node.value)
     if isinstance(node, ast.Attribute):
         # Handles namespaced types like os.PathLike
@@ -348,6 +350,8 @@ def _unparse_annotation_py(node: Optional[ast.AST]) -> Optional[str]:
         return f"{value}[{slice_val}]"
     if isinstance(node, ast.Tuple):  # For slices like Dict[str, int]
         return ", ".join([_unparse_annotation_py(e) for e in node.elts])
+    if isinstance(node, ast.List):  # For list types like [int, str] in Callable
+        return "[" + ", ".join([_unparse_annotation_py(e) for e in node.elts]) + "]"
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):  # For Python 3.10+ unions like str | None
         left = _unparse_annotation_py(node.left)
         right = _unparse_annotation_py(node.right)
@@ -572,9 +576,11 @@ def extract_file_imports_python(tree: ast.AST) -> Tuple[Dict[str, str], Set[str]
                     file_imports[local_name] = alias.name  # e.g. {'requests': 'requests'} or {'np': 'numpy'}
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
+                    # Preserve relative import structure (e.g., '.utils' instead of 'utils')
+                    module_name = f"{'.' * node.level}{node.module}" if node.level > 0 else node.module
                     for alias in node.names:
                         local_name = alias.asname if alias.asname else alias.name
-                        file_imports[local_name] = f"{node.module}.{alias.name}" if node.module else alias.name
+                        file_imports[local_name] = f"{module_name}.{alias.name}" if module_name else alias.name
                         import_from_targets.add(local_name)  # Track direct imports like 'get'
         else:  # Stop traversing deeper once we hit a function or class definition
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):

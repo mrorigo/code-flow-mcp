@@ -7,11 +7,8 @@ functions, classes, and their metadata.
 """
 
 import ast
-import os
 import re
 import sys
-import hashlib
-import fnmatch
 from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
 
@@ -39,6 +36,7 @@ class PythonASTVisitor(ast.NodeVisitor):
         self.current_class: Optional[str] = None
         self.current_file: str = ""
         self.source_lines: List[str] = []
+        self.full_source: str = ""
         self.file_level_imports: Dict[str, str] = {} # {local_name: original_module_name} e.g. {'requests': 'requests', 'Path': 'pathlib'}
         self.file_level_import_from_targets: Set[str] = set() # e.g. {'get', 'post'} for `from requests import get, post`
 
@@ -64,10 +62,31 @@ class PythonASTVisitor(ast.NodeVisitor):
         for sub_node in ast.walk(node):
             if isinstance(sub_node, ast.ExceptHandler):
                 if sub_node.type:
-                    caught_exceptions.add(self._unparse_annotation(sub_node.type))
+                    # Handle both single exception types and tuples of exception types
+                    exception_types = self._extract_exception_types(sub_node.type)
+                    caught_exceptions.update(exception_types)
                 else: # bare except
                     caught_exceptions.add('Exception') # Default catch-all
         return sorted(list(caught_exceptions))
+
+    def _extract_exception_types(self, node: ast.AST) -> List[str]:
+        """Recursively extract exception type names from AST node."""
+        if isinstance(node, ast.Name):
+            return [node.id]
+        elif isinstance(node, ast.Tuple):
+            # Handle tuple of exception types like (ValueError, TypeError)
+            result = []
+            for elt in node.elts:
+                result.extend(self._extract_exception_types(elt))
+            return result
+        elif isinstance(node, ast.Attribute):
+            # Handle module.exception like ValueError
+            if isinstance(node.value, ast.Name):
+                return [f"{node.value.id}.{node.attr}"]
+            return [node.attr]
+        else:
+            # Fallback for complex expressions
+            return [self._unparse_annotation(node)]
 
     def _extract_local_variables(self, node: ast.AST) -> List[str]:
         """Extracts names of local variables declared via assignment within a function."""
@@ -80,15 +99,18 @@ class PythonASTVisitor(ast.NodeVisitor):
                         local_vars.add(target.id)
             # Correctly handle variables from loops, context managers, and comprehensions
             elif isinstance(sub_node, (ast.For, ast.AsyncFor)):
-                 if isinstance(sub_node.target, ast.Name):
-                     local_vars.add(sub_node.target.id)
+                  if isinstance(sub_node.target, ast.Name):
+                      local_vars.add(sub_node.target.id)
             elif isinstance(sub_node, (ast.With, ast.AsyncWith)):
-                 for item in sub_node.items:
-                     if isinstance(item.optional_vars, ast.Name): # 'as var_name'
-                         local_vars.add(item.optional_vars.id)
+                  for item in sub_node.items:
+                      if isinstance(item.optional_vars, ast.Name): # 'as var_name'
+                          local_vars.add(item.optional_vars.id)
             elif isinstance(sub_node, ast.comprehension):
-                 if isinstance(sub_node.target, ast.Name):
-                     local_vars.add(sub_node.target.id)
+                  if isinstance(sub_node.target, ast.Name):
+                      local_vars.add(sub_node.target.id)
+            # Also detect function definitions as local variables
+            elif isinstance(sub_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                local_vars.add(sub_node.name)
 
         # Filter common keywords or self/cls
         return sorted([v for v in local_vars if v not in {'self', 'cls', '_', '__init__', '__post_init__'}])
@@ -106,13 +128,65 @@ class PythonASTVisitor(ast.NodeVisitor):
                 if isinstance(func, ast.Name):
                     # Check if it's a direct import (e.g., `requests.get`) or `from module import func`
                     if func.id in self.file_level_imports:
-                        external_deps.add(self.file_level_imports[func.id])
+                        # Extract just the module part (e.g., '.utils.helper_function' -> '.utils')
+                        full_module = self.file_level_imports[func.id]
+                        if full_module.startswith('.'):
+                            # For relative imports, get the module part
+                            module_part = '.'.join(full_module.split('.')[:-1])
+                            if module_part:  # Avoid empty string
+                                external_deps.add(module_part)
+                        else:
+                            # For absolute imports, extract base module name
+                            base_module = full_module.split('.')[0]
+                            external_deps.add(base_module)
                     elif func.id in self.file_level_import_from_targets:
                         external_deps.add(func.id)
                 elif isinstance(func, ast.Attribute):
                     # e.g., `requests.get` where `requests` is an imported module
                     if isinstance(func.value, ast.Name) and func.value.id in self.file_level_imports:
-                        external_deps.add(self.file_level_imports[func.value.id])
+                        full_module = self.file_level_imports[func.value.id]
+                        if full_module.startswith('.'):
+                            module_part = '.'.join(full_module.split('.')[:-1])
+                            if module_part:
+                                external_deps.add(module_part)
+                        else:
+                            base_module = full_module.split('.')[0]
+                            external_deps.add(base_module)
+            elif isinstance(sub_node, ast.Attribute):
+                # Also check for direct attribute access like `os.path`
+                if isinstance(sub_node.value, ast.Name) and sub_node.value.id in self.file_level_imports:
+                    full_module = self.file_level_imports[sub_node.value.id]
+                    if full_module.startswith('.'):
+                        module_part = '.'.join(full_module.split('.')[:-1])
+                        if module_part:
+                            external_deps.add(module_part)
+                    else:
+                        base_module = full_module.split('.')[0]
+                        external_deps.add(base_module)
+            elif isinstance(sub_node, ast.Name):
+                # Check if it's a reference to an imported name in type annotations or other contexts
+                if sub_node.id in self.file_level_imports:
+                    full_module = self.file_level_imports[sub_node.id]
+                    if full_module.startswith('.'):
+                        module_part = '.'.join(full_module.split('.')[:-1])
+                        if module_part:
+                            external_deps.add(module_part)
+                    else:
+                        base_module = full_module.split('.')[0]
+                        external_deps.add(base_module)
+                elif sub_node.id in self.file_level_import_from_targets:
+                    # For 'from module import name' patterns, we need to find the original module
+                    # This is a heuristic - check if any import ends with the target name
+                    for import_name, full_import in self.file_level_imports.items():
+                        if import_name == sub_node.id:
+                            if full_import.startswith('.'):
+                                module_part = '.'.join(full_import.split('.')[:-1])
+                                if module_part:
+                                    external_deps.add(module_part)
+                            else:
+                                base_module = full_import.split('.')[0]
+                                external_deps.add(base_module)
+                            break
         return sorted(list(external_deps))
 
     def _hash_source_snippet(self, start_line: int, end_line: int) -> str:
@@ -131,13 +205,33 @@ class PythonASTVisitor(ast.NodeVisitor):
         func_source_snippet_hash = self._hash_source_snippet(start_line, end_line)
 
         params = []
-        for arg in node.args.args:
+        # Calculate which arguments have defaults
+        # defaults are stored in reverse order from the end of the args list
+        num_args = len(node.args.args)
+        num_defaults = len(node.args.defaults)
+        args_with_defaults = set(num_args - num_defaults + i for i in range(num_defaults))
+
+        for i, arg in enumerate(node.args.args):
             param_name = arg.arg
             param_type = self._unparse_annotation(arg.annotation)
+
+            # Check if this argument has a default value
+            default_value = None
+            if i in args_with_defaults:
+                default_idx = i - (num_args - num_defaults)
+                if 0 <= default_idx < len(node.args.defaults):
+                    default_value = self._unparse_annotation(node.args.defaults[default_idx])
+
             if param_type:
-                params.append(f"{param_name}: {param_type}")
+                if default_value:
+                    params.append(f"{param_name}: {param_type} = {default_value}")
+                else:
+                    params.append(f"{param_name}: {param_type}")
             else:
-                params.append(param_name)
+                if default_value:
+                    params.append(f"{param_name} = {default_value}")
+                else:
+                    params.append(param_name)
 
         is_async = isinstance(node, ast.AsyncFunctionDef)
         docstring = ast.get_docstring(node)
@@ -158,7 +252,7 @@ class PythonASTVisitor(ast.NodeVisitor):
             file_path=self.current_file,
             line_start=start_line,
             line_end=end_line,
-            full_source='\n'.join(self.source_lines), # This is the full file content
+            full_source=self.full_source, # Preserve exact original source
             parameters=params,
             return_type=return_type_str,
             is_async=is_async,
@@ -185,7 +279,28 @@ class PythonASTVisitor(ast.NodeVisitor):
 
         extends = self._unparse_annotation(node.bases[0]) if node.bases else None
         methods = [n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-        attributes = [t.id for n in node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)]
+        attributes = []
+        for n in node.body:
+            if isinstance(n, ast.Assign):
+                for target in n.targets:
+                    if isinstance(target, ast.Name):
+                        attributes.append(target.id)
+                    elif isinstance(target, ast.Tuple):
+                        # Handle tuple unpacking like a, b = 1, 2
+                        for elt in target.elts:
+                            if isinstance(elt, ast.Name):
+                                attributes.append(elt.id)
+            elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                # Handle annotated assignments like self.value: int
+                attributes.append(n.target.id)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == '__init__':
+                # Look for instance variable assignments in __init__ method
+                for sub_node in ast.walk(n):
+                    if isinstance(sub_node, ast.Assign):
+                        for target in sub_node.targets:
+                            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self':
+                                # Found self.attribute = value
+                                attributes.append(target.attr)
         docstring = ast.get_docstring(node)
 
         # --- NEW METADATA EXTRACTION FOR CLASSES ---
@@ -197,7 +312,7 @@ class PythonASTVisitor(ast.NodeVisitor):
             file_path=self.current_file,
             line_start=start_line,
             line_end=end_line,
-            full_source='\n'.join(self.source_lines),
+            full_source=self.full_source, # Preserve exact original source
             methods=methods,
             attributes=attributes,
             extends=extends,
@@ -256,6 +371,7 @@ class PythonASTExtractor:
 
             self.visitor.source_lines = source.splitlines()
             self.visitor.current_file = str(file_path.resolve())
+            self.visitor.full_source = source  # Preserve exact original source
             self.visitor.elements = [] # Reset elements for each file
             self.visitor.file_level_imports = file_imports
             self.visitor.file_level_import_from_targets = import_from_targets
