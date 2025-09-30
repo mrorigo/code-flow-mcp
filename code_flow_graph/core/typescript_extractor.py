@@ -5,15 +5,10 @@ and extracting type information using regex-based parsing and TypeScript compile
 """
 
 import re
-import os
 import json
-import subprocess
-import tempfile
-import hashlib
 import sys
 from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
-from dataclasses import dataclass, field
 
 # Import from new modular structure
 from .models import CodeElement, FunctionElement, ClassElement
@@ -41,7 +36,7 @@ from .utils import (
 class TypeScriptASTVisitor:
     """
     AST visitor that extracts code elements from TypeScript codebases with enhanced metadata.
-    Uses TypeScript compiler API when available, falls back to regex-based parsing.
+    Uses fast regex-based parsing for optimal performance.
     """
 
     def __init__(self):
@@ -51,98 +46,14 @@ class TypeScriptASTVisitor:
         self.source_lines: List[str] = []
         self.file_level_imports: Dict[str, str] = {}
         self.file_level_import_from_targets: Set[str] = set()
-        self.typescript_available: bool = False
-        self._check_typescript_available()
 
-    def _check_typescript_available(self) -> bool:
-        """Check if TypeScript/Node.js is available on the system."""
-        try:
-            result = subprocess.run(
-                ['node', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                # Check if TypeScript compiler is available
-                ts_result = subprocess.run(
-                    ['npx', 'typescript', '--version'],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                self.typescript_available = ts_result.returncode == 0
-                return self.typescript_available
-        except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-            pass
-        return False
 
-    def _run_typescript_compiler(self, file_path: str, source: str) -> Optional[Dict[str, Any]]:
-        """Run TypeScript compiler to get AST and type information with enhanced error handling."""
-        if not self.typescript_available:
-            return None
-
-        try:
-            # Create temporary file with proper encoding
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False, encoding='utf-8') as f:
-                f.write(source)
-                temp_path = f.name
-
-            try:
-                # Use TypeScript compiler with better error reporting
-                result = subprocess.run([
-                    'npx', 'typescript', '--noEmit', '--strict',
-                    '--listFiles', temp_path
-                ], capture_output=True, text=True, timeout=30, cwd=os.path.dirname(file_path))
-
-                if result.returncode != 0:
-                    # Log TypeScript compiler errors for debugging
-                    if result.stderr:
-                        print(f"   Info: TypeScript compiler warnings for {file_path}: {result.stderr[:200]}...", file=sys.stderr)
-                    return None
-
-                # Return enhanced compiler info
-                return {
-                    'success': True,
-                    'file_path': file_path,
-                    'line_count': len(source.splitlines()),
-                    'compiler_version': self._get_typescript_version()
-                }
-            finally:
-                # Ensure temporary file is cleaned up
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-        except subprocess.TimeoutExpired:
-            print(f"   Warning: TypeScript compiler timeout for {file_path}", file=sys.stderr)
-            return None
-        except FileNotFoundError:
-            print(f"   Warning: TypeScript compiler not found for {file_path}", file=sys.stderr)
-            return None
-        except Exception as e:
-            print(f"   Warning: TypeScript compiler error for {file_path}: {e}", file=sys.stderr)
-            return None
-
-    def _get_typescript_version(self) -> Optional[str]:
-        """Get TypeScript compiler version."""
-        try:
-            result = subprocess.run(['npx', 'typescript', '--version'],
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
-        return None
 
     def _parse_typescript_ast(self, file_path: str, source: str) -> List[CodeElement]:
-        """Parse TypeScript AST using compiler API or fallback to regex parsing."""
-        # Try TypeScript compiler first
-        compiler_result = self._run_typescript_compiler(file_path, source)
-        if compiler_result and compiler_result.get('success'):
-            # Use compiler-based parsing
-            return self._parse_with_compiler(file_path, source)
-        else:
-            # Fall back to regex-based parsing
-            return self._parse_with_regex(file_path, source)
+        """Parse TypeScript AST using fast regex-based parsing."""
+        print(f"   Info: Parsing {file_path} using fast regex-based extraction")
+        # Use fast regex-based parsing for optimal performance
+        return self._parse_with_regex(file_path, source)
 
     def _parse_with_compiler(self, file_path: str, source: str) -> List[CodeElement]:
         """Parse using TypeScript compiler (placeholder for full implementation)."""
@@ -1391,9 +1302,8 @@ class TypeScriptASTVisitor:
             print(f"   Warning: Error logging parsing info: {e}", file=sys.stderr)
 
     def visit_file(self, file_path: str, source: str) -> List[CodeElement]:
-        """Visit a TypeScript file and extract all code elements with enhanced logging."""
+        """Visit a TypeScript file and extract all code elements using fast regex-based parsing."""
         import time
-        import traceback
 
         start_time = time.time()
         self.source_lines = source.splitlines()
@@ -1425,17 +1335,13 @@ class TypeScriptASTVisitor:
                 if type_alias_element:
                     self.elements.append(type_alias_element)
 
-            # Parse the file for classes first, then functions
+            # Parse the file for classes and functions using fast regex-based extraction
             elements = self._parse_typescript_ast(file_path, source)
             self.elements.extend(elements)
 
             # Log parsing results
             parsing_time = time.time() - start_time
-            self._log_parsing_info(file_path, 'regex_fallback', len(self.elements), {
-                'confidence': 0.8,
-                'parsing_time': parsing_time,
-                'typescript_features': ['advanced_types', 'decorators', 'framework_detection']
-            })
+            print(f"   Info: Parsed {file_path} using fast regex extraction ({len(self.elements)} elements, {parsing_time:.2f}s)")
 
             # Log framework detection if any
             if self.elements:
@@ -1452,9 +1358,6 @@ class TypeScriptASTVisitor:
         except Exception as e:
             parsing_time = time.time() - start_time
             print(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
-            print(f"   Debug: Full traceback for parsing error:", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
             return []
 
     def _parse_complex_types(self, source: str) -> Dict[str, Any]:
@@ -2137,6 +2040,7 @@ class TypeScriptASTExtractor:
             brace_count -= line.count('}')
             if brace_count == 0 and '{' in lines[start_idx]:
                 return i + 1
+
         return len(lines)
 
     def _find_enum_end(self, lines: List[str], start_idx: int) -> int:
