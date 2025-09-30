@@ -47,6 +47,97 @@ class TypeScriptASTVisitor:
         self.file_level_imports: Dict[str, str] = {}
         self.file_level_import_from_targets: Set[str] = set()
 
+        # Pre-compile regex patterns for maximum performance
+        self._compiled_patterns = self._compile_regex_patterns()
+
+    def _compile_regex_patterns(self) -> Dict[str, Any]:
+        """Pre-compile all regex patterns for maximum performance."""
+        import time
+        start_time = time.time()
+
+        patterns = {}
+
+        # Compile function patterns
+        function_patterns = [
+            # Regular functions with complex generics: function name<T, U>(...): Promise<T> { ... }
+            r'function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
+            # Arrow functions with complex return types: const name = <T>(...): T => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>',
+            # Async arrow functions: const name = async (...): Promise<Type> => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*async\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>',
+            # Simple arrow functions: const name = <T>(...) => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
+            # React functional components: const Name: React.FC<Props> = ({ ... }) => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*[^=]+\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
+            # Method definitions with complex types: public/private/protected name<T>(...): T { ... }
+            r'(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*(?:async)?\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
+            # Angular lifecycle methods: ngOnInit(): void { ... }
+            r'(\w+)\s*\(\s*\)\s*:\s*([^;{]+)\s*{',
+            # Async functions with complex return types: async function name<T>(...): Promise<T> { ... }
+            r'async\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
+            # Abstract methods: abstract name<T>(...): T; ...
+            r'abstract\s+(public|private|protected)?\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+)\s*;',
+            # Vue 3 Composition API functions: export function useXxx<T>() { ... }
+            r'export\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
+            # React hooks and custom functions
+            r'(export\s+)?function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
+            # Constructor functions: constructor(...) { ... }
+            r'constructor\s*\(([^)]*)\)\s*{',
+            # Getter methods: get name(): Type { ... }
+            r'get\s+(\w+)(?:<[^>]*>)?\s*\(\s*\)\s*:\s*([^;{]+)\s*{',
+            # Setter methods: set name(value: Type): void { ... }
+            r'set\s+(\w+)(?:<[^>]*>)?\s*\(\s*([^:)]+)\s*:\s*([^;{]+)\)\s*{',
+            # Express route handlers with asyncHandler wrapper: router.post('/path', asyncHandler(async (req, res) => { ... }
+            r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
+            # Express route handlers with validation: router.post('/path', validation, asyncHandler(async (req, res) => { ... }
+            r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
+            # Express middleware functions: asyncHandler(async (req, res, next) => { ... }
+            r'asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
+            # Vue 3 setup functions and configuration
+            r'(?:app\.config\.|config\.)(errorHandler|warnHandler|performance)\s*=\s*\([^)]+\)\s*=>',
+        ]
+
+        patterns['functions'] = [re.compile(pattern, re.MULTILINE | re.DOTALL) for pattern in function_patterns]
+
+        # Compile class patterns
+        class_patterns = [
+            # Regular classes: class Name<T> extends Base implements Interface { ... }
+            r'class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
+            # Abstract classes: abstract class Name<T> extends Base { ... }
+            r'abstract\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
+            # Classes with multiple decorators (supports complex decorator chains)
+            r'((?:@\w+(?:\([^)]*\))?\s*\n\s*)*)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
+            # Exported classes: export class Name { ... }
+            r'export\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
+            # Abstract exported classes
+            r'export\s+abstract\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
+            # Classes with more complex decorator patterns (multi-line decorators)
+            r'((?:@\w+\s*\([^)]+\)\s*\n\s*)+)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
+            # Classes with decorators that span multiple lines
+            r'((?:@\w+(?:\s*\([^)]+\))?\s*\n\s*)+)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
+        ]
+
+        patterns['classes'] = [re.compile(pattern, re.MULTILINE | re.DOTALL) for pattern in class_patterns]
+
+        # Compile other patterns
+        patterns['interfaces'] = re.compile(r'interface\s+(\w+)(?:<([^>]+)>)?(?:\s+extends\s+([^ {]+))?(?:\s+implements\s+([^ {]+))?\s*{')
+        patterns['enums'] = re.compile(r'enum\s+(\w+)(?:<([^>]+)>)?\s*{([^}]*)}', re.DOTALL)
+        patterns['type_aliases'] = [
+            re.compile(r'type\s+(\w+)(?:<([^>]+)>)?\s*=\s*([^;]+);'),
+            re.compile(r'export\s+type\s+(\w+)(?:<([^>]+)>)?\s*=\s*([^;]+);')
+        ]
+        patterns['namespaces'] = re.compile(r'(?:namespace|module)\s+(\w+)(?:\s*{([^}]*)})?', re.DOTALL)
+        patterns['express_vars'] = [
+            re.compile(r'const\s+(\w+)\s*=\s*express\s*\(\s*\)'),
+            re.compile(r'const\s+(\w+)\s*=\s*Application\s*\(\s*\)')
+        ]
+
+        compilation_time = time.time() - start_time
+        pattern_count = sum(len(p) if isinstance(p, list) else 1 for p in patterns.values())
+        print(f"   Info: Pre-compiled {pattern_count} regex patterns in {compilation_time:.4f}s")
+
+        return patterns
+
 
 
     def _parse_typescript_ast(self, file_path: str, source: str) -> List[CodeElement]:
@@ -112,73 +203,77 @@ class TypeScriptASTVisitor:
         return elements
 
     def _find_functions_regex(self, source: str) -> List[Dict[str, Any]]:
-        """Find function definitions using comprehensive regex patterns."""
+        """Find function definitions using pre-compiled regex patterns for maximum performance."""
         functions = []
 
-        # Comprehensive TypeScript function patterns with advanced type support
-        patterns = [
-            # Regular functions with complex generics: function name<T, U>(...): Promise<T> { ... }
-            r'function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
-            # Arrow functions with complex return types: const name = <T>(...): T => ...
-            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>',
-            # Async arrow functions: const name = async (...): Promise<Type> => ...
-            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*async\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>',
-            # Simple arrow functions: const name = <T>(...) => ...
-            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
-            # React functional components: const Name: React.FC<Props> = ({ ... }) => ...
-            r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*[^=]+\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
-            # Method definitions with complex types: public/private/protected name<T>(...): T { ... }
-            r'(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*(?:async)?\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
-            # Angular lifecycle methods: ngOnInit(): void { ... }
-            r'(\w+)\s*\(\s*\)\s*:\s*([^;{]+)\s*{',
-            # Async functions with complex return types: async function name<T>(...): Promise<T> { ... }
-            r'async\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
-            # Abstract methods: abstract name<T>(...): T; ...
-            r'abstract\s+(public|private|protected)?\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+)\s*;',
-            # Vue 3 Composition API functions: export function useXxx<T>() { ... }
-            r'export\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
-            # React hooks and custom functions
-            r'(export\s+)?function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
-            # Constructor functions: constructor(...) { ... }
-            r'constructor\s*\(([^)]*)\)\s*{',
-            # Getter methods: get name(): Type { ... }
-            r'get\s+(\w+)(?:<[^>]*>)?\s*\(\s*\)\s*:\s*([^;{]+)\s*{',
-            # Setter methods: set name(value: Type): void { ... }
-            r'set\s+(\w+)(?:<[^>]*>)?\s*\(\s*([^:)]+)\s*:\s*([^;{]+)\)\s*{',
-            # Express route handlers with asyncHandler wrapper: router.post('/path', asyncHandler(async (req, res) => { ... }
-            r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
-            # Express route handlers with validation: router.post('/path', validation, asyncHandler(async (req, res) => { ... }
-            r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
-            # Express middleware functions: asyncHandler(async (req, res, next) => { ... }
-            r'asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
-            # Vue 3 setup functions and configuration
-            r'(?:app\.config\.|config\.)(errorHandler|warnHandler|performance)\s*=\s*\([^)]+\)\s*=>',
-        ]
+        # Use pre-compiled patterns for maximum performance
+        compiled_patterns = self._compiled_patterns['functions']
 
-        # Define pattern types for proper matching
-        pattern_types = [
-            (r'function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{', 'function'),
-            (r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>', 'arrow'),
-            (r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*async\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^=;{]+)\s*=>', 'async_arrow'),
-            (r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>', 'simple_arrow'),
-            (r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*[^=]+\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>', 'react_component'),
-            (r'(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*(?:async)?\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{', 'method'),
-            (r'(\w+)\s*\(\s*\)\s*:\s*([^;{]+)\s*{', 'lifecycle_method'),
-            (r'async\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{', 'async_function'),
-            (r'abstract\s+(public|private|protected)?\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+)\s*;', 'abstract_method'),
-            (r'export\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{', 'export_composable'),
-            (r'(export\s+)?function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{', 'exported_function'),
-            (r'constructor\s*\(([^)]*)\)\s*{', 'constructor'),
-            (r'get\s+(\w+)(?:<[^>]*>)?\s*\(\s*\)\s*:\s*([^;{]+)\s*{', 'getter'),
-            (r'set\s+(\w+)(?:<[^>]*>)?\s*\(\s*([^:)]+)\s*:\s*([^;{]+)\)\s*{', 'setter'),
-            (r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>', 'express_route'),
-            (r'router\.(get|post|put|delete|patch)\s*\(\s*[^,]+,[^,]+,\s*asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>', 'express_route_validated'),
-            (r'asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>', 'express_middleware'),
-            (r'(?:app\.config\.|config\.)(errorHandler|warnHandler|performance)\s*=\s*\([^)]+\)\s*=>', 'vue_config'),
-        ]
+        for compiled_pattern in compiled_patterns:
+            for match in compiled_pattern.finditer(source):
+                groups = match.groups()
 
-        for pattern, pattern_type in pattern_types:
-            for match in re.finditer(pattern, source, re.MULTILINE | re.DOTALL):
+                # Calculate start_line correctly based on source content before match
+                start_line = source[:match.start()].count('\n') + 1
+
+                # Map pattern index to pattern type for proper matching
+                pattern_index = compiled_patterns.index(compiled_pattern)
+
+                # Define pattern types mapping (same order as patterns list)
+                pattern_types = [
+                    'function', 'arrow', 'async_arrow', 'simple_arrow', 'react_component',
+                    'method', 'lifecycle_method', 'async_function', 'abstract_method',
+                    'export_composable', 'exported_function', 'constructor', 'getter',
+                    'setter', 'express_route', 'express_route_validated', 'express_middleware',
+                    'vue_config'
+                ]
+
+                if pattern_index < len(pattern_types):
+                    pattern_type = pattern_types[pattern_index]
+
+                    if pattern_type == 'function':
+                        func_info = self._parse_function_match(groups, match, 'function', start_line)
+                    elif pattern_type == 'arrow':
+                        func_info = self._parse_function_match(groups, match, 'arrow', start_line)
+                    elif pattern_type == 'async_arrow':
+                        func_info = self._parse_function_match(groups, match, 'async_arrow')
+                    elif pattern_type == 'simple_arrow':
+                        func_info = self._parse_function_match(groups, match, 'simple_arrow')
+                    elif pattern_type == 'react_component':
+                        func_info = self._parse_function_match(groups, match, 'react_component')
+                    elif pattern_type == 'method':
+                        func_info = self._parse_function_match(groups, match, 'method', start_line)
+                    elif pattern_type == 'lifecycle_method':
+                        func_info = self._parse_lifecycle_method_match(groups, match, start_line)
+                    elif pattern_type == 'async_function':
+                        func_info = self._parse_function_match(groups, match, 'async_function', start_line)
+                    elif pattern_type == 'abstract_method':
+                        func_info = self._parse_function_match(groups, match, 'abstract_method', start_line)
+                    elif pattern_type == 'export_function':
+                        func_info = self._parse_function_match(groups, match, 'export_function', start_line)
+                    elif pattern_type == 'export_composable':
+                        func_info = self._parse_export_composable_match(groups, match, start_line)
+                    elif pattern_type == 'exported_function':
+                        func_info = self._parse_function_match(groups, match, 'exported_function', start_line)
+                    elif pattern_type == 'constructor':
+                        func_info = self._parse_function_match(groups, match, 'constructor', start_line)
+                    elif pattern_type == 'getter':
+                        func_info = self._parse_function_match(groups, match, 'getter', start_line)
+                    elif pattern_type == 'setter':
+                        func_info = self._parse_function_match(groups, match, 'setter', start_line)
+                    elif pattern_type == 'express_route':
+                        func_info = self._parse_express_route_match(groups, match)
+                    elif pattern_type == 'express_route_validated':
+                        func_info = self._parse_express_route_match(groups, match, start_line)
+                    elif pattern_type == 'express_middleware':
+                        func_info = self._parse_express_middleware_match(groups, match, start_line)
+                    elif pattern_type == 'vue_config':
+                        func_info = self._parse_vue_config_match(groups, match, start_line)
+                    else:
+                        continue
+
+                    if func_info:
+                        functions.append(func_info)
                 groups = match.groups()
 
                 # Calculate start_line correctly based on source content before match
@@ -251,17 +346,14 @@ class TypeScriptASTVisitor:
         return functions
 
     def _find_framework_variables(self, source: str) -> List[Dict[str, Any]]:
-        """Find variable declarations that might be framework instances (e.g., Express apps)."""
+        """Find variable declarations that might be framework instances using pre-compiled patterns."""
         variables = []
 
-        # Pattern for Express app creation
-        express_patterns = [
-            r'const\s+(\w+)\s*=\s*express\s*\(\s*\)',
-            r'const\s+(\w+)\s*=\s*Application\s*\(\s*\)',
-        ]
+        # Use pre-compiled patterns for maximum performance
+        express_patterns = self._compiled_patterns['express_vars']
 
-        for pattern in express_patterns:
-            for match in re.finditer(pattern, source, re.MULTILINE):
+        for compiled_pattern in express_patterns:
+            for match in compiled_pattern.finditer(source):
                 groups = match.groups()
                 if groups:
                     var_name = groups[0]
@@ -731,29 +823,14 @@ class TypeScriptASTVisitor:
         return return_type
 
     def _find_classes_regex(self, source: str) -> List[Dict[str, Any]]:
-        """Find class definitions using comprehensive regex patterns."""
+        """Find class definitions using pre-compiled regex patterns for maximum performance."""
         classes = []
 
-        # Comprehensive TypeScript class patterns with advanced decorator support
-        patterns = [
-            # Regular classes: class Name<T> extends Base implements Interface { ... }
-            r'class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
-            # Abstract classes: abstract class Name<T> extends Base { ... }
-            r'abstract\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
-            # Classes with multiple decorators (supports complex decorator chains)
-            r'((?:@\w+(?:\([^)]*\))?\s*\n\s*)*)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
-            # Exported classes: export class Name { ... }
-            r'export\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
-            # Abstract exported classes
-            r'export\s+abstract\s+class\s+(\w+)(?:<[^>]*>)?(\s+extends\s+([^,\s]+))?(\s+implements\s+([^}]+?))?\s*{',
-            # Classes with more complex decorator patterns (multi-line decorators)
-            r'((?:@\w+\s*\([^)]+\)\s*\n\s*)+)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
-            # Classes with decorators that span multiple lines
-            r'((?:@\w+(?:\s*\([^)]+\))?\s*\n\s*)+)class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+([^,\s]+))?(?:\s+implements\s+([^}]+?))?\s*{',
-        ]
+        # Use pre-compiled patterns for maximum performance
+        compiled_patterns = self._compiled_patterns['classes']
 
-        for pattern in patterns:
-            for match in re.finditer(pattern, source, re.MULTILINE | re.DOTALL):
+        for compiled_pattern in compiled_patterns:
+            for match in compiled_pattern.finditer(source):
                 groups = match.groups()
 
                 # Handle different pattern formats
@@ -771,7 +848,6 @@ class TypeScriptASTVisitor:
                 # Parse implements clause
                 implements = []
                 if implements_text:
-                    # Handle complex implements with generics and multiple interfaces
                     implements = self._parse_implements_clause(implements_text.strip())
 
                 # Parse decorators
@@ -1378,9 +1454,9 @@ class TypeScriptASTVisitor:
             'constructor_types': []
         }
 
-        # Parse interfaces with generics support: interface Name<T, U> extends Base<T> { ... }
-        interface_pattern = r'interface\s+(\w+)(?:<([^>]+)>)?(?:\s+extends\s+([^ {]+))?(?:\s+implements\s+([^ {]+))?\s*{'
-        for match in re.finditer(interface_pattern, source):
+        # Parse interfaces using pre-compiled pattern for maximum performance
+        interface_pattern = self._compiled_patterns['interfaces']
+        for match in interface_pattern.finditer(source):
             generics = self._extract_generics_from_match(match.group(2)) if match.group(2) else []
             extends = [ext.strip() for ext in match.group(3).split(',')] if match.group(3) else []
             implements = [impl.strip() for impl in match.group(4).split(',')] if match.group(4) else []
@@ -1393,14 +1469,11 @@ class TypeScriptASTVisitor:
                 'line': source[:match.start()].count('\n') + 1
             })
 
-        # Parse type aliases with complex types: type Name = T | U, type Name<T> = T extends string ? T : never
-        type_alias_patterns = [
-            r'type\s+(\w+)(?:<([^>]+)>)?\s*=\s*([^;]+);',
-            r'export\s+type\s+(\w+)(?:<([^>]+)>)?\s*=\s*([^;]+);'
-        ]
+        # Parse type aliases using pre-compiled patterns for maximum performance
+        type_alias_patterns = self._compiled_patterns['type_aliases']
 
-        for pattern in type_alias_patterns:
-            for match in re.finditer(pattern, source):
+        for compiled_pattern in type_alias_patterns:
+            for match in compiled_pattern.finditer(source):
                 generics = self._extract_generics_from_match(match.group(2)) if match.group(2) else []
                 definition = match.group(3).strip()
 
@@ -1431,9 +1504,9 @@ class TypeScriptASTVisitor:
                         'utility': utility_name
                     })
 
-        # Parse enums with enhanced member detection
-        enum_pattern = r'enum\s+(\w+)(?:<([^>]+)>)?\s*{([^}]*)}'
-        for match in re.finditer(enum_pattern, source, re.DOTALL):
+        # Parse enums using pre-compiled pattern for maximum performance
+        enum_pattern = self._compiled_patterns['enums']
+        for match in enum_pattern.finditer(source):
             generics = self._extract_generics_from_match(match.group(2)) if match.group(2) else []
             enum_members_text = match.group(3)
 
@@ -1447,9 +1520,9 @@ class TypeScriptASTVisitor:
                 'line': source[:match.start()].count('\n') + 1
             })
 
-        # Parse namespaces and modules
-        namespace_pattern = r'(?:namespace|module)\s+(\w+)(?:\s*{([^}]*)})?'
-        for match in re.finditer(namespace_pattern, source, re.DOTALL):
+        # Parse namespaces using pre-compiled pattern for maximum performance
+        namespace_pattern = self._compiled_patterns['namespaces']
+        for match in namespace_pattern.finditer(source):
             namespace_content = match.group(2) if match.group(2) else ""
             complex_types['namespaces'].append({
                 'name': match.group(1),
