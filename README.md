@@ -8,9 +8,10 @@ CodeFlow is a powerful Python-based code analysis tool designed to help develope
 
 By extracting rich metadata from Abstract Syntax Trees (ASTs) and leveraging a persistent vector store (ChromaDB), CodeFlow enables efficient querying and visualization of code structure and behavior.
 
-The tool provides two main interfaces:
+The tool provides three main interfaces:
 - **CLI Tool**: A command-line interface for direct analysis and querying of codebases.
 - **MCP Server**: A Model Context Protocol server that integrates with AI assistants and IDEs for real-time code analysis.
+- **Unified API**: A single programmatic interface that automatically detects and analyzes both Python and TypeScript codebases.
 
 ## Features
 
@@ -23,6 +24,7 @@ The tool provides two main interfaces:
   - Locally declared variables
   - Inferred external library/module dependencies
   - Source body hash for efficient change detection
+- **Unified Interface:** Single API that automatically detects and analyzes both Python and TypeScript codebases without manual language specification.
 - **Intelligent Call Graph Generation:**
   - Builds a graph of function-to-function calls.
   - Employs multiple heuristics to identify potential entry points in the codebase.
@@ -112,10 +114,10 @@ Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the c
 
 #### 1. Analyze a Codebase and Generate a Report
 
-This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<YOUR_CODE_DIRECTORY>/code_vectors_chroma/`), and generate a JSON report.
+This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<YOUR_CODE_DIRECTORY>/code_vectors_chroma/`), and generate a JSON report. Language detection is automatic.
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --language python --output my_analysis_report.json
+python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
 ```
 
 #### 2. Querying the Codebase (Analysis + Query)
@@ -123,7 +125,7 @@ python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --language p
 Run a full analysis and then immediately perform a semantic search. This will update the vector store if code has changed.
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --language python --query "functions that handle user authentication"
+python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "functions that handle user authentication"
 ```
 
 #### 3. Querying an Existing Analysis (Query Only)
@@ -153,7 +155,6 @@ This output is stripped of visual styling and uses short aliases for node IDs, w
 #### Command Line Arguments
 
 - `<directory>`: (Positional, optional) Path to the codebase directory (default: current directory `.`). This is also the base for the persistent ChromaDB store (`<directory>/code_vectors_chroma/`).
-- `--language`: Programming language (`python` or `typescript`, default: `python`).
 - `--output`: Output file for the analysis report (default: `code_analysis_report.json`). *Only used during full analysis.*
 - `--query <QUESTION>`: Perform a semantic query.
 - `--no-analyze`: (Flag) Skips AST extraction and graph building. Requires `--query`. Assumes an existing vector store.
@@ -255,40 +256,40 @@ tsc --version   # Should show TypeScript version
 
 #### Basic TypeScript Analysis
 ```bash
-# Analyze a TypeScript project
-python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --language typescript --output analysis.json
+# Analyze a TypeScript project (language detection is automatic)
+python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --output analysis.json
 
 # Query TypeScript codebase
-python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --language typescript --query "user authentication functions"
+python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --query "user authentication functions"
 ```
 
 #### Framework-Specific Examples
 
 **Angular Application Analysis:**
 ```bash
-# Analyze Angular project
-python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --language typescript --query "component lifecycle methods"
+# Analyze Angular project (language detection automatic)
+python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --query "component lifecycle methods"
 
 # Find Angular services
-python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --language typescript --query "injectable services"
+python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --query "injectable services"
 ```
 
 **NestJS Application Analysis:**
 ```bash
-# Analyze NestJS backend
-python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --language typescript --query "controller endpoints"
+# Analyze NestJS backend (language detection automatic)
+python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --query "controller endpoints"
 
 # Find service dependencies
-python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --language typescript --query "database service dependencies"
+python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --query "database service dependencies"
 ```
 
 **React TypeScript Analysis:**
 ```bash
-# Analyze React TypeScript components
-python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --language typescript --query "custom hooks"
+# Analyze React TypeScript components (language detection automatic)
+python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --query "custom hooks"
 
 # Find component prop types
-python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --language typescript --query "component interfaces"
+python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --query "component interfaces"
 ```
 
 #### TypeScript-Specific Features
@@ -339,11 +340,11 @@ If Node.js or TypeScript is unavailable, the tool gracefully falls back to regex
 
 #### Basic Analysis
 ```bash
-# Analyze current directory and generate report
+# Analyze current directory and generate report (language detection automatic)
 python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
 
 # Analyze a specific project
-python -m code_flow_graph.cli.code_flow_graph /path/to/my/project --language python
+python -m code_flow_graph.cli.code_flow_graph /path/to/my/project
 ```
 
 #### Semantic Search
@@ -445,12 +446,46 @@ python client.py
 
 This tests the MCP protocol handshake and basic tool interactions.
 
+### Unified API
+
+For programmatic access, CodeFlow provides a unified interface that automatically detects and analyzes both Python and TypeScript codebases:
+
+```python
+from code_flow_graph.core import create_extractor, extract_from_file, extract_from_directory, get_language_from_extension
+
+# Create appropriate extractor based on file type (automatic language detection)
+extractor = create_extractor('myfile.ts')  # Returns TypeScriptASTExtractor
+extractor = create_extractor('myfile.py')  # Returns PythonASTExtractor
+
+# Single API for both languages
+elements = extract_from_file('myfile.ts')  # Works for TypeScript
+elements = extract_from_file('myfile.py')  # Works for Python
+
+# Directory processing with automatic language detection
+elements = extract_from_directory('./src')  # Processes all Python and TypeScript files
+
+# Manual language detection
+language = get_language_from_extension('file.ts')  # Returns 'typescript'
+language = get_language_from_extension('file.py')  # Returns 'python'
+```
+
+The unified interface provides:
+- **Automatic Language Detection:** No need to manually specify Python vs TypeScript
+- **Factory Pattern:** `create_extractor()` returns appropriate extractor for file type
+- **Consistent API:** Same functions work for both languages
+- **Clean Abstraction:** Hides complexity of modular structure underneath
+
 ## Architecture
 
-The tool is structured into three main components, designed for clarity and maintainability:
+The tool is structured into four main components, designed for clarity and maintainability:
 
 ### Core Components
-1. **AST Extractor** (`core/ast_extractor.py`)
+1. **Unified Interface** (`core/__init__.py`)
+   - Provides a single API for both Python and TypeScript codebases.
+   - Factory functions for automatic language detection and extractor creation.
+   - Simplifies usage by hiding complexity of modular structure.
+
+2. **AST Extractor** (`core/ast_extractor.py`)
    - Parses source code into Abstract Syntax Trees.
    - Extracts rich metadata for `FunctionElement` and `ClassElement` objects (complexity, decorators, dependencies, etc.).
    - Filters files based on `.gitignore` for relevant analysis.
@@ -494,6 +529,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Support for other programming languages.
 - Web-based UI for interactive code exploration.
 - Plugin system for custom analysis rules.
+
+### Recently Completed
+
+- ✅ **Unified Interface Module**: Single API for automatic Python and TypeScript detection and analysis
+- ✅ **Factory Functions**: `create_extractor()` and `get_language_from_extension()` for simplified usage
+- ✅ **Backward Compatibility**: Existing code continues to work with new modular structure
 
 ## Acknowledgments
 

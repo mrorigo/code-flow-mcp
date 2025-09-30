@@ -7,7 +7,7 @@ import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
 
-from code_flow_graph.core.ast_extractor import PythonASTExtractor
+from code_flow_graph.core.python_extractor import PythonASTExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
 

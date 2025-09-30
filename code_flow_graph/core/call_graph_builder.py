@@ -11,7 +11,7 @@ import ast
 import sys
 import itertools
 
-from code_flow_graph.core.ast_extractor import CodeElement, FunctionElement
+from code_flow_graph.core.models import CodeElement, FunctionElement
 
 @dataclass
 class CallEdge:
@@ -166,20 +166,25 @@ class CallGraphBuilder:
         self._identify_entry_points()
 
     def _extract_calls_from_function(self, func_element: FunctionElement) -> None:
-        """Extract all function calls from a single function's source using AST."""
+        """Extract all function calls from a single function's source using AST for Python, regex for TypeScript."""
         try:
             with open(func_element.file_path, 'r', encoding='utf-8') as f:
                 full_source = f.read()
 
-            tree = ast.parse(full_source, filename=func_element.file_path)
+            # Handle TypeScript files differently - use regex-based extraction
+            if func_element.file_path.endswith(('.ts', '.tsx')):
+                calls = self._extract_calls_from_typescript_function(func_element, full_source)
+            else:
+                # Use AST parsing for Python files
+                tree = ast.parse(full_source, filename=func_element.file_path)
 
-            # Find the specific function node using its name and exact start line for precision
-            func_node = self._find_function_node(tree, func_element.name, func_element.line_start)
-            if not func_node:
-                # print(f"   Warning: Could not find AST node for function {func_element.name} at line {func_element.line_start} in {func_element.file_path}")
-                return
+                # Find the specific function node using its name and exact start line for precision
+                func_node = self._find_function_node(tree, func_element.name, func_element.line_start)
+                if not func_node:
+                    # print(f"   Warning: Could not find AST node for function {func_element.name} at line {func_element.line_start} in {func_element.file_path}")
+                    return
 
-            calls = self._extract_calls_from_ast_node(func_node, func_element)
+                calls = self._extract_calls_from_ast_node(func_node, func_element)
 
             module_name = self._get_module_name(Path(func_element.file_path))
             caller_fqn = f"{module_name}.{func_element.name}"
@@ -189,8 +194,142 @@ class CallGraphBuilder:
 
         except Exception as e:
             print(f"   Warning: Error extracting calls from {func_element.name} in {func_element.file_path}: {e}", file=sys.stderr)
-            # Fallback to regex-based extraction - keep for robustness, but AST is preferred
-            # self._extract_calls_regex_fallback(func_element)
+
+    def _extract_calls_from_typescript_function(self, func_element: FunctionElement, full_source: str) -> List[PotentialCall]:
+        """Extract function calls from TypeScript function using comprehensive regex patterns."""
+        calls = []
+
+        try:
+            lines = full_source.splitlines()
+            func_start = func_element.line_start - 1  # Convert to 0-based indexing
+            func_end = func_element.line_end
+
+            # Extract the function body lines
+            func_body_lines = lines[func_start:func_end] if func_end > func_start else lines[func_start:func_start+1]
+            func_body = '\n'.join(func_body_lines)
+
+            # Debug: print function body for problematic cases
+            if func_element.name in ['getUser', 'processUser', 'main']:
+                print(f"     Function {func_element.name} body (lines {func_start+1}-{func_end}):")
+                for i, line in enumerate(func_body_lines):
+                    print(f"       {func_start + i + 1}: {line}")
+
+            # Enhanced patterns to match various TypeScript function call patterns
+            import re
+
+            # Comprehensive call patterns for TypeScript - more specific and ordered by priority
+            call_patterns = [
+                # Method calls with 'this': this.methodName() or this.database.findUser()
+                r'\bthis\.([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\(',
+                # Method calls with 'super': super.methodName()
+                r'\bsuper\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(',
+                # Calls with await: await functionName() or await this.getUser()
+                r'\bawait\s+([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\(',
+                # Constructor calls: new ClassName()
+                r'\bnew\s+([A-Z][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\(',
+                # Static method calls: ClassName.methodName() or DatabaseImpl.findUser()
+                r'\b([A-Z][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\(',
+                # Regular function calls: functionName()
+                r'\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(',
+                # Generic function calls: functionName<T>()
+                r'\b([a-zA-Z_$][a-zA-Z0-9_$]*(?:<[^>]*>)*)\s*\(',
+            ]
+
+            for pattern in call_patterns:
+                for match in re.finditer(pattern, func_body):
+                    call_text = match.group(1)
+                    if call_text and self._is_valid_typescript_call(call_text):
+                        line_number = func_start + match.start() + 1
+
+                        # Extract parameters
+                        params = self._extract_typescript_call_parameters(match.group(0))
+
+                        call = PotentialCall(
+                            callee=call_text,
+                            file_path=func_element.file_path,
+                            line_number=line_number,
+                            parameters=params,
+                            context=lines[line_number-1].strip() if line_number <= len(lines) else ""
+                        )
+                        calls.append(call)
+
+        except Exception as e:
+            print(f"   Warning: Error in TypeScript call extraction for {func_element.name}: {e}", file=sys.stderr)
+
+        return calls
+
+    def _is_valid_typescript_call(self, call_text: str) -> bool:
+        """Check if a potential call is valid (not a keyword or built-in)."""
+        # TypeScript keywords and built-ins to avoid
+        invalid_calls = {
+            'if', 'for', 'while', 'switch', 'case', 'try', 'catch', 'finally',
+            'function', 'class', 'interface', 'type', 'enum', 'namespace',
+            'return', 'break', 'continue', 'throw', 'yield', 'await', 'async',
+            'import', 'export', 'from', 'as', 'typeof', 'instanceof', 'in', 'of',
+            'true', 'false', 'null', 'undefined', 'this', 'super', 'new',
+            'console.log', 'console.error', 'console.warn', 'console.info',
+            'Math.', 'JSON.', 'Object.', 'Array.', 'String.', 'Number.', 'Boolean.',
+            'Date.', 'RegExp.', 'Promise.', 'Symbol.',
+            # Add common TypeScript/JavaScript built-ins that might be called
+            'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURI', 'decodeURI',
+            'encodeURIComponent', 'decodeURIComponent', 'eval', 'setTimeout', 'setInterval',
+            'clearTimeout', 'clearInterval', 'require', 'module', 'exports', 'global',
+            'process', 'Buffer', 'setImmediate', 'clearImmediate'
+        }
+
+        # Check if it's a direct invalid call
+        if call_text in invalid_calls:
+            return False
+
+        # Check if it starts with any invalid pattern
+        for invalid in invalid_calls:
+            if call_text.startswith(invalid):
+                return False
+
+        # Allow 'this' and 'super' method calls (these are valid)
+        if '.' in call_text:
+            parts = call_text.split('.')
+            if parts[0] in ['this', 'super']:
+                return True
+
+        return True
+
+    def _extract_typescript_call_parameters(self, call_text: str) -> List[str]:
+        """Extract parameters from a TypeScript function call."""
+        try:
+            import re
+
+            # Extract parameter list from function call
+            param_match = re.search(r'\(([^)]*)\)', call_text)
+            if param_match:
+                param_list = param_match.group(1).strip()
+                if param_list:
+                    # Simple parameter extraction - split by comma, respecting basic nesting
+                    params = []
+                    current = ""
+                    depth = 0
+
+                    for char in param_list:
+                        if char in '([{' :
+                            depth += 1
+                            current += char
+                        elif char in ')]}':
+                            depth -= 1
+                            current += char
+                        elif char == ',' and depth == 0:
+                            if current.strip():
+                                params.append(current.strip())
+                            current = ""
+                        else:
+                            current += char
+
+                    if current.strip():
+                        params.append(current.strip())
+
+                    return params[:5]  # Limit to first 5 parameters
+            return []
+        except Exception:
+            return []
 
     def _find_function_node(self, tree: ast.AST, func_name: str, line_start: int) -> Optional[ast.FunctionDef|ast.AsyncFunctionDef]:
         """Find the specific function node in the AST tree by name and approximate line number."""
@@ -299,8 +438,8 @@ class CallGraphBuilder:
         return extractor.calls
 
     def _create_edge_if_valid(self, caller_fqn: str, call: PotentialCall,
-                            func_element: FunctionElement) -> None:
-        """Create a call edge if the target function exists."""
+                             func_element: FunctionElement) -> None:
+        """Create a call edge if the target function exists with improved resolution."""
         target_fqn = None
         target_node = None
 
@@ -308,33 +447,84 @@ class CallGraphBuilder:
         if call.callee in self.functions_by_name:
             target_node = self.functions_by_name[call.callee]
             target_fqn = target_node.fully_qualified_name
-        # Strategy 2: If it's a method call (e.g., "obj.method"), try to resolve by method name.
-        # This is very simplified; a real type inference system would be needed for accuracy.
-        # For now, if the method name exists as a function anywhere, assume it's a potential match.
+
+        # Strategy 2: Handle method calls (e.g., "obj.method", "this.method", "super.method")
         elif '.' in call.callee:
             parts = call.callee.split('.')
             method_name = parts[-1]
+
+            # First try to find the exact method name
             if method_name in self.functions_by_name:
-                target_node = self.functions_by_name[method_name]
+                candidate_node = self.functions_by_name[method_name]
+                # Check if this could be a method (has class_name or is_method=True)
+                if candidate_node.is_method or candidate_node.class_name:
+                    target_node = candidate_node
+                    target_fqn = candidate_node.fully_qualified_name
+
+            # If not found, try to find any method with this name
+            if not target_node:
+                for fqn, node in self.functions.items():
+                    if (node.name == method_name and
+                        (node.is_method or node.class_name) and
+                        node.fully_qualified_name != caller_fqn):  # Avoid self-calls
+                        target_node = node
+                        target_fqn = node.fully_qualified_name
+                        break
+
+        # Strategy 3: Handle constructor calls and static method calls
+        elif call.callee in [node.name for node in self.functions.values() if node.is_method or node.class_name]:
+            # Look for methods or class functions with this name
+            for fqn, node in self.functions.items():
+                if node.name == call.callee and (node.is_method or node.class_name):
+                    target_node = node
+                    target_fqn = node.fully_qualified_name
+                    break
+
+        # Strategy 4: Handle generic function calls (functionName<T>())
+        else:
+            # Remove generic type parameters for matching
+            simple_name = call.callee.split('<')[0] if '<' in call.callee else call.callee
+            if simple_name in self.functions_by_name:
+                target_node = self.functions_by_name[simple_name]
                 target_fqn = target_node.fully_qualified_name
 
         # Final check if the resolved FQN actually exists in our graph
         if target_fqn and target_fqn in self.functions:
+            # Determine call type based on the target
+            call_type = 'direct'
+            if target_node and target_node.is_method:
+                call_type = 'method'
+            elif target_node and target_node.class_name:
+                call_type = 'static_method'
+
+            # Determine if it's a static call
+            is_static_call = (call_type == 'static_method' or
+                             (target_node and target_node.is_static) or
+                             '.' not in call.callee or
+                             call.callee.startswith(('this.', 'super.')))
+
+            # Calculate confidence based on how well we matched
+            confidence = 0.9
+            if '.' in call.callee and target_node and target_node.is_method:
+                confidence = 0.95  # Higher confidence for method calls
+            elif call.callee == target_node.name:
+                confidence = 0.85  # Slightly lower for simple name matches
+
             edge = CallEdge(
                 caller=caller_fqn,
                 callee=target_fqn,
                 file_path=call.file_path,
                 line_number=call.line_number,
-                call_type='direct',
+                call_type=call_type,
                 parameters=call.parameters,
-                is_static_call=True,
-                confidence=0.9
+                is_static_call=is_static_call,
+                confidence=confidence
             )
 
             self.edges.append(edge)
             self.functions[caller_fqn].outgoing_edges.append(edge)
             self.functions[target_fqn].incoming_edges.append(edge)
-            # print(f"     ✓ Created edge: {caller_fqn} -> {target_fqn}")
+            # print(f"     ✓ Created edge: {caller_fqn} -> {target_fqn} ({call_type}, {confidence:.2f})")
         # else:
             # print(f"     Info: Could not resolve call target for '{call.callee}' from '{caller_fqn}'")
 
@@ -382,21 +572,30 @@ class CallGraphBuilder:
         """Identify entry points using multiple strategies."""
         entry_point_patterns = {
             'python': ['main', 'run', '__main__', 'app', 'server', 'start', 'init', 'create', 'cli', 'execute'],
+            'typescript': ['main', 'run', 'app', 'server', 'start', 'init', 'bootstrap', 'index', 'entry']
         }
-        python_patterns = entry_point_patterns['python']
+
+        # Use appropriate patterns based on file extensions in the project
+        has_ts_files = any(f.file_path.endswith(('.ts', '.tsx')) for f in self.functions.values())
+        patterns = entry_point_patterns['typescript'] if has_ts_files else entry_point_patterns['python']
+
         print("   Identifying entry points using multiple strategies...")
 
         # Determine all callable FQNs in the graph for quicker lookup
         all_fqns = set(self.functions.keys())
 
+        # First pass: identify entry points using multiple strategies
+        potential_entry_points = []
         for fqn, func in self.functions.items():
-            # Apply all strategies. Once marked, don't re-evaluate.
-            if func.is_entry_point: continue
+            # Skip functions with None names (shouldn't happen but safety check)
+            if not func.name:
+                continue
 
             # Strategy 1: Common entry point names
-            if any(pattern in func.name.lower() for pattern in python_patterns):
+            if any(pattern in func.name.lower() for pattern in patterns):
                 func.is_entry_point = True
-                # print(f"     ✓ Entry point (name): {func.name} ({fqn})")
+                potential_entry_points.append(func)
+                print(f"     ✓ Entry point (name): {func.name} ({fqn})")
 
             # Strategy 2: Functions with no incoming edges (likely entry points), but not methods
             # and not common dunder methods that might not have explicit calls but aren't entry points
@@ -406,34 +605,55 @@ class CallGraphBuilder:
                 func.name not in ['_get_extractor', '_get_gitignore_patterns', '_match_file_against_pattern'] and # Specific internal helpers
                 not func.is_entry_point):
                 func.is_entry_point = True
-                # print(f"     ✓ Entry point (no incoming): {func.name} ({fqn})")
+                potential_entry_points.append(func)
+                print(f"     ✓ Entry point (no incoming): {func.name} ({fqn})")
 
             # Strategy 3: Functions in '__main__' modules or files containing 'main' or 'app'
             if ('__main__' in fqn or
                 'main' in func.file_path.lower() or
-                'app.py' in func.file_path.lower() or
-                'cli.py' in func.file_path.lower()) and not func.is_entry_point:
+                'app' in func.file_path.lower() or
+                'index' in func.file_path.lower() or
+                (has_ts_files and ('main.ts' in func.file_path or 'index.ts' in func.file_path))) and not func.is_entry_point:
                 func.is_entry_point = True
-                # print(f"     ✓ Entry point (location): {func.name} ({fqn})")
+                potential_entry_points.append(func)
+                print(f"     ✓ Entry point (location): {func.name} ({fqn})")
 
             # Strategy 4: Functions with common 'cli' patterns or called by Typer/Argparse
-            # (Requires deeper AST analysis for actual argparse/typer calls,
-            # for now, relying on names and decorator hints)
             if 'cli' in func.name.lower() or 'command' in func.name.lower():
                 # Check for decorators like @app.command() if we extract them
                 if any('command' in d.get('name', '') for d in func.decorators): # check for 'command' in decorator name
                     func.is_entry_point = True
+                    potential_entry_points.append(func)
                 elif not func.is_method and not func.is_entry_point:
-                     func.is_entry_point = True
+                    func.is_entry_point = True
+                    potential_entry_points.append(func)
 
             # Strategy 5: Simple top-level functions in small modules without being called
             # (Similar to strategy 2, but emphasizes module context)
             module_fqn = '.'.join(fqn.split('.')[:-1])
             if module_fqn in self.modules:
-                module_functions = [f for f in self.modules[module_fqn].functions if not f.is_method]
+                module_functions = [f for f in self.modules[module_fqn].functions if not f.is_method and f.name]
                 if len(module_functions) <= 3 and len(func.incoming_edges) == 0 and not func.is_entry_point:
                     func.is_entry_point = True
+                    potential_entry_points.append(func)
 
+        # Fallback Strategy: If no entry points found, mark the first few functions as entry points
+        if not potential_entry_points and self.functions:
+            print("   No entry points found with standard strategies, applying fallback...")
+            # Mark all functions with no incoming edges as entry points (up to 5)
+            no_incoming_functions = [f for f in self.functions.values() if len(f.incoming_edges) == 0]
+            for func in no_incoming_functions[:5]:  # Limit to first 5
+                if not func.is_entry_point:
+                    func.is_entry_point = True
+                    potential_entry_points.append(func)
+                    print(f"     ✓ Entry point (fallback): {func.name} ({func.fully_qualified_name})")
+
+        # Final fallback: if still no entry points, mark the first function as entry point
+        if not potential_entry_points and self.functions:
+            first_func = next(iter(self.functions.values()))
+            if not first_func.is_entry_point:
+                first_func.is_entry_point = True
+                print(f"     ✓ Entry point (final fallback): {first_func.name} ({first_func.fully_qualified_name})")
 
         entry_points = self.get_entry_points()
         print(f"   Total entry points identified: {len(entry_points)}")

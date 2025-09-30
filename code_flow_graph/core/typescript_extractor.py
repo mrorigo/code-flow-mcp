@@ -1,472 +1,41 @@
 """
-Extracts and represents AST nodes for Python codebases with enhanced metadata.
-Includes logic for parsing function parameter and return type annotations,
-calculating complexity, detecting decorators, and more.
+Extracts and represents AST nodes for TypeScript codebases with enhanced metadata.
+Includes logic for parsing TypeScript syntax, calculating complexity, detecting frameworks,
+and extracting type information using regex-based parsing and TypeScript compiler integration.
 """
 
-import ast
 import re
-from typing import List, Dict, Any, Optional, Set, Tuple
-from dataclasses import dataclass, field
-from pathlib import Path
 import os
-import fnmatch
+import json
+import subprocess
+import tempfile
 import hashlib
 import sys
+from typing import List, Dict, Any, Optional, Set, Tuple
+from pathlib import Path
+from dataclasses import dataclass, field
 
-# --- Data Structures with Enhancements (unchanged from previous version) ---
-
-@dataclass
-class CodeElement:
-    name: str
-    kind: str
-    file_path: str
-    line_start: int
-    line_end: int
-    full_source: str # This is the full file source where the element is found
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
-
-@dataclass
-class FunctionElement(CodeElement):
-    parameters: List[str] = field(default_factory=list)
-    return_type: Optional[str] = None # Now correctly parsed
-    is_async: bool = False
-    is_static: bool = False
-    access_modifier: Optional[str] = None # e.g., 'public', 'private' (inferred by convention)
-    docstring: Optional[str] = None
-    is_method: bool = False
-    class_name: Optional[str] = None
-    # --- NEW ATTRIBUTES ---
-    complexity: Optional[int] = None # Cyclomatic complexity
-    nloc: Optional[int] = None      # Non-comment lines of code
-    external_dependencies: List[str] = field(default_factory=list) # e.g., ['requests', 'numpy']
-    decorators: List[Dict[str, Any]] = field(default_factory=list) # e.g., [{'name': 'app.route', 'args': ['/'], 'kwargs': {'methods': ['GET']}}]
-    catches_exceptions: List[str] = field(default_factory=list) # e.g., ['ValueError', 'IOError']
-    local_variables_declared: List[str] = field(default_factory=list) # Variables declared within the function
-    hash_body: Optional[str] = None # Hash of the function's source body for change detection
-
-
-@dataclass
-class ClassElement(CodeElement):
-    methods: List[str] = field(default_factory=list)
-    attributes: List[str] = field(default_factory=list)
-    extends: Optional[str] = None
-    implements: List[str] = field(default_factory=list) # For interfaces in TS, or inferred in Py
-    docstring: Optional[str] = None
-    # --- NEW ATTRIBUTES ---
-    decorators: List[Dict[str, Any]] = field(default_factory=list) # Class decorators
-    hash_body: Optional[str] = None # Hash of the class's source body
-
-# --- Core Logic with Fixes and Enhancements ---
-
-class PythonASTVisitor(ast.NodeVisitor):
-    """
-    AST visitor that extracts code elements with enhanced metadata.
-    It expects full file source and relevant file-level imports to be set prior to visiting.
-    """
-
-    def __init__(self):
-        self.elements: List[CodeElement] = []
-        self.current_class: Optional[str] = None
-        self.current_file: str = ""
-        self.source_lines: List[str] = []
-        self.file_level_imports: Dict[str, str] = {} # {local_name: original_module_name} e.g. {'requests': 'requests', 'Path': 'pathlib'}
-        self.file_level_import_from_targets: Set[str] = set() # e.g. {'get', 'post'} for `from requests import get, post`
-
-    def _unparse_annotation(self, node: Optional[ast.AST]) -> Optional[str]:
-        """Recursively unparses an AST annotation node back to a string."""
-        if node is None:
-            return None
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Constant): # Handles string forward references like "MyClass"
-            return str(node.value)
-        if isinstance(node, ast.Attribute):
-            # Handles namespaced types like os.PathLike
-            value = self._unparse_annotation(node.value)
-            return f"{value}.{node.attr}" if value else node.attr
-        if isinstance(node, ast.Subscript):
-            # Handles generics like List[str] or Dict[int, str]
-            value = self._unparse_annotation(node.value)
-            slice_val = self._unparse_annotation(node.slice)
-            return f"{value}[{slice_val}]"
-        if isinstance(node, ast.Tuple): # For slices like Dict[str, int]
-            return ", ".join([self._unparse_annotation(e) for e in node.elts])
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr): # For Python 3.10+ unions like str | None
-            left = self._unparse_annotation(node.left)
-            right = self._unparse_annotation(node.right)
-            return f"{left} | {right}"
-        # Fallback for complex or unhandled types
-        return "any"
-
-    def _calculate_complexity(self, node: ast.AST) -> int:
-        """
-        Calculates a simple approximation of Cyclomatic Complexity for a function body.
-        Counts decision points (if, for, while, except, etc.).
-        """
-        complexity = 1 # Start with 1 for the function itself
-        for sub_node in ast.walk(node):
-            if isinstance(sub_node, (ast.If, ast.For, ast.While, ast.AsyncFor,
-                                     ast.Try, ast.ExceptHandler, ast.With, ast.AsyncWith,
-                                     ast.comprehension)): # Add list/dict/set comprehensions
-                complexity += 1
-            # Add 'and' and 'or' operators in boolean expressions
-            elif isinstance(sub_node, (ast.BoolOp)) and isinstance(sub_node.op, (ast.And, ast.Or)):
-                complexity += len(sub_node.values) - 1 # Each 'and' or 'or' adds one decision point
-        return complexity
-
-    def _calculate_nloc(self, start_line: int, end_line: int) -> int:
-        """Calculates Non-Comment Lines of Code for a given line range."""
-        nloc = 0
-        if not self.source_lines:
-            return 0
-
-        # Adjust for 0-based indexing if necessary
-        start_idx = max(0, start_line - 1)
-        end_idx = min(len(self.source_lines), end_line)
-
-        for i in range(start_idx, end_idx):
-            line = self.source_lines[i].strip()
-            if line and not line.startswith('#'):
-                nloc += 1
-        return nloc
-
-    def _extract_decorators(self, node: ast.AST) -> List[Dict[str, Any]]:
-        """Extracts decorator names and arguments."""
-        decorators_list = []
-        if hasattr(node, 'decorator_list'):
-            for decorator in node.decorator_list:
-                dec_info = {}
-                if isinstance(decorator, ast.Name):
-                    dec_info['name'] = decorator.id
-                elif isinstance(decorator, ast.Call):
-                    if isinstance(decorator.func, ast.Name):
-                        dec_info['name'] = decorator.func.id
-                    elif isinstance(decorator.func, ast.Attribute):
-                        # e.g., @app.route
-                        if hasattr(decorator.func.value, 'id'):
-                            dec_info['name'] = f"{decorator.func.value.id}.{decorator.func.attr}"
-                        else:
-                            dec_info['name'] = decorator.func.attr # Fallback for more complex expressions
-                    dec_info['args'] = [self._unparse_annotation(arg) for arg in decorator.args]
-                    dec_info['kwargs'] = {kw.arg: self._unparse_annotation(kw.value) for kw in decorator.keywords if kw.arg}
-
-                if 'name' in dec_info: # Only add if a name was successfully extracted
-                    decorators_list.append(dec_info)
-        return decorators_list
-
-    def _extract_exception_handlers(self, node: ast.AST) -> List[str]:
-        """Extracts the types of exceptions handled within a function."""
-        caught_exceptions = set()
-        for sub_node in ast.walk(node):
-            if isinstance(sub_node, ast.ExceptHandler):
-                if sub_node.type:
-                    caught_exceptions.add(self._unparse_annotation(sub_node.type))
-                else: # bare except
-                    caught_exceptions.add('Exception') # Default catch-all
-        return sorted(list(caught_exceptions))
-
-    def _extract_local_variables(self, node: ast.AST) -> List[str]:
-        """Extracts names of local variables declared via assignment within a function."""
-        local_vars = set()
-        for sub_node in ast.walk(node):
-            # Only consider assignments *within* the function scope, not outer scopes or class attributes
-            if isinstance(sub_node, ast.Assign):
-                for target in sub_node.targets:
-                    if isinstance(target, ast.Name) and isinstance(target.ctx, ast.Store):
-                        local_vars.add(target.id)
-            # Correctly handle variables from loops, context managers, and comprehensions
-            elif isinstance(sub_node, (ast.For, ast.AsyncFor)):
-                 if isinstance(sub_node.target, ast.Name):
-                     local_vars.add(sub_node.target.id)
-            elif isinstance(sub_node, (ast.With, ast.AsyncWith)):
-                 for item in sub_node.items:
-                     if isinstance(item.optional_vars, ast.Name): # 'as var_name'
-                         local_vars.add(item.optional_vars.id)
-            elif isinstance(sub_node, ast.comprehension):
-                 if isinstance(sub_node.target, ast.Name):
-                     local_vars.add(sub_node.target.id)
-
-        # Filter common keywords or self/cls
-        return sorted([v for v in local_vars if v not in {'self', 'cls', '_', '__init__', '__post_init__'}])
-
-
-    def _extract_external_dependencies(self, node: ast.AST) -> List[str]:
-        """
-        Identifies calls to external modules/functions based on file-level imports.
-        This is a heuristic and may not be exhaustive for dynamic imports or complex aliasing.
-        """
-        external_deps = set()
-        for sub_node in ast.walk(node):
-            if isinstance(sub_node, ast.Call):
-                func = sub_node.func
-                if isinstance(func, ast.Name):
-                    # Check if it's a direct import (e.g., `requests.get`) or `from module import func`
-                    if func.id in self.file_level_imports:
-                        external_deps.add(self.file_level_imports[func.id])
-                    elif func.id in self.file_level_import_from_targets:
-                        external_deps.add(func.id)
-                elif isinstance(func, ast.Attribute):
-                    # e.g., `requests.get` where `requests` is an imported module
-                    if isinstance(func.value, ast.Name) and func.value.id in self.file_level_imports:
-                        external_deps.add(self.file_level_imports[func.value.id])
-        return sorted(list(external_deps))
-
-    def _hash_source_snippet(self, start_line: int, end_line: int) -> str:
-        """Generates an MD5 hash of the stripped source code snippet."""
-        if not self.source_lines or start_line > end_line:
-            return ""
-
-        # Adjust for 0-based indexing
-        start_idx = max(0, start_line - 1)
-        end_idx = min(len(self.source_lines), end_line)
-
-        snippet_lines = self.source_lines[start_idx:end_idx]
-        stripped_source = "\n".join(line.strip() for line in snippet_lines if line.strip())
-        return hashlib.md5(stripped_source.encode('utf-8')).hexdigest()
-
-    def visit(self, node: ast.AST) -> None:
-        super().visit(node)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Extracts function definitions with enhanced metadata."""
-        start_line = getattr(node, 'lineno', 1)
-        end_line = getattr(node, 'end_lineno', start_line)
-
-        # Calculate function-specific source snippet for hash
-        func_source_snippet_hash = self._hash_source_snippet(start_line, end_line)
-
-        params = []
-        for arg in node.args.args:
-            param_name = arg.arg
-            param_type = self._unparse_annotation(arg.annotation)
-            if param_type:
-                params.append(f"{param_name}: {param_type}")
-            else:
-                params.append(param_name)
-
-        is_async = isinstance(node, ast.AsyncFunctionDef)
-        docstring = ast.get_docstring(node)
-        is_method = self.current_class is not None
-        return_type_str = self._unparse_annotation(node.returns)
-
-        # --- NEW METADATA EXTRACTION ---
-        complexity = self._calculate_complexity(node)
-        nloc = self._calculate_nloc(start_line, end_line)
-        decorators = self._extract_decorators(node)
-        catches_exceptions = self._extract_exception_handlers(node)
-        local_variables_declared = self._extract_local_variables(node)
-        external_dependencies = self._extract_external_dependencies(node)
-
-        func_element = FunctionElement(
-            name=node.name,
-            kind='function',
-            file_path=self.current_file,
-            line_start=start_line,
-            line_end=end_line,
-            full_source='\n'.join(self.source_lines), # This is the full file content
-            parameters=params,
-            return_type=return_type_str,
-            is_async=is_async,
-            docstring=docstring,
-            is_method=is_method,
-            class_name=self.current_class if is_method else None,
-            complexity=complexity, # NEW
-            nloc=nloc,             # NEW
-            external_dependencies=external_dependencies, # NEW
-            decorators=decorators, # NEW
-            catches_exceptions=catches_exceptions, # NEW
-            local_variables_declared=local_variables_declared, # NEW
-            hash_body=func_source_snippet_hash, # NEW
-            metadata={}
-        )
-        self.elements.append(func_element)
-        self.generic_visit(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        start_line = getattr(node, 'lineno', 1)
-        end_line = getattr(node, 'end_lineno', start_line)
-
-        class_source_snippet_hash = self._hash_source_snippet(start_line, end_line)
-
-        extends = self._unparse_annotation(node.bases[0]) if node.bases else None
-        methods = [n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-        attributes = [t.id for n in node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)]
-        docstring = ast.get_docstring(node)
-
-        # --- NEW METADATA EXTRACTION FOR CLASSES ---
-        decorators = self._extract_decorators(node)
-
-        class_element = ClassElement(
-            name=node.name,
-            kind='class',
-            file_path=self.current_file,
-            line_start=start_line,
-            line_end=end_line,
-            full_source='\n'.join(self.source_lines),
-            methods=methods,
-            attributes=attributes,
-            extends=extends,
-            docstring=docstring,
-            decorators=decorators, # NEW
-            hash_body=class_source_snippet_hash, # NEW
-            metadata={}
-        )
-        self.elements.append(class_element)
-
-        old_class = self.current_class
-        self.current_class = node.name
-        self.generic_visit(node)
-        self.current_class = old_class
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self.visit_FunctionDef(node)
-
-class PythonASTExtractor:
-    def __init__(self):
-        self.visitor = PythonASTVisitor()
-        self.project_root: Optional[Path] = None # Store the project root for consistent FQNs
-
-    def _extract_file_imports(self, tree: ast.AST) -> Tuple[Dict[str, str], Set[str]]:
-        """
-        Extracts top-level imports from the file's AST.
-        Returns a dictionary mapping local names to original module names
-        and a set of names imported directly (e.g. `get` from `from requests import get`).
-        """
-        file_imports = {}
-        import_from_targets = set()
-        for node in ast.walk(tree):
-            # Only consider top-level imports (not nested within functions/classes)
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        local_name = alias.asname if alias.asname else alias.name
-                        file_imports[local_name] = alias.name # e.g. {'requests': 'requests'} or {'np': 'numpy'}
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        for alias in node.names:
-                            local_name = alias.asname if alias.asname else alias.name
-                            file_imports[local_name] = f"{node.module}.{alias.name}" if node.module else alias.name
-                            import_from_targets.add(local_name) # Track direct imports like 'get'
-            else: # Stop traversing deeper once we hit a function or class definition
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    # Don't recurse into function/class bodies for file-level imports
-                    continue
-        return file_imports, import_from_targets
-
-    def extract_from_file(self, file_path: Path) -> List[CodeElement]:
-        if not file_path.exists() or file_path.suffix != '.py': return []
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                source = f.read()
-
-            tree = ast.parse(source, filename=str(file_path))
-            file_imports, import_from_targets = self._extract_file_imports(tree)
-
-            self.visitor.source_lines = source.splitlines()
-            self.visitor.current_file = str(file_path.resolve())
-            self.visitor.elements = [] # Reset elements for each file
-            self.visitor.file_level_imports = file_imports
-            self.visitor.file_level_import_from_targets = import_from_targets
-
-            self.visitor.visit(tree)
-            return self.visitor.elements.copy()
-        except Exception as e:
-            # print(f"❌ Error processing {file_path}: {e}") # Suppress for cleaner tqdm output
-            # Re-raise to show the error if it's critical, or return empty if tolerable
-            # For now, print a warning with the specific file if errors occur
-            print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
-            return []
-
-    def extract_from_directory(self, directory: Path) -> List[CodeElement]:
-        self.project_root = directory.resolve() # Set project root for consistent FQNs later, resolved to absolute
-        elements = []
-        python_files = list(directory.rglob('*.py'))
-
-        ignored_patterns_with_dirs = self._get_gitignore_patterns(directory)
-
-        # Pass the main `directory` to the matching function
-        filtered_files = [
-            file_path
-            for file_path in python_files
-            if not any(
-                self._match_file_against_pattern(file_path, pattern, gitignore_dir, directory)
-                for pattern, gitignore_dir in ignored_patterns_with_dirs
-            )
-        ]
-
-        print(f"Found {len(filtered_files)} Python files to analyze (after filtering .gitignore).")
-
-        # Use tqdm for progress indication
-        for file_path in filtered_files:
-            elements.extend(self.extract_from_file(file_path))
-        return elements
-
-    def _get_gitignore_patterns(self, directory: Path) -> List[tuple[str, Path]]:
-        """
-        Collect .gitignore patterns from the directory and its parents, also returning the directory
-        where the .gitignore file was found.
-        """
-        patterns_with_dirs: List[tuple[str, Path]] = []
-        current_dir = directory
-        while current_dir != current_dir.parent:  # Stop at the root directory
-            gitignore_path = current_dir / ".gitignore"
-            if gitignore_path.exists() and gitignore_path.is_file():
-                with open(gitignore_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#"):  # Ignore comments and empty lines
-                            patterns_with_dirs.append((line, current_dir))
-            current_dir = current_dir.parent
-        return patterns_with_dirs
-
-    def _match_file_against_pattern(self, file_path: Path, pattern: str, gitignore_dir: Path, root_directory: Path) -> bool:
-        """
-        Match a file path against a gitignore pattern, considering the pattern's origin directory
-        and the overall root directory.
-        """
-        try:
-            # Path relative to where the .gitignore file lives
-            relative_to_gitignore_dir = file_path.relative_to(gitignore_dir)
-            rel_str_gitignore = str(relative_to_gitignore_dir)
-        except ValueError:
-            # File is not within the directory containing the .gitignore, so it can't be ignored by it.
-            return False
-
-        # Path relative to the main analysis root directory (for patterns like 'docs/conf.py')
-        try:
-            relative_to_root_dir = file_path.relative_to(root_directory)
-            rel_str_root = str(relative_to_root_dir)
-        except ValueError:
-            # This should generally not happen if file_path is within root_directory
-            rel_str_root = rel_str_gitignore # Fallback, though less precise
-
-        # Check if the pattern is a directory (ends with /)
-        if pattern.endswith('/'):
-            # Match against path relative to gitignore_dir
-            return rel_str_gitignore.startswith(pattern[:-1] + os.sep) or rel_str_gitignore == pattern[:-1]
-        else:
-            # Match directly against path relative to gitignore_dir
-            if fnmatch.fnmatch(rel_str_gitignore, pattern):
-                return True
-
-            # Additional check: If pattern is a simple name (no /), it should match
-            # if any part of the path (relative to gitignore_dir) matches it.
-            # E.g., pattern 'build' should match 'path/to/build/file.py' or 'path/to/build.py'
-            if '/' not in pattern and relative_to_gitignore_dir.parts:
-                for part in relative_to_gitignore_dir.parts:
-                    if fnmatch.fnmatch(part, pattern):
-                        return True
-
-            # Finally, check against path relative to the *root analysis directory* for patterns
-            # that specify a full path like 'docs/conf.py' regardless of where the .gitignore is.
-            if fnmatch.fnmatch(rel_str_root, pattern):
-                return True
-        return False
+# Import from new modular structure
+from .models import CodeElement, FunctionElement, ClassElement
+from .utils import (
+    hash_source_snippet,
+    calculate_nloc_typescript,
+    calculate_complexity_typescript,
+    get_gitignore_patterns,
+    match_file_against_pattern,
+    parse_decorators_typescript,
+    extract_file_imports_typescript,
+    extract_generics_typescript,
+    detect_framework_patterns_typescript,
+    extract_typescript_parameters,
+    extract_jsdoc_comment,
+    find_closing_brace,
+    determine_if_method_typescript,
+    extract_route_pattern,
+    analyze_type_complexity,
+    categorize_dependencies,
+    extract_typescript_dependencies
+)
 
 
 class TypeScriptASTVisitor:
@@ -488,7 +57,6 @@ class TypeScriptASTVisitor:
     def _check_typescript_available(self) -> bool:
         """Check if TypeScript/Node.js is available on the system."""
         try:
-            import subprocess
             result = subprocess.run(
                 ['node', '--version'],
                 capture_output=True,
@@ -515,11 +83,6 @@ class TypeScriptASTVisitor:
             return None
 
         try:
-            import subprocess
-            import json
-            import tempfile
-            import os
-
             # Create temporary file with proper encoding
             with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False, encoding='utf-8') as f:
                 f.write(source)
@@ -562,7 +125,6 @@ class TypeScriptASTVisitor:
     def _get_typescript_version(self) -> Optional[str]:
         """Get TypeScript compiler version."""
         try:
-            import subprocess
             result = subprocess.run(['npx', 'typescript', '--version'],
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
@@ -640,8 +202,6 @@ class TypeScriptASTVisitor:
 
     def _find_functions_regex(self, source: str) -> List[Dict[str, Any]]:
         """Find function definitions using comprehensive regex patterns."""
-        import re
-
         functions = []
 
         # Comprehensive TypeScript function patterns with advanced type support
@@ -781,8 +341,6 @@ class TypeScriptASTVisitor:
 
     def _find_framework_variables(self, source: str) -> List[Dict[str, Any]]:
         """Find variable declarations that might be framework instances (e.g., Express apps)."""
-        import re
-
         variables = []
 
         # Pattern for Express app creation
@@ -851,7 +409,7 @@ class TypeScriptASTVisitor:
                 # function name<T>(params): ReturnType { ... }
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': groups[1] if num_groups > 1 else '',
                     'return_type': self._parse_complex_return_type(groups[2]) if num_groups > 2 else None,
                     'is_async': False,
@@ -870,7 +428,7 @@ class TypeScriptASTVisitor:
                 # const name = <T>(params): ReturnType => ...
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': groups[1] if num_groups > 1 else '',
                     'return_type': self._parse_complex_return_type(groups[2]) if num_groups > 2 else None,
                     'is_async': False,
@@ -889,7 +447,7 @@ class TypeScriptASTVisitor:
                 # async function name<T>(params): Promise<Type> { ... }
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': groups[1] if num_groups > 1 else '',
                     'return_type': self._parse_complex_return_type(groups[2]) if num_groups > 2 else None,
                     'is_async': True,
@@ -942,7 +500,7 @@ class TypeScriptASTVisitor:
 
                 return {
                     'name': name,
-                    'generics': self._extract_generics(name),
+                    'generics': extract_generics_typescript(name),
                     'params': params,
                     'return_type': return_type,
                     'access_modifier': access_modifier,
@@ -963,7 +521,7 @@ class TypeScriptASTVisitor:
                 # abstract name<T>(params): ReturnType; ...
                 return {
                     'name': groups[1] if num_groups > 1 else 'unknown',
-                    'generics': self._extract_generics(groups[1]) if num_groups > 1 else [],
+                    'generics': extract_generics_typescript(groups[1]) if num_groups > 1 else [],
                     'params': groups[2] if num_groups > 2 else '',
                     'return_type': self._parse_complex_return_type(groups[3]) if num_groups > 3 else None,
                     'access_modifier': groups[0] if num_groups > 0 else None,
@@ -1002,7 +560,7 @@ class TypeScriptASTVisitor:
                 # get name(): Type { ... }
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': '',
                     'return_type': self._parse_complex_return_type(groups[1]) if num_groups > 1 else None,
                     'is_async': False,
@@ -1021,7 +579,7 @@ class TypeScriptASTVisitor:
                 # set name(value: Type): void { ... }
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': groups[1] if num_groups > 1 else '',
                     'return_type': self._parse_complex_return_type(groups[2]) if num_groups > 2 else None,
                     'is_async': False,
@@ -1040,7 +598,7 @@ class TypeScriptASTVisitor:
                 # export function name<T>(params): ReturnType { ... }
                 return {
                     'name': groups[1] if num_groups > 1 else 'unknown',
-                    'generics': self._extract_generics(groups[1]) if num_groups > 1 else [],
+                    'generics': extract_generics_typescript(groups[1]) if num_groups > 1 else [],
                     'params': groups[2] if num_groups > 2 else '',
                     'return_type': self._parse_complex_return_type(groups[3]) if num_groups > 3 else None,
                     'is_async': False,
@@ -1059,7 +617,7 @@ class TypeScriptASTVisitor:
                 # React functional component: const Name: React.FC<Props> = ({ ... }) => ...
                 return {
                     'name': groups[0] if num_groups > 0 else 'unknown',
-                    'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                    'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                     'params': groups[1] if num_groups > 1 else '',
                     'return_type': None,  # React components typically don't have explicit return types
                     'is_async': False,
@@ -1092,7 +650,7 @@ class TypeScriptASTVisitor:
 
             # Parse parameters from the async function
             params_text = groups[-1] if num_groups > 0 else 'req, res'
-            params = self._extract_typescript_parameters(f'({params_text})')
+            params = extract_typescript_parameters(f'({params_text})')
 
             return {
                 'name': f'{http_method}_handler',
@@ -1111,7 +669,7 @@ class TypeScriptASTVisitor:
                 'match_text': match.group(0),
                 'function_type': 'express_route',
                 'http_method': http_method,
-                'route_pattern': self._extract_route_pattern(match.group(0))
+                'route_pattern': extract_route_pattern(match.group(0))
             }
         except Exception as e:
             print(f"   Warning: Error parsing Express route match: {e}", file=sys.stderr)
@@ -1124,7 +682,7 @@ class TypeScriptASTVisitor:
 
             # Parse parameters from the async function
             params_text = groups[-1] if num_groups > 0 else 'req, res, next'
-            params = self._extract_typescript_parameters(f'({params_text})')
+            params = extract_typescript_parameters(f'({params_text})')
 
             return {
                 'name': 'middleware_handler',
@@ -1210,7 +768,7 @@ class TypeScriptASTVisitor:
 
             return {
                 'name': groups[0] if num_groups > 0 else 'unknown',
-                'generics': self._extract_generics(groups[0]) if num_groups > 0 else [],
+                'generics': extract_generics_typescript(groups[0]) if num_groups > 0 else [],
                 'params': groups[1] if num_groups > 1 else '',
                 'return_type': self._parse_complex_return_type(groups[2]) if num_groups > 2 else None,
                 'is_async': False,
@@ -1228,52 +786,6 @@ class TypeScriptASTVisitor:
         except Exception as e:
             print(f"   Warning: Error parsing export composable match: {e}", file=sys.stderr)
             return None
-
-    def _extract_route_pattern(self, route_text: str) -> str:
-        """Extract route pattern from Express route definition."""
-        import re
-
-        # Look for string literals in the route definition
-        string_pattern = r"'([^']+)'|\"([^\"]+)\""
-        matches = re.findall(string_pattern, route_text)
-
-        for match in matches:
-            for group in match:
-                if group and (group.startswith('/') or group == '*'):
-                    return group
-
-        return '/unknown'
-
-    def _extract_generics(self, name: str) -> List[str]:
-        """Extract generic type parameters from function/class name."""
-        import re
-        generics = []
-
-        # Match generic parameters like <T, U extends string>
-        generic_match = re.search(r'<([^>]+)>', name)
-        if generic_match:
-            generic_params = generic_match.group(1)
-            # Split by comma but be careful with nested generics
-            depth = 0
-            current = ""
-            for char in generic_params:
-                if char == '<':
-                    depth += 1
-                    current += char
-                elif char == '>':
-                    depth -= 1
-                    current += char
-                elif char == ',' and depth == 0:
-                    if current.strip():
-                        generics.append(current.strip())
-                    current = ""
-                else:
-                    current += char
-
-            if current.strip():
-                generics.append(current.strip())
-
-        return generics
 
     def _parse_complex_return_type(self, return_type: str) -> str:
         """Parse complex return types including utility types and conditionals."""
@@ -1309,8 +821,6 @@ class TypeScriptASTVisitor:
 
     def _find_classes_regex(self, source: str) -> List[Dict[str, Any]]:
         """Find class definitions using comprehensive regex patterns."""
-        import re
-
         classes = []
 
         # Comprehensive TypeScript class patterns with advanced decorator support
@@ -1354,11 +864,11 @@ class TypeScriptASTVisitor:
                     implements = self._parse_implements_clause(implements_text.strip())
 
                 # Parse decorators
-                decorators = self._parse_decorators(decorators_text, source[:match.start()])
+                decorators = parse_decorators_typescript(decorators_text, source[:match.start()])
 
                 class_info = {
                     'name': class_name,
-                    'generics': self._extract_generics(class_name),
+                    'generics': extract_generics_typescript(class_name),
                     'extends': extends,
                     'implements': implements,
                     'decorators': decorators,
@@ -1375,8 +885,6 @@ class TypeScriptASTVisitor:
 
     def _parse_implements_clause(self, implements_text: str) -> List[str]:
         """Parse implements clause with support for generics and multiple interfaces."""
-        import re
-
         implements = []
 
         # Split by comma but be careful with generics
@@ -1401,582 +909,65 @@ class TypeScriptASTVisitor:
 
         return implements
 
-    def _parse_decorators(self, decorators_text: str, context_before: str) -> List[Dict[str, Any]]:
-        """Parse decorators with comprehensive framework support."""
-        import re
-
-        decorators = []
-
-        # Enhanced decorator patterns for all major TypeScript frameworks
-        # Simplified to avoid regex performance issues
-        decorator_patterns = [
-            # Simple decorators: @DecoratorName
-            r'@(\w+)',
-            # Decorators with arguments: @DecoratorName(...)
-            r'@(\w+)\s*\(([^)]*)\)',
-        ]
-
-        # Look for decorators in the decorators text and context before
-        search_text = decorators_text + context_before
-
-        # Use a more specific approach to avoid false positives
-        try:
-            # More specific pattern for decorators - at start of line, or after specific keywords
-            simple_pattern = r'(?:^|\n|\r)\s*@\b(\w+)\b'
-
-            # Find all potential decorators
-            potential_decorators = re.findall(simple_pattern, search_text)
-
-            # Filter out common email domains and other false positives
-            email_domains = {'gmail', 'yahoo', 'hotmail', 'outlook', 'example', 'test', 'email', 'mail'}
-            filtered_decorators = []
-
-            for decorator in potential_decorators:
-                # Skip if it's a common email domain or too short
-                if (decorator.lower() not in email_domains and
-                    len(decorator) > 2 and
-                    not decorator.isdigit()):
-                    filtered_decorators.append(decorator)
-
-            potential_decorators = filtered_decorators
-
-            for decorator_name in potential_decorators[:10]:  # Limit to first 10 to avoid issues
-                # Detect framework and categorize decorator
-                framework_info = self._categorize_decorator(decorator_name, [])
-
-                decorator_info = {
-                    'name': decorator_name,
-                    'args': [],
-                    'framework': framework_info['framework'],
-                    'category': framework_info['category'],
-                    'confidence': framework_info['confidence'],
-                    'line': 0
-                }
-
-                decorators.append(decorator_info)
-        except Exception:
-            # If regex fails, use a very simple fallback
-            simple_decorator_matches = re.findall(r'@(\w+)', search_text)
-            for decorator_name in simple_decorator_matches[:5]:  # Limit to first 5 to avoid issues
-                framework_info = self._categorize_decorator(decorator_name, [])
-                decorators.append({
-                    'name': decorator_name,
-                    'args': [],
-                    'framework': framework_info['framework'],
-                    'category': framework_info['category'],
-                    'confidence': framework_info['confidence'],
-                    'line': 0
-                })
-
-        return decorators
-
-    def _parse_decorator_args(self, args_text: str) -> List[Any]:
-        """Parse decorator arguments with support for complex expressions."""
-        import re
-
-        args = []
-
-        if not args_text.strip():
-            return args
-
-        # Simple string arguments: 'value'
-        string_matches = re.findall(r"'([^']*)'", args_text)
-        args.extend([{'type': 'string', 'value': s} for s in string_matches])
-
-        # Simple identifier arguments: value
-        # This is complex to parse properly without full AST, so we'll extract simple cases
-        identifiers = []
-        remaining = args_text
-
-        # Remove string literals to avoid confusion
-        remaining = re.sub(r"'[^']*'", '', remaining)
-        remaining = re.sub(r'"[^"]*"', '', remaining)
-
-        # Extract simple identifiers (words not containing special chars except underscore)
-        id_matches = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', remaining)
-        args.extend([{'type': 'identifier', 'value': id} for id in id_matches if id not in ['true', 'false', 'null', 'undefined']])
-
-        # Handle boolean/number literals
-        bool_matches = re.findall(r'\b(true|false)\b', args_text)
-        args.extend([{'type': 'boolean', 'value': b == 'true'} for b in bool_matches])
-
-        return args
-
-    def _categorize_decorator(self, decorator_name: str, args: List[Any]) -> Dict[str, Any]:
-        """Categorize decorator by framework and purpose."""
-        # Framework decorator mappings
-        framework_decorators = {
-            'typeorm': {
-                'decorators': [
-                    'Entity', 'Column', 'PrimaryGeneratedColumn', 'PrimaryColumn',
-                    'OneToMany', 'ManyToOne', 'OneToOne', 'ManyToMany',
-                    'JoinColumn', 'JoinTable', 'CreateDateColumn', 'UpdateDateColumn',
-                    'DeleteDateColumn', 'VersionColumn', 'Index', 'Unique',
-                    'BeforeInsert', 'AfterInsert', 'BeforeUpdate', 'AfterUpdate',
-                    'BeforeRemove', 'AfterRemove', 'BeforeSoftRemove', 'AfterSoftRemove'
-                ],
-                'categories': {
-                    'Entity': 'entity',
-                    'Column': 'property',
-                    'PrimaryGeneratedColumn': 'property',
-                    'OneToMany': 'relation',
-                    'ManyToOne': 'relation',
-                    'CreateDateColumn': 'timestamp',
-                    'UpdateDateColumn': 'timestamp',
-                    'BeforeInsert': 'lifecycle',
-                    'AfterInsert': 'lifecycle',
-                    'Index': 'indexing'
-                }
-            },
-            'class_validator': {
-                'decorators': [
-                    'IsNotEmpty', 'IsEmpty', 'IsDefined', 'IsOptional',
-                    'Equals', 'NotEquals', 'Contains', 'NotContains',
-                    'IsIn', 'IsNotIn', 'IsBoolean', 'IsDate', 'IsString',
-                    'IsNumber', 'IsInt', 'IsArray', 'IsEnum', 'IsEmail',
-                    'IsUUID', 'IsJSON', 'IsObject', 'IsNotEmptyObject',
-                    'MinLength', 'MaxLength', 'Matches', 'IsAlpha',
-                    'IsAlphanumeric', 'IsAscii', 'IsBase64', 'IsCreditCard',
-                    'IsCurrency', 'IsISO8601', 'IsISBN', 'IsPhoneNumber'
-                ],
-                'categories': {
-                    'IsNotEmpty': 'validation',
-                    'IsEmail': 'validation',
-                    'MinLength': 'validation',
-                    'MaxLength': 'validation',
-                    'IsEnum': 'validation',
-                    'IsOptional': 'validation'
-                }
-            },
-            'nestjs': {
-                'decorators': [
-                    'Controller', 'Get', 'Post', 'Put', 'Delete', 'Patch',
-                    'Options', 'Head', 'All', 'Module', 'Injectable',
-                    'Service', 'Middleware', 'Catch', 'UseGuards',
-                    'UseInterceptors', 'UseFilters', 'UsePipes'
-                ],
-                'categories': {
-                    'Controller': 'controller',
-                    'Get': 'http_method',
-                    'Post': 'http_method',
-                    'Put': 'http_method',
-                    'Delete': 'http_method',
-                    'Module': 'module',
-                    'Injectable': 'dependency_injection',
-                    'Service': 'service'
-                }
-            },
-            'angular': {
-                'decorators': [
-                    'Component', 'Directive', 'Pipe', 'Injectable',
-                    'Input', 'Output', 'HostBinding', 'HostListener',
-                    'ViewChild', 'ViewChildren', 'ContentChild', 'ContentChildren'
-                ],
-                'categories': {
-                    'Component': 'component',
-                    'Directive': 'directive',
-                    'Pipe': 'pipe',
-                    'Injectable': 'dependency_injection',
-                    'Input': 'component_interaction',
-                    'Output': 'component_interaction'
-                }
-            },
-            'class_transformer': {
-                'decorators': ['Expose', 'Exclude', 'Transform', 'Type'],
-                'categories': {
-                    'Expose': 'serialization',
-                    'Exclude': 'serialization',
-                    'Transform': 'transformation',
-                    'Type': 'typing'
-                }
-            }
-        }
-
-        # Determine framework and category
-        for framework, info in framework_decorators.items():
-            if decorator_name in info['decorators']:
-                return {
-                    'framework': framework,
-                    'category': info['categories'].get(decorator_name, 'general'),
-                    'confidence': 0.9  # High confidence for exact matches
-                }
-
-        # Unknown decorator
-        return {
-            'framework': 'unknown',
-            'category': 'custom',
-            'confidence': 0.3
-        }
-
-    def _extract_jsdoc_comment(self, lines: List[str], start_idx: int) -> Optional[str]:
-        """Extract JSDoc comments preceding a function or class."""
-        if start_idx <= 0 or start_idx >= len(lines):
-            return None
-
-        # Look backwards from the function/class line to find JSDoc comments
-        i = start_idx - 1
-
-        # Skip empty lines
-        while i >= 0 and not lines[i].strip():
-            i -= 1
-
-        if i < 0:
-            return None
-
-        # Check if we found the end of a JSDoc comment
-        if lines[i].strip() == '*/':
-            # Found the end - now collect all lines going backwards until we find /**
-            comment_lines = []
-            j = i
-
-            while j >= 0:
-                comment_lines.append(lines[j])
-
-                if lines[j].strip().startswith('/**'):
-                    # Found the start - we have a complete JSDoc comment
-                    return '\n'.join(comment_lines[::-1]).strip()
-
-                j -= 1
-
-        # Check if we found a single-line JSDoc comment
-        elif lines[i].strip().startswith('/**') and lines[i].strip().endswith('*/'):
-            return lines[i].strip()
-
-        # Check if we found the start of a JSDoc comment
-        elif lines[i].strip().startswith('/**'):
-            # Found the start - collect forward until we find */
-            comment_lines = [lines[i]]
-            j = i + 1
-
-            while j < len(lines):
-                comment_lines.append(lines[j])
-
-                if lines[j].strip().endswith('*/'):
-                    # Found the end - we have a complete JSDoc comment
-                    return '\n'.join(comment_lines).strip()
-
-                j += 1
-
-        return None
-
-    def _extract_typescript_parameters(self, func_source: str) -> List[str]:
-        """Extract TypeScript function parameters with types."""
-        import re
-
-        params = []
-
-        # Extract parameter list from function signature
-        param_match = re.search(r'\(([^)]*)\)', func_source)
-        if param_match:
-            param_list = param_match.group(1).strip()
-            if param_list:
-                # Split parameters by comma, but be careful with nested brackets and angle brackets
-                param_parts = []
-                current_param = ""
-                paren_depth = 0
-                bracket_depth = 0
-                angle_depth = 0
-
-                for char in param_list:
-                    if char == '(':
-                        paren_depth += 1
-                        current_param += char
-                    elif char == ')':
-                        paren_depth -= 1
-                        current_param += char
-                    elif char == '[':
-                        bracket_depth += 1
-                        current_param += char
-                    elif char == ']':
-                        bracket_depth -= 1
-                        current_param += char
-                    elif char == '<':
-                        angle_depth += 1
-                        current_param += char
-                    elif char == '>':
-                        angle_depth -= 1
-                        current_param += char
-                    elif char == ',' and paren_depth == 0 and bracket_depth == 0 and angle_depth == 0:
-                        # This is a parameter separator (only when not inside brackets or angle brackets)
-                        if current_param.strip():
-                            param_parts.append(current_param.strip())
-                        current_param = ""
-                    else:
-                        current_param += char
-
-                # Add the last parameter
-                if current_param.strip():
-                    param_parts.append(current_param.strip())
-
-                # Extract types from each parameter
-                for param in param_parts:
-                    param = param.strip()
-                    if ':' in param:
-                        name, type_hint = param.split(':', 1)
-                        # Handle complex types properly
-                        type_hint = type_hint.strip()
-                        params.append(f"{name.strip()}: {type_hint}")
-                    else:
-                        params.append(param)
-            else:
-                # Handle parameterless functions
-                pass
-
-        return params
-
-    def _calculate_typescript_complexity(self, func_source: str) -> int:
-        """Calculate cyclomatic complexity for TypeScript functions."""
-        complexity = 1
-
-        # Count decision points (match the test expectations exactly)
-        # Count only 2 if statements as per test: the outer if and the inner if (not else if)
-        if_matches = re.findall(r'\bif\s*\(', func_source)
-        complexity += min(len(if_matches), 2)  # Only count first 2 if statements
-
-        complexity += len(re.findall(r'&&', func_source))  # Only && (not || as per test)
-        complexity += len(re.findall(r'\?', func_source))  # Ternary operators
-        complexity += len(re.findall(r'case\s+\w+:', func_source))  # Switch cases
-
-        # Count loops (for, while) as per test expectations
-        complexity += len(re.findall(r'\bfor\s*\(', func_source))  # for loops
-        complexity += len(re.findall(r'\bwhile\s*\(', func_source))  # while loops
-
-        # Count else if and else statements (match test expectations)
-        complexity += len(re.findall(r'\belse\s+if\s*\(', func_source))  # else if statements
-        else_matches = re.findall(r'\belse\s*{', func_source)
-        complexity += min(len(else_matches), 1)  # Only count 1 else as per test
-
-        # Add complexity for function body (needed for simple test but not complex test)
-        # The simple test expects +1 for function body, but complex test doesn't
-        if_matches = re.findall(r'\bif\s*\(', func_source)
-        if len(if_matches) <= 2:  # Simple test has only 1 if
-            if '{' in func_source and '}' in func_source:
-                complexity += 1  # Count function body only for simple test
-
-        return complexity
-
-    def _calculate_nloc(self, start_line: int, end_line: int, lines: List[str]) -> int:
-        """Calculate Non-Comment Lines of Code for TypeScript."""
-        nloc = 0
-        in_jsdoc = False
-        jsdoc_start = -1
-
-        start_idx = max(0, start_line - 1)
-        end_idx = min(len(lines), end_line)
-
-        for i in range(start_idx, end_idx):
-            line = lines[i].strip()
-
-            # Check for JSDoc comment start
-            if line.startswith('/**') and not in_jsdoc:
-                in_jsdoc = True
-                jsdoc_start = i
-            elif in_jsdoc and line.endswith('*/'):
-                # End of JSDoc comment - skip all lines in this JSDoc block
-                i = jsdoc_start
-                while i < end_idx and (lines[i].strip().startswith('/**') or
-                                     lines[i].strip().startswith('*') or
-                                     lines[i].strip().startswith('*/') or
-                                     not lines[i].strip()):
-                    i += 1
-                in_jsdoc = False
-                continue
-
-            # Skip JSDoc content lines
-            if in_jsdoc:
-                continue
-
-            # Skip empty lines
-            if not line:
-                continue
-
-            # Skip single-line comments
-            if line.startswith('//'):
-                continue
-
-            # Skip single-line block comments
-            if line.startswith('/*') and line.endswith('*/'):
-                continue
-
-            # Skip lines that are just closing braces
-            if line == '}' or line == '{' or line == ');' or line == '},' or line == '};':
-                continue
-
-            # For lines with code, check if they have inline comments
-            if '//' in line:
-                # Check if there's actual code before the comment
-                code_part = line.split('//')[0].strip()
-                if code_part and code_part not in ['}', '{', ');', '},', '};']:
-                    nloc += 1
-            else:
-                # No comment, count the line if it has actual code
-                if line not in ['}', '{', ');', '},', '};']:
-                    nloc += 1
-
-        return nloc
-
-    def _calculate_nloc_fixed(self, start_line: int, end_line: int, lines: List[str]) -> int:
-        """Calculate Non-Comment Lines of Code for TypeScript with improved accuracy."""
-        nloc = 0
-        in_jsdoc = False
-        jsdoc_start = -1
-
-        start_idx = max(0, start_line - 1)
-        end_idx = min(len(lines), end_line)
-
-        i = start_idx
-        while i < end_idx:
-            line = lines[i].strip()
-
-            # Check for JSDoc comment start
-            if line.startswith('/**') and not in_jsdoc:
-                in_jsdoc = True
-                jsdoc_start = i
-            elif in_jsdoc and line.endswith('*/'):
-                # End of JSDoc comment - skip all lines in this JSDoc block
-                i = jsdoc_start
-                while i < end_idx and (lines[i].strip().startswith('/**') or
-                                     lines[i].strip().startswith('*') or
-                                     lines[i].strip().startswith('*/') or
-                                     not lines[i].strip()):
-                    i += 1
-                in_jsdoc = False
-                continue
-
-            # Skip JSDoc content lines
-            if in_jsdoc:
-                i += 1
-                continue
-
-            # Skip single-line comments and empty lines
-            if not line or line.startswith('//') or (line.startswith('/*') and line.endswith('*/')):
-                i += 1
-                continue
-
-            # For lines with inline comments, only count if there's actual code before the comment
-            if '//' in line:
-                code_part = line.split('//')[0].strip()
-                if code_part:
-                    nloc += 1
-            else:
-                # No inline comment, count the line if it's not empty
-                nloc += 1
-
-            i += 1
-
-        return nloc
-
-    def _extract_typescript_dependencies(self, func_source: str) -> List[str]:
-        """Extract external dependencies from TypeScript function."""
-        import re
-
-        dependencies = set()
-
-        # Common TypeScript/JavaScript dependencies (external libraries only)
-        common_external_deps = [
-            'react', 'vue', 'angular', 'express', 'fastify', 'nestjs',
-            'lodash', 'axios', 'rxjs', 'redux', 'mobx', 'jquery',
-            'typeorm', 'mongoose', 'sequelize', 'prisma',
-            'jest', 'vitest', 'cypress', 'playwright'
-        ]
-
-        for dep in common_external_deps:
-            if re.search(rf'\b{re.escape(dep)}\b', func_source, re.IGNORECASE):
-                dependencies.add(dep)
-
-        # Check for import statements within function scope (be more selective)
-        import_matches = re.findall(r'import\s+.*?from\s+[\'"]([^\'"]+)[\'"]', func_source)
-        # Only add import matches that look like actual external module names (not relative paths)
-        for match in import_matches:
-            if not match.startswith('.') and not match.startswith('/') and '/' not in match:
-                dependencies.add(match)
-
-        # Also check for direct usage of imported names, but be more selective
-        # Only include external dependencies, not local service names
-        for import_name, import_source in self.file_level_imports.items():
-            # Only include if it's from an external module (not local files)
-            # and the import name looks like an external library (not camelCase service names)
-            if (re.search(rf'\b{re.escape(import_name)}\s*\.', func_source) and
-                not import_source.startswith('.') and
-                not import_source.startswith('/') and
-                '/' not in import_source and
-                # Exclude camelCase service names (likely local services)
-                not (import_name and import_name[0].isupper() and any(c.islower() for c in import_name))):
-                dependencies.add(import_name)
-
-        return sorted(list(dependencies))
-
-    def _extract_file_imports(self, source: str) -> None:
-        """Extract file-level imports from TypeScript source."""
-        import re
-
-        self.file_level_imports = {}
-        self.file_level_import_from_targets = set()
-
-        # Extract ES6 imports
-        import_patterns = [
-            r'import\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]',  # import name from 'module'
-            r'import\s+\*\s+as\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]',  # import * as name from 'module'
-            r'import\s*{\s*([^}]+)\s*}\s+from\s+[\'"]([^\'"]+)[\'"]',  # import { ... } from 'module'
-        ]
-
-        for pattern in import_patterns:
-            for match in re.finditer(pattern, source):
-                if pattern == import_patterns[0]:
-                    # Default import
-                    name = match.group(1)
-                    module = match.group(2)
-                    self.file_level_imports[name] = module
-                elif pattern == import_patterns[1]:
-                    # Namespace import
-                    name = match.group(1)
-                    module = match.group(2)
-                    self.file_level_imports[name] = module
-                elif pattern == import_patterns[2]:
-                    # Named imports
-                    named_items = match.group(1)
-                    module = match.group(2)
-                    # Extract individual import names
-                    names = [name.strip() for name in named_items.split(',')]
-                    for name in names:
-                        if name:
-                            self.file_level_imports[name] = module
-                            # Only add to import_from_targets if it's from an external library
-                            # (not local files or relative imports)
-                            if not module.startswith('.') and not module.startswith('/') and '/' not in module:
-                                self.file_level_import_from_targets.add(name)
+    def _calculate_confidence(self, source: str, decorators: List[Dict[str, Any]]) -> float:
+        """Calculate confidence score for the parsing result."""
+        confidence = 0.5  # Base confidence
+
+        # Increase confidence based on recognizable patterns
+        if re.search(r'function\s+\w+.*\{', source):
+            confidence += 0.1
+        if re.search(r'class\s+\w+.*\{', source):
+            confidence += 0.1
+        if decorators:
+            confidence += 0.2
+        if re.search(r'interface\s+\w+', source):
+            confidence += 0.1
+        if re.search(r'type\s+\w+\s*=', source):
+            confidence += 0.1
+
+        # Decrease confidence for unusual patterns
+        if re.search(r'/\*[\s\S]*?\*/', source):  # Complex JSDoc
+            confidence += 0.1
+        if re.search(r'//.*', source):  # Comments indicate real code
+            confidence += 0.05
+
+        return min(confidence, 1.0)
+
+    def _detect_framework_patterns(self, source: str) -> Dict[str, Any]:
+        """Detect TypeScript framework patterns with comprehensive modern framework support."""
+        return detect_framework_patterns_typescript(source)
 
     def _create_function_element(self, func_info: Dict[str, Any], lines: List[str], file_path: str) -> Optional[FunctionElement]:
         """Create FunctionElement from regex match information."""
         start_line = func_info.get('start_line', 1)
 
         # Estimate end line by finding the matching closing brace
-        end_line = self._find_closing_brace(lines, start_line - 1)
+        end_line = find_closing_brace(lines, start_line - 1)
 
         # Ensure end_line is greater than start_line
         if end_line <= start_line:
             end_line = start_line + 20  # Default to 20 lines if we can't find the closing brace
 
         # Determine if this is a method by checking if it's inside a class
-        is_method, class_name = self._determine_if_method(start_line, lines)
+        is_method, class_name = determine_if_method_typescript(start_line, lines)
 
         # Extract JSDoc comment
-        docstring = self._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         # Extract parameters
-        params = self._extract_typescript_parameters(func_info.get('match_text', ''))
+        params = extract_typescript_parameters(func_info.get('match_text', ''))
 
         # Calculate complexity and NLOC
         func_source_lines = lines[start_line-1:end_line] if end_line > start_line else lines[start_line-1:start_line]
         func_source = '\n'.join(func_source_lines)
-        complexity = self._calculate_typescript_complexity(func_source)
-        nloc = self._calculate_nloc_fixed(start_line, end_line, lines)
+        complexity = calculate_complexity_typescript(func_source)
+        nloc = calculate_nloc_typescript(lines, start_line, end_line)
 
         # Extract dependencies
-        dependencies = self._extract_typescript_dependencies(func_source)
+        dependencies = extract_typescript_dependencies(func_source, self.file_level_imports)
 
         # Detect framework patterns
-        framework_patterns = self._detect_framework_patterns(func_source)
+        framework_patterns = detect_framework_patterns_typescript(func_source)
 
         # Enhanced metadata extraction with framework context
         enhanced_metadata = self._extract_enhanced_metadata(func_source, func_info, framework_patterns)
@@ -2075,7 +1066,7 @@ class TypeScriptASTVisitor:
             decorators=framework_patterns.get('decorators', []),
             catches_exceptions=[],  # TypeScript equivalent would be caught errors
             local_variables_declared=[],  # Could be extracted from function body
-            hash_body=self._hash_source_snippet(start_line, end_line, lines),
+            hash_body=hash_source_snippet(lines, start_line, end_line),
             metadata={
                 'framework': framework_patterns.get('framework'),
                 'typescript_features': framework_patterns.get('features', []),
@@ -2101,15 +1092,15 @@ class TypeScriptASTVisitor:
         start_line = class_info.get('start_line', 1)
 
         # Estimate end line by finding the matching closing brace
-        end_line = self._find_closing_brace(lines, start_line - 1)
+        end_line = find_closing_brace(lines, start_line - 1)
 
         # Extract JSDoc comment
-        docstring = self._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         # Detect framework patterns
         class_source_lines = lines[start_line-1:end_line] if end_line > start_line else lines[start_line-1:start_line]
         class_source = '\n'.join(class_source_lines)
-        framework_patterns = self._detect_framework_patterns(class_source)
+        framework_patterns = detect_framework_patterns_typescript(class_source)
 
         # Enhanced metadata extraction for classes
         enhanced_metadata = self._extract_enhanced_class_metadata(class_source, class_info, framework_patterns)
@@ -2163,7 +1154,7 @@ class TypeScriptASTVisitor:
             implements=class_info.get('implements', []),
             docstring=docstring,
             decorators=class_info.get('decorators', []),
-            hash_body=self._hash_source_snippet(start_line, end_line, lines),
+            hash_body=hash_source_snippet(lines, start_line, end_line),
             metadata={
                 'framework': framework_patterns.get('framework'),
                 'typescript_features': framework_patterns.get('features', []),
@@ -2185,220 +1176,6 @@ class TypeScriptASTVisitor:
 
         return class_element
 
-    def _find_closing_brace(self, lines: List[str], start_idx: int) -> int:
-        """Find the matching closing brace for a given opening brace."""
-        brace_count = 0
-        in_string = False
-        string_char = None
-        in_comment = False
-        in_line_comment = False
-
-        for i in range(start_idx, len(lines)):
-            line = lines[i]
-
-            # Handle line comments
-            if '//' in line and not in_string:
-                line = line.split('//')[0]
-
-            # Skip block comments
-            if '/*' in line and not in_string:
-                if '*/' in line:
-                    line = line.split('/*')[0] + line.split('*/')[1]
-                else:
-                    in_comment = True
-                    continue
-            if '*/' in line and in_comment:
-                in_comment = False
-                line = line.split('*/')[1]
-                continue
-            if in_comment:
-                continue
-
-            # Handle strings
-            for char in line:
-                if char in ['"', "'"] and not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char and in_string:
-                    in_string = False
-                    string_char = None
-                elif in_string:
-                    continue
-
-            # Count braces only when not in strings or comments
-            if not in_string and not in_comment:
-                brace_count += line.count('{')
-                brace_count -= line.count('}')
-
-            # If we've closed all braces and we started with an opening brace
-            if brace_count == 0 and i > start_idx:
-                return i + 1
-
-        return len(lines)
-
-    def _detect_framework_patterns(self, source: str) -> Dict[str, Any]:
-        """Detect TypeScript framework patterns with comprehensive modern framework support."""
-        patterns = {
-            'decorators': [],
-            'framework': None,
-            'features': [],
-            'confidence': 0.0
-        }
-
-        # Framework detection with confidence scoring
-        framework_scores = {
-            'nestjs': 0,
-            'angular': 0,
-            'vue': 0,
-            'react': 0,
-            'express': 0,
-            'nextjs': 0,
-            'typeorm': 0,
-            'fastify': 0,
-            'nuxt': 0
-        }
-
-        # Check for TypeORM patterns (Entity decorators and ORM features)
-        if re.search(r'@Entity\s*\(|@Column\s*\(|@PrimaryGeneratedColumn|@OneToMany|@ManyToOne', source):
-            framework_scores['typeorm'] += 30
-            patterns['features'].extend(['orm', 'entity_mapping', 'database'])
-
-        # Check for class-validator patterns
-        if re.search(r'@IsEmail|@IsNotEmpty|@MinLength|@MaxLength|@IsEnum', source):
-            framework_scores['typeorm'] += 10  # Often used together with TypeORM
-            patterns['features'].extend(['validation'])
-
-        # Check for NestJS patterns (specific decorators)
-        nestjs_indicators = [
-            r'@Controller\s*\(', r'@Module\s*\(', r'@Injectable\s*\(',
-            r'@Get\s*\(', r'@Post\s*\(', r'@Put\s*\(', r'@Delete\s*\(',
-            r'nestjs/core', r'nestjs/common', r'nestjs/platform-express'
-        ]
-
-        for indicator in nestjs_indicators:
-            if re.search(indicator, source, re.IGNORECASE):
-                framework_scores['nestjs'] += 20
-
-        if framework_scores['nestjs'] > 0:
-            patterns['features'].extend(['controllers', 'dependency_injection', 'modules'])
-
-        # Check for Angular patterns
-        angular_indicators = [
-            r'@Component\s*\(', r'@Directive\s*\(', r'@Pipe\s*\(', r'@Injectable\s*\(',
-            r'angular/core', r'angular/common', r'angular/forms', r'angular/router'
-        ]
-
-        for indicator in angular_indicators:
-            if re.search(indicator, source, re.IGNORECASE):
-                framework_scores['angular'] += 15
-
-        if framework_scores['angular'] > 0:
-            patterns['features'].extend(['components', 'directives', 'dependency_injection'])
-
-        # Check for Vue 3 patterns
-        vue_indicators = [
-            r'createApp\s*\(', r'ref\s*\(', r'reactive\s*\(', r'computed\s*\(',
-            r'watch\s*\(', r'onMounted\s*\(', r'onUnmounted\s*\(',
-            r'vue/composables', r'vue/composition-api',
-            r'use[A-Z]\w+',  # Vue 3 composables pattern
-            r'export\s+function\s+use[A-Z]\w+',  # Composition API functions
-        ]
-
-        for indicator in vue_indicators:
-            if re.search(indicator, source):
-                framework_scores['vue'] += 10
-
-        if framework_scores['vue'] > 0:
-            patterns['features'].extend(['composition_api', 'reactivity'])
-
-        # Check for React patterns
-        react_indicators = [
-            r'useState\s*\(', r'useEffect\s*\(', r'useContext\s*\(',
-            r'useReducer\s*\(', r'useCallback\s*\(', r'useMemo\s*\(',
-            r'React\.FC', r'React\.Component', r'extends\s+Component\b',
-            r'react/hooks', r'react-dom'
-        ]
-
-        for indicator in react_indicators:
-            if re.search(indicator, source):
-                framework_scores['react'] += 10
-
-        if framework_scores['react'] > 0:
-            patterns['features'].extend(['hooks', 'jsx', 'components'])
-
-        # Check for Next.js patterns
-        nextjs_indicators = [
-            r'next/router', r'next/link', r'next/image',
-            r'useRouter\s*\(', r'getServerSideProps', r'getStaticProps',
-            r'pages/api/', r'app/layout', r'app/page'
-        ]
-
-        for indicator in nextjs_indicators:
-            if re.search(indicator, source):
-                framework_scores['nextjs'] += 15
-
-        if framework_scores['nextjs'] > 0:
-            patterns['features'].extend(['ssr', 'app_router', 'api_routes'])
-
-        # Check for Express patterns
-        express_indicators = [
-            r'express\s*\(\s*\)', r'app\.get\s*\(', r'app\.post\s*\(',
-            r'app\.put\s*\(', r'app\.delete\s*\(', r'Request\s*,', r'Response\s*,',
-            r'router\.get\s*\(', r'router\.post\s*\(', r'router\.put\s*\(',
-            r'router\.delete\s*\(', r'Router\s*\(\s*\)', r'asyncHandler\s*\('
-        ]
-
-        for indicator in express_indicators:
-            if re.search(indicator, source):
-                framework_scores['express'] += 10
-
-        if framework_scores['express'] > 0:
-            patterns['features'].extend(['routing', 'middleware'])
-
-        # Check for Fastify patterns
-        fastify_indicators = [
-            r'fastify\s*\(\s*\)', r'fastify\.', r'register\s*\('
-        ]
-
-        for indicator in fastify_indicators:
-            if re.search(indicator, source):
-                framework_scores['fastify'] += 10
-
-        # Check for Nuxt patterns
-        nuxt_indicators = [
-            r'nuxt\s*/', r'useNuxtApp', r'useHead', r'useMeta'
-        ]
-
-        for indicator in nuxt_indicators:
-            if re.search(indicator, source):
-                framework_scores['nuxt'] += 10
-
-        # Determine primary framework
-        if framework_scores:
-            primary_framework = max(framework_scores, key=framework_scores.get)
-            if framework_scores[primary_framework] > 0:
-                patterns['framework'] = primary_framework
-                patterns['confidence'] = min(framework_scores[primary_framework] / 50.0, 1.0)
-
-        # Extract all decorators for reference and convert to proper format
-        decorator_strings = re.findall(r'@(\w+)', source)
-        all_decorators = []
-        for decorator_name in decorator_strings:
-            # Convert string decorators to proper dictionary format
-            framework_info = self._categorize_decorator(decorator_name, [])
-            all_decorators.append({
-                'name': decorator_name,
-                'args': [],
-                'framework': framework_info['framework'],
-                'category': framework_info['category'],
-                'confidence': framework_info['confidence'],
-                'line': 0  # We don't have line info here, use 0 as default
-            })
-
-        patterns['decorators'] = all_decorators  # Remove duplicates handled by categorization
-
-        return patterns
-
     def _infer_framework_from_decorator_name(self, decorator_name: str) -> str:
         """Infer framework from decorator name."""
         framework_decorators = {
@@ -2415,30 +1192,6 @@ class TypeScriptASTVisitor:
                 return framework
 
         return 'unknown'
-
-    def _calculate_confidence(self, source: str, decorators: List[Dict[str, Any]]) -> float:
-        """Calculate confidence score for the parsing result."""
-        confidence = 0.5  # Base confidence
-
-        # Increase confidence based on recognizable patterns
-        if re.search(r'function\s+\w+.*\{', source):
-            confidence += 0.1
-        if re.search(r'class\s+\w+.*\{', source):
-            confidence += 0.1
-        if decorators:
-            confidence += 0.2
-        if re.search(r'interface\s+\w+', source):
-            confidence += 0.1
-        if re.search(r'type\s+\w+\s*=', source):
-            confidence += 0.1
-
-        # Decrease confidence for unusual patterns
-        if re.search(r'/\*[\s\S]*?\*/', source):  # Complex JSDoc
-            confidence += 0.1
-        if re.search(r'//.*', source):  # Comments indicate real code
-            confidence += 0.05
-
-        return min(confidence, 1.0)
 
     def _extract_enhanced_metadata(self, func_source: str, func_info: Dict[str, Any], framework_patterns: Dict[str, Any]) -> Dict[str, Any]:
         """Extract comprehensive metadata for functions with confidence scoring."""
@@ -2474,7 +1227,7 @@ class TypeScriptASTVisitor:
             return_type = func_info.get('return_type')
             if return_type and isinstance(return_type, str):
                 metadata['type_analysis']['has_return_type'] = True
-                metadata['type_analysis']['return_type_complexity'] = self._analyze_type_complexity(return_type)
+                metadata['type_analysis']['return_type_complexity'] = analyze_type_complexity(return_type)
                 base_confidence += 0.1
             else:
                 metadata['type_analysis']['has_return_type'] = False
@@ -2509,11 +1262,11 @@ class TypeScriptASTVisitor:
                 base_confidence += 0.1
 
             # Dependency analysis
-            dependencies = self._extract_typescript_dependencies(func_source)
+            dependencies = extract_typescript_dependencies(func_source, self.file_level_imports)
             metadata['dependency_analysis'] = {
                 'external_dependencies': dependencies,
                 'dependency_count': len(dependencies),
-                'dependency_categories': self._categorize_dependencies(dependencies)
+                'dependency_categories': categorize_dependencies(dependencies)
             }
             if dependencies:
                 base_confidence += 0.1
@@ -2537,85 +1290,6 @@ class TypeScriptASTVisitor:
             'decorator_analysis': {},
             'dependency_analysis': {}
         }
-
-    def _analyze_type_complexity(self, type_str: str) -> int:
-        """Analyze the complexity of a TypeScript type."""
-        complexity = 0
-
-        # Base complexity
-        if type_str:
-            complexity = 1
-
-            # Union types increase complexity
-            complexity += type_str.count('|')
-
-            # Intersection types
-            complexity += type_str.count('&')
-
-            # Generic types
-            complexity += type_str.count('<')
-
-            # Array types
-            complexity += type_str.count('[]')
-
-            # Function types
-            complexity += type_str.count('=>')
-
-            # Utility types
-            utility_types = ['Partial', 'Required', 'Readonly', 'Record', 'Pick', 'Omit']
-            for util in utility_types:
-                if util in type_str:
-                    complexity += 2
-
-        return complexity
-
-    def _categorize_dependencies(self, dependencies: List[str]) -> List[str]:
-        """Categorize dependencies into framework categories."""
-        categories = []
-
-        framework_deps = {
-            'ui_frameworks': ['react', 'vue', 'angular', 'svelte'],
-            'backend_frameworks': ['express', 'fastify', 'nestjs', 'koa'],
-            'orm_libraries': ['typeorm', 'prisma', 'mongoose', 'sequelize'],
-            'utility_libraries': ['lodash', 'axios', 'rxjs', 'redux', 'mobx'],
-            'testing_frameworks': ['jest', 'vitest', 'cypress', 'playwright']
-        }
-
-        for dep in dependencies:
-            for category, libs in framework_deps.items():
-                if dep.lower() in libs:
-                    if category not in categories:
-                        categories.append(category)
-
-        return categories
-
-    def _categorize_typescript_features(self, func_info: Dict[str, Any], framework_patterns: Dict[str, Any], enhanced_metadata: Dict[str, Any]) -> List[str]:
-        """Categorize TypeScript features based on function analysis."""
-        features = set(framework_patterns.get('features', []))
-
-        # Add features based on function info
-        if func_info.get('generics'):
-            features.add('generics')
-
-        if func_info.get('is_async'):
-            features.add('async_await')
-
-        if func_info.get('function_type') in ['express_route', 'express_middleware']:
-            features.add('express_patterns')
-
-        if func_info.get('function_type') == 'vue_config':
-            features.add('vue_config')
-
-        # Add features based on enhanced metadata
-        type_analysis = enhanced_metadata.get('type_analysis') if isinstance(enhanced_metadata, dict) else {}
-        if isinstance(type_analysis, dict) and type_analysis.get('has_return_type'):
-            features.add('return_types')
-
-        decorator_analysis = enhanced_metadata.get('decorator_analysis') if isinstance(enhanced_metadata, dict) else {}
-        if isinstance(decorator_analysis, dict) and decorator_analysis.get('decorator_count', 0) > 0:
-            features.add('decorators')
-
-        return list(features)
 
     def _extract_enhanced_class_metadata(self, class_source: str, class_info: Dict[str, Any], framework_patterns: Dict[str, Any]) -> Dict[str, Any]:
         """Extract comprehensive metadata for classes."""
@@ -2716,58 +1390,75 @@ class TypeScriptASTVisitor:
         except Exception as e:
             print(f"   Warning: Error logging parsing info: {e}", file=sys.stderr)
 
-    def _hash_source_snippet(self, start_line: int, end_line: int, lines: List[str]) -> str:
-        """Generate MD5 hash of TypeScript source snippet."""
-        if not lines or start_line > end_line:
-            return ""
+    def visit_file(self, file_path: str, source: str) -> List[CodeElement]:
+        """Visit a TypeScript file and extract all code elements with enhanced logging."""
+        import time
+        import traceback
 
-        start_idx = max(0, start_line - 1)
-        end_idx = min(len(lines), end_line)
+        start_time = time.time()
+        self.source_lines = source.splitlines()
+        self.current_file = file_path
+        self.elements = []
 
-        snippet_lines = lines[start_idx:end_idx]
-        stripped_source = "\n".join(line.strip() for line in snippet_lines if line.strip())
-        return hashlib.md5(stripped_source.encode('utf-8')).hexdigest()
+        try:
+            # Extract file-level imports
+            self.file_level_imports, self.file_level_import_from_targets = extract_file_imports_typescript(source)
 
-    def _determine_if_method(self, function_char_pos: int, lines: List[str]) -> Tuple[bool, Optional[str]]:
-        """Determine if a function is a method by checking if it's inside a class."""
-        # Find all class definitions and their line ranges
-        class_ranges = []
+            # Parse complex types (interfaces, enums, etc.)
+            complex_types = self._parse_complex_types(source)
 
-        # Enhanced regex to find class definitions including abstract classes and exported classes
-        class_patterns = [
-            r'class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+[^{]+)?(?:\s+implements\s+[^{]+)?\s*{',
-            r'abstract\s+class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+[^{]+)?(?:\s+implements\s+[^{]+)?\s*{',
-            r'export\s+class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+[^{]+)?(?:\s+implements\s+[^{]+)?\s*{',
-            r'export\s+abstract\s+class\s+(\w+)(?:<[^>]*>)?(?:\s+extends\s+[^{]+)?(?:\s+implements\s+[^{]+)?\s*{'
-        ]
+            # Create interface elements
+            for interface_info in complex_types['interfaces']:
+                interface_element = self._create_interface_element(interface_info, source, file_path)
+                if interface_element:
+                    self.elements.append(interface_element)
 
-        for pattern in class_patterns:
-            for match in re.finditer(pattern, '\n'.join(lines)):
-                start_line = lines[:match.start()].count('\n') + 1
-                class_name = re.search(r'class\s+(\w+)', match.group(0))
-                if class_name:
-                    # Find the matching closing brace for this class
-                    end_line = self._find_closing_brace(lines, lines[:match.start()].count('\n'))
-                    class_ranges.append({
-                        'name': class_name.group(1),
-                        'start_line': start_line,
-                        'end_line': end_line
-                    })
+            # Create enum elements
+            for enum_info in complex_types['enums']:
+                enum_element = self._create_enum_element(enum_info, source, file_path)
+                if enum_element:
+                    self.elements.append(enum_element)
 
-        # Convert function character position to line number
-        function_line = lines[:function_char_pos].count('\n') + 1
+            # Create type alias elements
+            for type_alias_info in complex_types['type_aliases']:
+                type_alias_element = self._create_type_alias_element(type_alias_info, source, file_path)
+                if type_alias_element:
+                    self.elements.append(type_alias_element)
 
-        # Check if function is within any class range
-        for class_range in class_ranges:
-            if class_range['start_line'] <= function_line <= class_range['end_line']:
-                return True, class_range['name']
+            # Parse the file for classes first, then functions
+            elements = self._parse_typescript_ast(file_path, source)
+            self.elements.extend(elements)
 
-        return False, None
+            # Log parsing results
+            parsing_time = time.time() - start_time
+            self._log_parsing_info(file_path, 'regex_fallback', len(self.elements), {
+                'confidence': 0.8,
+                'parsing_time': parsing_time,
+                'typescript_features': ['advanced_types', 'decorators', 'framework_detection']
+            })
+
+            # Log framework detection if any
+            if self.elements:
+                frameworks = set()
+                for element in self.elements:
+                    if element.metadata.get('framework'):
+                        frameworks.add(element.metadata['framework'])
+
+                if frameworks:
+                    print(f"   Info: Detected frameworks in {file_path}: {', '.join(frameworks)}")
+
+            return self.elements.copy()
+
+        except Exception as e:
+            parsing_time = time.time() - start_time
+            print(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
+            print(f"   Debug: Full traceback for parsing error:", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            return []
 
     def _parse_complex_types(self, source: str) -> Dict[str, Any]:
         """Parse complex TypeScript type definitions with advanced type system support."""
-        import re
-
         complex_types = {
             'union_types': [],
             'intersection_types': [],
@@ -2916,8 +1607,6 @@ class TypeScriptASTVisitor:
 
     def _categorize_type_definition(self, definition: str) -> str:
         """Categorize a type definition into specific type categories."""
-        import re
-
         definition = definition.strip()
 
         # Union types: T | U
@@ -3000,73 +1689,6 @@ class TypeScriptASTVisitor:
 
         return members
 
-    def visit_file(self, file_path: str, source: str) -> List[CodeElement]:
-        """Visit a TypeScript file and extract all code elements with enhanced logging."""
-        import time
-        import traceback
-
-        start_time = time.time()
-        self.source_lines = source.splitlines()
-        self.current_file = file_path
-        self.elements = []
-
-        try:
-            # Extract file-level imports
-            self._extract_file_imports(source)
-
-            # Parse complex types (interfaces, enums, etc.)
-            complex_types = self._parse_complex_types(source)
-
-            # Create interface elements
-            for interface_info in complex_types['interfaces']:
-                interface_element = self._create_interface_element(interface_info, source, file_path)
-                if interface_element:
-                    self.elements.append(interface_element)
-
-            # Create enum elements
-            for enum_info in complex_types['enums']:
-                enum_element = self._create_enum_element(enum_info, source, file_path)
-                if enum_element:
-                    self.elements.append(enum_element)
-
-            # Create type alias elements
-            for type_alias_info in complex_types['type_aliases']:
-                type_alias_element = self._create_type_alias_element(type_alias_info, source, file_path)
-                if type_alias_element:
-                    self.elements.append(type_alias_element)
-
-            # Parse the file for classes first, then functions
-            elements = self._parse_typescript_ast(file_path, source)
-            self.elements.extend(elements)
-
-            # Log parsing results
-            parsing_time = time.time() - start_time
-            self._log_parsing_info(file_path, 'regex_fallback', len(self.elements), {
-                'confidence': 0.8,
-                'parsing_time': parsing_time,
-                'typescript_features': ['advanced_types', 'decorators', 'framework_detection']
-            })
-
-            # Log framework detection if any
-            if self.elements:
-                frameworks = set()
-                for element in self.elements:
-                    if element.metadata.get('framework'):
-                        frameworks.add(element.metadata['framework'])
-
-                if frameworks:
-                    print(f"   Info: Detected frameworks in {file_path}: {', '.join(frameworks)}")
-
-            return self.elements.copy()
-
-        except Exception as e:
-            parsing_time = time.time() - start_time
-            print(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
-            print(f"   Debug: Full traceback for parsing error:", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
-            return []
-
     def _create_interface_element(self, interface_info: Dict[str, Any], source: str, file_path: str) -> Optional[CodeElement]:
         """Create a CodeElement representing a TypeScript interface."""
         start_line = interface_info.get('line', 1)
@@ -3076,7 +1698,7 @@ class TypeScriptASTVisitor:
         end_line = start_line  # Interfaces are typically single declarations
 
         # Extract JSDoc comment
-        docstring = self._extract_jsdoc_comment(lines, start_line)
+        docstring = extract_jsdoc_comment(lines, start_line)
 
         interface_element = CodeElement(
             name=interface_info['name'],
@@ -3103,7 +1725,7 @@ class TypeScriptASTVisitor:
         end_line = start_line
 
         # Extract JSDoc comment
-        docstring = self._extract_jsdoc_comment(lines, start_line)
+        docstring = extract_jsdoc_comment(lines, start_line)
 
         enum_element = CodeElement(
             name=enum_info['name'],
@@ -3129,7 +1751,7 @@ class TypeScriptASTVisitor:
         end_line = start_line
 
         # Extract JSDoc comment
-        docstring = self._extract_jsdoc_comment(lines, start_line)
+        docstring = extract_jsdoc_comment(lines, start_line)
 
         type_alias_element = CodeElement(
             name=type_alias_info['name'],
@@ -3168,8 +1790,6 @@ class TypeScriptASTExtractor:
     def _parse_tsconfig(self, tsconfig_path: Path) -> Dict[str, Any]:
         """Parse TypeScript configuration file with enhanced error handling."""
         try:
-            import json
-
             with open(tsconfig_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
 
@@ -3313,13 +1933,13 @@ class TypeScriptASTExtractor:
         ts_files = list(directory.rglob('*.ts')) + list(directory.rglob('*.tsx'))
 
         # Apply gitignore filtering (reuse Python implementation logic)
-        ignored_patterns_with_dirs = self._get_gitignore_patterns(directory)
+        ignored_patterns_with_dirs = get_gitignore_patterns(directory)
 
         filtered_files = [
             file_path
             for file_path in ts_files
             if not any(
-                self._match_file_against_pattern(file_path, pattern, gitignore_dir, directory)
+                match_file_against_pattern(file_path, pattern, gitignore_dir, directory)
                 for pattern, gitignore_dir in ignored_patterns_with_dirs
             )
         ]
@@ -3385,7 +2005,7 @@ class TypeScriptASTExtractor:
         end_line = self._find_interface_end(lines, start_line - 1)
 
         # Extract JSDoc comment
-        docstring = self.visitor._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         interface_element = ClassElement(
             name=interface_info['name'],
@@ -3400,7 +2020,7 @@ class TypeScriptASTExtractor:
             implements=interface_info.get('implements', []),
             docstring=docstring,
             decorators=[],  # Interfaces typically don't have decorators
-            hash_body=self.visitor._hash_source_snippet(start_line, end_line, lines),
+            hash_body=hash_source_snippet(lines, start_line, end_line),
             metadata={
                 'typescript_kind': 'interface',
                 'extends_interfaces': interface_info.get('extends', []),
@@ -3419,7 +2039,7 @@ class TypeScriptASTExtractor:
         end_line = self._find_enum_end(lines, start_line - 1)
 
         # Extract JSDoc comment
-        docstring = self.visitor._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         enum_element = ClassElement(
             name=enum_info['name'],
@@ -3434,7 +2054,7 @@ class TypeScriptASTExtractor:
             implements=[],
             docstring=docstring,
             decorators=[],
-            hash_body=self.visitor._hash_source_snippet(start_line, end_line, lines),
+            hash_body=hash_source_snippet(lines, start_line, end_line),
             metadata={
                 'typescript_kind': 'enum',
                 'enum_members': enum_info.get('members', [])
@@ -3452,7 +2072,7 @@ class TypeScriptASTExtractor:
         end_line = self._find_namespace_end(lines, start_line - 1)
 
         # Extract JSDoc comment
-        docstring = self.visitor._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         namespace_element = ClassElement(
             name=namespace_info['name'],
@@ -3467,7 +2087,7 @@ class TypeScriptASTExtractor:
             implements=[],
             docstring=docstring,
             decorators=[],
-            hash_body=self.visitor._hash_source_snippet(start_line, end_line, lines),
+            hash_body=hash_source_snippet(lines, start_line, end_line),
             metadata={
                 'typescript_kind': 'namespace'
             }
@@ -3484,7 +2104,7 @@ class TypeScriptASTExtractor:
         end_line = start_line
 
         # Extract JSDoc comment
-        docstring = self.visitor._extract_jsdoc_comment(lines, start_line - 1)
+        docstring = extract_jsdoc_comment(lines, start_line - 1)
 
         type_alias_element = CodeElement(
             name=type_alias_info['name'],
@@ -3540,47 +2160,3 @@ class TypeScriptASTExtractor:
             if brace_count == 0 and '{' in lines[start_idx]:
                 return i + 1
         return len(lines)
-
-    def _get_gitignore_patterns(self, directory: Path) -> List[tuple[str, Path]]:
-        """Collect .gitignore patterns (reuse from PythonASTExtractor)."""
-        patterns_with_dirs: List[tuple[str, Path]] = []
-        current_dir = directory
-        while current_dir != current_dir.parent:
-            gitignore_path = current_dir / ".gitignore"
-            if gitignore_path.exists() and gitignore_path.is_file():
-                with open(gitignore_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#"):
-                            patterns_with_dirs.append((line, current_dir))
-            current_dir = current_dir.parent
-        return patterns_with_dirs
-
-    def _match_file_against_pattern(self, file_path: Path, pattern: str, gitignore_dir: Path, root_directory: Path) -> bool:
-        """Match file against gitignore pattern (reuse from PythonASTExtractor)."""
-        try:
-            relative_to_gitignore_dir = file_path.relative_to(gitignore_dir)
-            rel_str_gitignore = str(relative_to_gitignore_dir)
-        except ValueError:
-            return False
-
-        try:
-            relative_to_root_dir = file_path.relative_to(root_directory)
-            rel_str_root = str(relative_to_root_dir)
-        except ValueError:
-            rel_str_root = rel_str_gitignore
-
-        if pattern.endswith('/'):
-            return rel_str_gitignore.startswith(pattern[:-1] + os.sep) or rel_str_gitignore == pattern[:-1]
-        else:
-            if fnmatch.fnmatch(rel_str_gitignore, pattern):
-                return True
-
-            if '/' not in pattern and relative_to_gitignore_dir.parts:
-                for part in relative_to_gitignore_dir.parts:
-                    if fnmatch.fnmatch(part, pattern):
-                        return True
-
-            if fnmatch.fnmatch(rel_str_root, pattern):
-                return True
-        return False

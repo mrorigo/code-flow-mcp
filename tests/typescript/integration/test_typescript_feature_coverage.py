@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 from typing import Set, Dict, Any
 
-from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor
+from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
 
 
 class TestTypeScriptFeatureCoverage:

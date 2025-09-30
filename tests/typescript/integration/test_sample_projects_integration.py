@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from typing import List, Dict, Any
 
-from code_flow_graph.core.ast_extractor import TypeScriptASTVisitor, TypeScriptASTExtractor
+from code_flow_graph.core.typescript_extractor import TypeScriptASTVisitor, TypeScriptASTExtractor
 
 
 class TestExpressTypeScriptAPI:

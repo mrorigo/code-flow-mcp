@@ -119,7 +119,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_call_graph_builder_integration(self):
         """Test TypeScript elements work with CallGraphBuilder."""
-        from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor
+        from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
         from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -194,7 +194,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_vector_store_integration(self):
         """Test TypeScript elements work with vector store."""
-        from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor
+        from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
         from code_flow_graph.core.call_graph_builder import CallGraphBuilder
         from code_flow_graph.core.vector_store import CodeVectorStore
 
@@ -266,7 +266,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_framework_detection_integration(self):
         """Test framework detection in end-to-end workflow."""
-        from code_flow_graph.core.ast_extractor import TypeScriptASTVisitor
+        from code_flow_graph.core.typescript_extractor import TypeScriptASTVisitor
 
         # Test different frameworks
         frameworks = {
@@ -337,7 +337,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_error_handling_integration(self):
         """Test error handling in complete workflow."""
-        from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor
+        from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -403,7 +403,7 @@ class TestTypeScriptEndToEndWorkflow:
         # Note: This is a basic test since MCP server currently uses PythonASTExtractor
         # In a full implementation, the MCP server would be updated to support TypeScript
 
-        from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor
+        from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

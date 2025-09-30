@@ -12,10 +12,11 @@ import argparse
 # Ensure local modules can be found
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.ast_extractor import PythonASTExtractor, TypeScriptASTExtractor, FunctionElement, ClassElement
+from core.python_extractor import PythonASTExtractor
+from core.typescript_extractor import TypeScriptASTExtractor
+from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
-from core.ast_extractor import CodeElement # Import CodeElement for typing hints
 
 class CodeGraphAnalyzer:
     """Main analyzer that orchestrates the entire pipeline."""
@@ -332,7 +333,12 @@ def main():
             analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
         else:
             # Just generate the report (implies analysis)
-            analyzer.export_report(args.output)
+            # Ensure output file is created in the analyzed directory if no explicit output path given
+            output_path = args.output
+            if not Path(args.output).is_absolute():
+                output_path = str(root_dir / args.output)
+
+            analyzer.export_report(output_path)
 
     except Exception as e:
         print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)

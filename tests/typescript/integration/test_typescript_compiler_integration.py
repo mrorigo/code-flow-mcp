@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from code_flow_graph.core.ast_extractor import TypeScriptASTVisitor, TypeScriptASTExtractor
+from code_flow_graph.core.typescript_extractor import TypeScriptASTVisitor, TypeScriptASTExtractor
 
 
 class TestTypeScriptCompilerIntegration:
@@ -38,6 +38,9 @@ class TestTypeScriptCompilerIntegration:
         # Mock successful TypeScript compiler run
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
+
+            # Ensure TypeScript is marked as available
+            typescript_visitor.typescript_available = True
 
             with patch.object(typescript_visitor, '_get_typescript_version', return_value='Version 4.9.5'):
                 result = typescript_visitor._run_typescript_compiler(str(ts_file), source)

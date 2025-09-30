@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 
-from code_flow_graph.core.ast_extractor import TypeScriptASTExtractor, TypeScriptASTVisitor
+from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor, TypeScriptASTVisitor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
 

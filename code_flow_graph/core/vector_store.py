@@ -15,27 +15,57 @@ from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""
 
-    def __init__(self, persist_directory: str, embedding_model_name: str = 'all-mpnet-base-v2', max_tokens: int = 256):
+    def __init__(self, persist_directory: str, embedding_model_name: str = 'all-MiniLM-L6-v2', max_tokens: int = 256):
         """
-        Initialize the ChromaDB vector store.
+        Initialize the ChromaDB vector store with consistent embedding dimensions.
 
         Args:
             persist_directory: Where to persist the vector database on disk.
+            embedding_model_name: Model to use for embeddings (defaults to 384-dim for consistency)
         """
         print(f"Initializing ChromaDB client at: {persist_directory}")
         try:
             self.client = chromadb.PersistentClient(path=persist_directory)
+
+            # Check if collection exists and get its current embedding dimension
+            existing_collections = self.client.list_collections()
+            collection_exists = any(col.name == "code_graph_v2" for col in existing_collections)
+
+            if collection_exists:
+                try:
+                    existing_collection = self.client.get_collection("code_graph_v2")
+                    # Check if collection has documents to determine embedding dimension
+                    if existing_collection.count() > 0:
+                        # Get a sample to check dimensions
+                        sample = existing_collection.peek(1)
+                        if sample['embeddings'] and len(sample['embeddings']) > 0:
+                            existing_dim = len(sample['embeddings'][0])
+                            print(f"   Info: Existing collection has {existing_dim}D embeddings")
+
+                            # Use the same dimension as existing collection for consistency
+                            if existing_dim == 768:
+                                embedding_model_name = 'all-mpnet-base-v2'
+                                print(f"   Info: Using all-mpnet-base-v2 to match existing 768D collection")
+                            elif existing_dim == 384:
+                                embedding_model_name = 'all-MiniLM-L6-v2'
+                                print(f"   Info: Using all-MiniLM-L6-v2 to match existing 384D collection")
+                            else:
+                                print(f"   Warning: Unknown embedding dimension {existing_dim}, using default model")
+                except Exception as e:
+                    print(f"   Warning: Could not determine existing collection dimensions: {e}")
+
             self.collection = self.client.get_or_create_collection(
                 name="code_graph_v2",
                 metadata={"hnsw:space": "cosine"} # Using cosine distance for semantic similarity
             )
-            # Consider using a smaller, faster model if performance is critical for embedding
-            # e.g., 'all-MiniLM-L6-v2', 'all-distilroberta-v1'
+
+            # Use consistent embedding model (384 dimensions by default)
             self.embedding_model = SentenceTransformer(embedding_model_name)
             self.tokenizer = self.embedding_model.tokenizer
             self.max_tokens = max_tokens
 
             print(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
+            print(f"   Using embedding model: {embedding_model_name} ({self.embedding_model.get_sentence_embedding_dimension()} dimensions)")
         except Exception as e:
             print(f"❌ Failed to initialize ChromaDB or SentenceTransformer at {persist_directory}: {e}")
             print("   Please ensure you have run 'pip install chromadb sentence-transformers'")

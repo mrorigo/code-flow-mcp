@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 import asyncio
-from code_flow_graph.core.ast_extractor import FunctionElement
+from code_flow_graph.core.models import FunctionElement
 from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
 
 
