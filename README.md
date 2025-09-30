@@ -15,7 +15,7 @@ The tool provides two main interfaces:
 ## Features
 
 ### Core Analysis Capabilities
-- **Deep AST Metadata Extraction (Python):** Gathers comprehensive details about functions and classes including:
+- **Deep AST Metadata Extraction (Python & TypeScript):** Gathers comprehensive details about functions and classes including:
   - Parameters, return types, docstrings
   - Cyclomatic complexity and Non-Comment Lines of Code (NLOC)
   - Applied decorators (e.g., `@app.route`, `@transactional`)
@@ -220,6 +220,118 @@ embedding_model: "all-MiniLM-L6-v2" # Embedding model to use
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
+
+## TypeScript Support
+
+CodeFlow provides comprehensive TypeScript analysis capabilities with feature parity to Python support. It can analyze TypeScript applications, extract detailed metadata, and build call graphs for various TypeScript frameworks.
+
+### Requirements
+
+#### Node.js and TypeScript
+For full TypeScript support, ensure Node.js and TypeScript are installed:
+
+```bash
+# Install Node.js (version 16+ recommended)
+# On Ubuntu/Debian:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# On macOS with Homebrew:
+brew install node
+
+# Install TypeScript globally
+npm install -g typescript
+```
+
+#### Verification
+Verify your installation:
+
+```bash
+node --version  # Should show v16+
+tsc --version   # Should show TypeScript version
+```
+
+### Usage Examples
+
+#### Basic TypeScript Analysis
+```bash
+# Analyze a TypeScript project
+python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --language typescript --output analysis.json
+
+# Query TypeScript codebase
+python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --language typescript --query "user authentication functions"
+```
+
+#### Framework-Specific Examples
+
+**Angular Application Analysis:**
+```bash
+# Analyze Angular project
+python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --language typescript --query "component lifecycle methods"
+
+# Find Angular services
+python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --language typescript --query "injectable services"
+```
+
+**NestJS Application Analysis:**
+```bash
+# Analyze NestJS backend
+python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --language typescript --query "controller endpoints"
+
+# Find service dependencies
+python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --language typescript --query "database service dependencies"
+```
+
+**React TypeScript Analysis:**
+```bash
+# Analyze React TypeScript components
+python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --language typescript --query "custom hooks"
+
+# Find component prop types
+python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --language typescript --query "component interfaces"
+```
+
+#### TypeScript-Specific Features
+
+**Type System Analysis:**
+- **Interface Detection**: Identifies and extracts TypeScript interfaces and their implementations
+- **Type Annotations**: Analyzes function parameters and return types
+- **Generic Types**: Handles generic type definitions and constraints
+- **Union/Intersection Types**: Processes complex type definitions
+- **Decorator Analysis**: Detects Angular, NestJS, and custom decorators
+
+**Framework Pattern Recognition:**
+- **Angular**: Component, Service, Module, Directive decorators
+- **NestJS**: Controller, Injectable, Module decorators
+- **Express**: Route handlers and middleware detection
+- **React**: Component classes and hooks detection
+
+### TypeScript Configuration
+
+The tool automatically detects and uses `tsconfig.json` settings:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+**Supported File Types:**
+- `.ts` - TypeScript files
+- `.tsx` - TypeScript React/JSX files
+
+### Fallback Strategy
+
+If Node.js or TypeScript is unavailable, the tool gracefully falls back to regex-based parsing for basic functionality. While this provides reduced accuracy compared to full TypeScript compiler integration, it ensures the tool remains functional in constrained environments.
 
 ## Examples
 
