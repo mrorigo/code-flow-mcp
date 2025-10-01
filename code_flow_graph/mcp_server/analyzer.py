@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 import asyncio
 import logging
 import threading
@@ -53,7 +53,7 @@ class MCPAnalyzer:
         # Background cleanup configuration
         self.cleanup_interval = config.get('cleanup_interval_minutes', 30)  # Default: 30 minutes
         self.cleanup_task = None
-        self.cleanup_shutdown_event = asyncio.Event()
+        self.cleanup_shutdown_event = threading.Event()
 
     def start_background_cleanup(self) -> None:
         """

@@ -644,8 +644,7 @@ class CodeVectorStore:
                 try:
                     # Find all documents with this file path
                     docs_to_delete = self.collection.get(
-                        where={"file_path": stale_path},
-                        include=['ids']
+                        where={"file_path": stale_path}
                     )
 
                     if docs_to_delete and docs_to_delete.get('ids'):
