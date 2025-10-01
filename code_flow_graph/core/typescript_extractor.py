@@ -1749,7 +1749,7 @@ class TypeScriptASTVisitor:
 
 
 class TypeScriptASTExtractor:
-    def __init__(self, parallel_processing: bool = False, max_workers: Optional[int] = None, batch_size: int = 50):
+    def __init__(self, parallel_processing: bool = True, max_workers: Optional[int] = None, batch_size: int = 50):
         self.visitor = TypeScriptASTVisitor()
         self.project_root: Optional[Path] = None
         self.tsconfig: Optional[Dict[str, Any]] = None
