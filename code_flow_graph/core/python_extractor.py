@@ -9,6 +9,7 @@ functions, classes, and their metadata.
 import ast
 import re
 import sys
+import time
 from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
 
@@ -193,6 +194,44 @@ class PythonASTVisitor(ast.NodeVisitor):
         """Generates an MD5 hash of the stripped source code snippet."""
         return hash_source_snippet(self.source_lines, start_line, end_line)
 
+    def _compile_regex_patterns(self) -> Dict[str, Any]:
+        """Pre-compile regex patterns used in utility functions for maximum performance."""
+        import time
+        start_time = time.time()
+
+        patterns = {}
+
+        # Import patterns for TypeScript files (used in utils.py)
+        import_patterns = [
+            r'import\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]',  # import name from 'module'
+            r'import\s+\*\s+as\s+(\w+)\s+from\s+[\'"]([^\'"]+)[\'"]',  # import * as name from 'module'
+            r'import\s*{\s*([^}]+)\s*}\s+from\s+[\'"]([^\'"]+)[\'"]',  # import { ... } from 'module'
+        ]
+
+        patterns['imports'] = [re.compile(pattern) for pattern in import_patterns]
+
+        # Framework detection patterns
+        framework_patterns = [
+            r'@Entity\s*\(', r'@Column\s*\(', r'@PrimaryGeneratedColumn',
+            r'@OneToMany', r'@ManyToOne', r'useState\s*\(', r'useEffect\s*\(',
+            r'React\.FC', r'express\s*\(\s*\)', r'createApp\s*\(',
+            r'@Controller\s*\(', r'@Component\s*\(', r'fastify\s*\(\s*\)'
+        ]
+
+        patterns['frameworks'] = [re.compile(pattern, re.IGNORECASE) for pattern in framework_patterns]
+
+        # Generic type patterns
+        patterns['generics'] = re.compile(r'<([^>]+)>')
+
+        # Decorator patterns
+        patterns['decorators'] = re.compile(r'@(\w+)')
+
+        compilation_time = time.time() - start_time
+        pattern_count = sum(len(p) if isinstance(p, list) else 1 for p in patterns.values())
+        print(f"   Info: Pre-compiled {pattern_count} regex patterns for Python analysis in {compilation_time:.4f}s")
+
+        return patterns
+
     def visit(self, node: ast.AST) -> None:
         super().visit(node)
 
@@ -337,9 +376,20 @@ class PythonASTExtractor:
     Main interface for extracting Python code elements from files and directories.
     """
 
-    def __init__(self):
+    def __init__(self, enable_performance_monitoring: bool = True):
         self.visitor = PythonASTVisitor()
         self.project_root: Optional[Path] = None # Store the project root for consistent FQNs
+
+        # Performance monitoring
+        self.enable_performance_monitoring = enable_performance_monitoring
+        self.performance_metrics = {
+            'total_files': 0,
+            'total_elements': 0,
+            'processing_time': 0.0,
+            'ast_parsing_time': 0.0,
+            'regex_compilation_time': 0.0,
+            'io_time': 0.0
+        }
 
     def _extract_file_imports(self, tree: ast.AST) -> Tuple[Dict[str, str], Set[str]]:
         """
@@ -362,13 +412,20 @@ class PythonASTExtractor:
         if not file_path.exists() or file_path.suffix != '.py':
             return []
 
+        start_time = time.time()
+
         try:
+            io_start = time.time()
             with open(file_path, 'r', encoding='utf-8') as f:
                 source = f.read()
+            io_time = time.time() - io_start
 
+            ast_start = time.time()
             tree = ast.parse(source, filename=str(file_path))
             file_imports, import_from_targets = self._extract_file_imports(tree)
+            ast_time = time.time() - ast_start
 
+            visitor_start = time.time()
             self.visitor.source_lines = source.splitlines()
             self.visitor.current_file = str(file_path.resolve())
             self.visitor.full_source = source  # Preserve exact original source
@@ -377,9 +434,29 @@ class PythonASTExtractor:
             self.visitor.file_level_import_from_targets = import_from_targets
 
             self.visitor.visit(tree)
-            return self.visitor.elements.copy()
+            visitor_time = time.time() - visitor_start
+
+            total_time = time.time() - start_time
+            elements = self.visitor.elements.copy()
+
+            # Update performance metrics
+            if self.enable_performance_monitoring:
+                self.performance_metrics['total_files'] += 1
+                self.performance_metrics['total_elements'] += len(elements)
+                self.performance_metrics['processing_time'] += total_time
+                self.performance_metrics['ast_parsing_time'] += ast_time
+                self.performance_metrics['io_time'] += io_time
+
+            return elements
 
         except Exception as e:
+            total_time = time.time() - start_time
+            # Update performance metrics even for failed files
+            if self.enable_performance_monitoring:
+                self.performance_metrics['total_files'] += 1
+                self.performance_metrics['processing_time'] += total_time
+                self.performance_metrics['io_time'] += io_time
+
             # Re-raise to show the error if it's critical, or return empty if tolerable
             # For now, print a warning with the specific file if errors occur
             print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
@@ -413,8 +490,56 @@ class PythonASTExtractor:
 
         print(f"Found {len(filtered_files)} Python files to analyze (after filtering .gitignore).")
 
+        start_time = time.time()
+
         # Use tqdm for progress indication
         for file_path in filtered_files:
             elements.extend(self.extract_from_file(file_path))
 
+        total_time = time.time() - start_time
+
+        # Print performance summary if enabled
+        if self.enable_performance_monitoring:
+            self._print_performance_summary(total_time)
+
         return elements
+
+    def _print_performance_summary(self, total_time: float):
+        """Print detailed performance metrics for Python analysis."""
+        metrics = self.performance_metrics
+        print(f"   📊 Python Analysis Performance Summary:")
+        print(f"      • Files processed: {metrics['total_files']}")
+        print(f"      • Elements found: {metrics['total_elements']}")
+        print(f"      • Total time: {total_time:.3f}s")
+        print(f"      • AST parsing time: {metrics['ast_parsing_time']:.3f}s")
+        print(f"      • I/O time: {metrics['io_time']:.3f}s")
+
+        if metrics['total_files'] > 0:
+            avg_time_per_file = total_time / metrics['total_files']
+            print(f"      • Avg time per file: {avg_time_per_file:.3f}s")
+
+        if metrics['total_elements'] > 0:
+            avg_time_per_element = total_time / metrics['total_elements']
+            print(f"      • Avg time per element: {avg_time_per_element:.4f}s")
+
+        # Calculate efficiency metrics
+        if total_time > 0:
+            ast_efficiency = (metrics['ast_parsing_time'] / total_time) * 100
+            io_efficiency = (metrics['io_time'] / total_time) * 100
+            print(f"      • AST parsing efficiency: {ast_efficiency:.1f}%")
+            print(f"      • I/O efficiency: {io_efficiency:.1f}%")
+
+    def get_performance_metrics(self) -> Dict[str, float]:
+        """Get current performance metrics."""
+        return self.performance_metrics.copy()
+
+    def reset_performance_metrics(self):
+        """Reset performance metrics for new analysis."""
+        self.performance_metrics = {
+            'total_files': 0,
+            'total_elements': 0,
+            'processing_time': 0.0,
+            'ast_parsing_time': 0.0,
+            'regex_compilation_time': 0.0,
+            'io_time': 0.0
+        }
