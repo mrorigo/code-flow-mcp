@@ -254,6 +254,12 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
     Returns:
         True if file matches pattern (should be ignored), False otherwise
     """
+    # Handle root-relative patterns (starting with /)
+    is_root_relative = pattern.startswith('/')
+    if is_root_relative:
+        # Strip the leading / for processing
+        pattern = pattern[1:]
+
     try:
         # Path relative to where the .gitignore file lives
         relative_to_gitignore_dir = file_path.relative_to(gitignore_dir)
@@ -275,22 +281,34 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
         # Match against path relative to gitignore_dir
         return rel_str_gitignore.startswith(pattern[:-1] + os.sep) or rel_str_gitignore == pattern[:-1]
     else:
-        # Match directly against path relative to gitignore_dir
-        if fnmatch.fnmatch(rel_str_gitignore, pattern):
-            return True
+        # For root-relative patterns, we need to match against the root-relative path
+        if is_root_relative:
+            # Use root-relative path for matching
+            if fnmatch.fnmatch(rel_str_root, pattern):
+                return True
 
-        # Additional check: If pattern is a simple name (no /), it should match
-        # if any part of the path (relative to gitignore_dir) matches it.
-        # E.g., pattern 'build' should match 'path/to/build/file.py' or 'path/to/build.py'
-        if '/' not in pattern and relative_to_gitignore_dir.parts:
-            for part in relative_to_gitignore_dir.parts:
-                if fnmatch.fnmatch(part, pattern):
-                    return True
+            # For root-relative patterns that are simple names (no /),
+            # only match if the file is directly in the root
+            if '/' not in pattern:
+                # Pattern like '/node_modules' should only match 'node_modules' in root
+                return rel_str_root == pattern or rel_str_root.startswith(pattern + os.sep)
+        else:
+            # Regular pattern matching (relative to gitignore directory)
+            if fnmatch.fnmatch(rel_str_gitignore, pattern):
+                return True
 
-        # Finally, check against path relative to the *root analysis directory* for patterns
-        # that specify a full path like 'docs/conf.py' regardless of where the .gitignore is.
-        if fnmatch.fnmatch(rel_str_root, pattern):
-            return True
+            # Additional check: If pattern is a simple name (no /), it should match
+            # if any part of the path (relative to gitignore_dir) matches it.
+            # E.g., pattern 'build' should match 'path/to/build/file.py' or 'path/to/build.py'
+            if '/' not in pattern and relative_to_gitignore_dir.parts:
+                for part in relative_to_gitignore_dir.parts:
+                    if fnmatch.fnmatch(part, pattern):
+                        return True
+
+            # Finally, check against path relative to the *root analysis directory* for patterns
+            # that specify a full path like 'docs/conf.py' regardless of where the .gitignore is.
+            if fnmatch.fnmatch(rel_str_root, pattern):
+                return True
     return False
 
 

@@ -177,6 +177,124 @@ def ignored_function():
         assert 'good_function' in func_names
         assert 'ignored_function' not in func_names
 
+    def test_extract_from_directory_with_root_relative_gitignore(self, python_extractor, temp_dir):
+        """Test extraction from directory respecting root-relative gitignore patterns."""
+        # Create .gitignore file with root-relative pattern
+        gitignore = temp_dir / ".gitignore"
+        gitignore.write_text("/temp_*.py\nnested_*.py\n")
+
+        # Create test files in root
+        (temp_dir / "temp_ignore.py").write_text('''
+def temp_ignored_function():
+    return "temp_ignored"
+''')
+
+        (temp_dir / "root_keep.py").write_text('''
+def root_keep_function():
+    return "root_keep"
+''')
+
+        # Create nested directory with files
+        nested_dir = temp_dir / "subdir"
+        nested_dir.mkdir()
+
+        (nested_dir / "nested_ignore.py").write_text('''
+def nested_ignored_function():
+    return "nested_ignored"
+''')
+
+        (nested_dir / "nested_keep.py").write_text('''
+def nested_keep_function():
+    return "nested_keep"
+''')
+
+        elements = python_extractor.extract_from_directory(temp_dir)
+
+        # Should extract functions that don't match the patterns
+        func_names = {e.name for e in elements if e.kind == 'function'}
+        assert 'root_keep_function' in func_names  # Should not be affected by /temp_*.py
+        assert 'temp_ignored_function' not in func_names  # Should be ignored by /temp_*.py
+        assert 'nested_keep_function' not in func_names  # Should be ignored by nested_*.py (matches nested_* pattern)
+        assert 'nested_ignored_function' not in func_names  # Should be ignored by nested_*.py
+
+    def test_gitignore_root_relative_node_modules_pattern(self, python_extractor, temp_dir):
+        """Test that /node_modules pattern only ignores root node_modules, not nested ones."""
+        # Create .gitignore file with ONLY the root-relative node_modules pattern
+        gitignore = temp_dir / ".gitignore"
+        gitignore.write_text("/node_modules\n")
+
+        # Create root node_modules
+        root_node_modules = temp_dir / "node_modules"
+        root_node_modules.mkdir()
+        (root_node_modules / "root_package.py").write_text('''
+def root_package_function():
+    return "root"
+''')
+
+        # Create nested node_modules
+        nested_dir = temp_dir / "src"
+        nested_dir.mkdir()
+        nested_node_modules = nested_dir / "node_modules"
+        nested_node_modules.mkdir()
+        (nested_node_modules / "nested_package.py").write_text('''
+def nested_package_function():
+    return "nested"
+''')
+
+        # Create regular source files
+        (temp_dir / "app.py").write_text('''
+def app_function():
+    return "app"
+''')
+
+        elements = python_extractor.extract_from_directory(temp_dir)
+
+        # Should only ignore files in root node_modules, not nested node_modules
+        func_names = {e.name for e in elements if e.kind == 'function'}
+        assert 'app_function' in func_names  # Regular file should be included
+        assert 'root_package_function' not in func_names  # Should be ignored by /node_modules
+        assert 'nested_package_function' in func_names  # Should NOT be ignored by /node_modules
+
+    def test_gitignore_directory_patterns_with_leading_slash(self, python_extractor, temp_dir):
+        """Test directory patterns with leading slash."""
+        # Create .gitignore file with directory patterns
+        gitignore = temp_dir / ".gitignore"
+        gitignore.write_text("/build/\ndist/\n")
+
+        # Create root build directory
+        root_build = temp_dir / "build"
+        root_build.mkdir()
+        (root_build / "root_build.py").write_text('''
+def root_build_function():
+    return "root_build"
+''')
+
+        # Create nested build directory
+        nested_dir = temp_dir / "src"
+        nested_dir.mkdir()
+        nested_build = nested_dir / "build"
+        nested_build.mkdir()
+        (nested_build / "nested_build.py").write_text('''
+def nested_build_function():
+    return "nested_build"
+''')
+
+        # Create root dist directory
+        root_dist = temp_dir / "dist"
+        root_dist.mkdir()
+        (root_dist / "root_dist.py").write_text('''
+def root_dist_function():
+    return "root_dist"
+''')
+
+        elements = python_extractor.extract_from_directory(temp_dir)
+
+        # Should only ignore files in root directories, not nested ones
+        func_names = {e.name for e in elements if e.kind == 'function'}
+        assert 'root_build_function' not in func_names  # Should be ignored by /build/
+        assert 'nested_build_function' in func_names   # Should NOT be ignored by /build/
+        assert 'root_dist_function' not in func_names  # Should be ignored by /dist/
+
     def test_extract_from_nested_directory(self, python_extractor, temp_dir):
         """Test extraction from nested directory structure."""
         # Create nested structure
