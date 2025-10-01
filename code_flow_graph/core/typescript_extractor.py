@@ -60,7 +60,7 @@ class TypeScriptASTVisitor:
 
         patterns = {}
 
-        # Compile function patterns
+        # Compile function patterns (optimized for TSX performance)
         function_patterns = [
             # Regular functions with complex generics: function name<T, U>(...): Promise<T> { ... }
             r'function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
@@ -71,7 +71,11 @@ class TypeScriptASTVisitor:
             # Simple arrow functions: const name = <T>(...) => ...
             r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
             # React functional components: const Name: React.FC<Props> = ({ ... }) => ...
-            r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*[^=]+\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>',
+            r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*React\.FC\s*<\s*([^>]+)\s*>\s*=\s*\(([^)]*)\)\s*=>',
+            # React components with custom props: const Name: FC<Props> = ({ ... }) => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*FC\s*<\s*([^>]+)\s*>\s*=\s*\(([^)]*)\)\s*=>',
+            # Simple React components without explicit typing: const Name = ({ ... }) => ...
+            r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>(?:\s*return\s*)?[\s\S]*?(?=<|$)',
             # Method definitions with complex types: public/private/protected name<T>(...): T { ... }
             r'(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*(?:async)?\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
             # Angular lifecycle methods: ngOnInit(): void { ... }
@@ -79,11 +83,11 @@ class TypeScriptASTVisitor:
             # Async functions with complex return types: async function name<T>(...): Promise<T> { ... }
             r'async\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;{]+)\s*{',
             # Abstract methods: abstract name<T>(...): T; ...
-            r'abstract\s+(public|private|protected)?\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+)\s*;',
+            r'abstract\s+(?:public|private|protected)?\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)\s*:\s*([^;]+)\s*;',
             # Vue 3 Composition API functions: export function useXxx<T>() { ... }
             r'export\s+function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
-            # React hooks and custom functions
-            r'(export\s+)?function\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
+            # React hooks and custom functions (optimized for TSX)
+            r'(?:export\s+)?(?:function|const\s+\w+\s*=\s*(?:async\s*)?)\s*(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)(?:\s*:\s*([^;{]+))?\s*{',
             # Constructor functions: constructor(...) { ... }
             r'constructor\s*\(([^)]*)\)\s*{',
             # Getter methods: get name(): Type { ... }
@@ -97,7 +101,9 @@ class TypeScriptASTVisitor:
             # Express middleware functions: asyncHandler(async (req, res, next) => { ... }
             r'asyncHandler\s*\(\s*async\s*\(([^)]+)\)\s*=>',
             # Vue 3 setup functions and configuration
-            r'(?:app\.config\.|config\.)(errorHandler|warnHandler|performance)\s*=\s*\([^)]+\)\s*=>',
+            r'(?:app\.config\.|config\.)(errorHandler|warnHandler|performance)\s*=\s*(?:\([^)]+\)\s*=>|[\w]+)',
+            # Vue app usage patterns: app.use(), app.component(), etc.
+            r'app\.(use|component|mount|config)\s*\(',
         ]
 
         patterns['functions'] = [re.compile(pattern, re.MULTILINE | re.DOTALL) for pattern in function_patterns]
@@ -228,123 +234,63 @@ class TypeScriptASTVisitor:
                     'method', 'lifecycle_method', 'async_function', 'abstract_method',
                     'export_composable', 'exported_function', 'constructor', 'getter',
                     'setter', 'express_route', 'express_route_validated', 'express_middleware',
-                    'vue_config'
+                    'vue_config', 'vue_app_usage'
                 ]
+
+                # Ensure we have enough pattern types for all patterns
+                while len(pattern_types) < len(compiled_patterns):
+                    pattern_types.append('unknown')
+
+                pattern_type = 'unknown'  # Default value
 
                 if pattern_index < len(pattern_types):
                     pattern_type = pattern_types[pattern_index]
 
-                    if pattern_type == 'function':
-                        func_info = self._parse_function_match(groups, match, 'function', start_line)
-                    elif pattern_type == 'arrow':
-                        func_info = self._parse_function_match(groups, match, 'arrow', start_line)
-                    elif pattern_type == 'async_arrow':
-                        func_info = self._parse_function_match(groups, match, 'async_arrow')
-                    elif pattern_type == 'simple_arrow':
-                        func_info = self._parse_function_match(groups, match, 'simple_arrow')
-                    elif pattern_type == 'react_component':
-                        func_info = self._parse_function_match(groups, match, 'react_component')
-                    elif pattern_type == 'method':
-                        func_info = self._parse_function_match(groups, match, 'method', start_line)
-                    elif pattern_type == 'lifecycle_method':
-                        func_info = self._parse_lifecycle_method_match(groups, match, start_line)
-                    elif pattern_type == 'async_function':
-                        func_info = self._parse_function_match(groups, match, 'async_function', start_line)
-                    elif pattern_type == 'abstract_method':
-                        func_info = self._parse_function_match(groups, match, 'abstract_method', start_line)
-                    elif pattern_type == 'export_function':
-                        func_info = self._parse_function_match(groups, match, 'export_function', start_line)
-                    elif pattern_type == 'export_composable':
-                        func_info = self._parse_export_composable_match(groups, match, start_line)
-                    elif pattern_type == 'exported_function':
-                        func_info = self._parse_function_match(groups, match, 'exported_function', start_line)
-                    elif pattern_type == 'constructor':
-                        func_info = self._parse_function_match(groups, match, 'constructor', start_line)
-                    elif pattern_type == 'getter':
-                        func_info = self._parse_function_match(groups, match, 'getter', start_line)
-                    elif pattern_type == 'setter':
-                        func_info = self._parse_function_match(groups, match, 'setter', start_line)
-                    elif pattern_type == 'express_route':
-                        func_info = self._parse_express_route_match(groups, match)
-                    elif pattern_type == 'express_route_validated':
-                        func_info = self._parse_express_route_match(groups, match, start_line)
-                    elif pattern_type == 'express_middleware':
-                        func_info = self._parse_express_middleware_match(groups, match, start_line)
-                    elif pattern_type == 'vue_config':
-                        func_info = self._parse_vue_config_match(groups, match, start_line)
-                    else:
-                        continue
-
-                    if func_info:
-                        functions.append(func_info)
-                groups = match.groups()
-
-                # Calculate start_line correctly based on source content before match
-                start_line = source[:match.start()].count('\n') + 1
-
                 if pattern_type == 'function':
-                    # Regular function
                     func_info = self._parse_function_match(groups, match, 'function', start_line)
                 elif pattern_type == 'arrow':
-                    # Arrow function with return type
                     func_info = self._parse_function_match(groups, match, 'arrow', start_line)
                 elif pattern_type == 'async_arrow':
-                    # Async arrow function
                     func_info = self._parse_function_match(groups, match, 'async_arrow')
                 elif pattern_type == 'simple_arrow':
-                    # Simple arrow function
                     func_info = self._parse_function_match(groups, match, 'simple_arrow')
                 elif pattern_type == 'react_component':
-                    # React functional component
                     func_info = self._parse_function_match(groups, match, 'react_component')
                 elif pattern_type == 'method':
-                    # Method definition
                     func_info = self._parse_function_match(groups, match, 'method', start_line)
                 elif pattern_type == 'lifecycle_method':
-                    # Angular lifecycle method like ngOnInit()
                     func_info = self._parse_lifecycle_method_match(groups, match, start_line)
                 elif pattern_type == 'async_function':
-                    # Async function
                     func_info = self._parse_function_match(groups, match, 'async_function', start_line)
                 elif pattern_type == 'abstract_method':
-                    # Abstract method
                     func_info = self._parse_function_match(groups, match, 'abstract_method', start_line)
                 elif pattern_type == 'export_function':
-                    # Exported function (Vue 3 Composition API style)
                     func_info = self._parse_function_match(groups, match, 'export_function', start_line)
                 elif pattern_type == 'export_composable':
-                    # Exported Vue composable function
                     func_info = self._parse_export_composable_match(groups, match, start_line)
                 elif pattern_type == 'exported_function':
-                    # Exported function (React/Vue style)
                     func_info = self._parse_function_match(groups, match, 'exported_function', start_line)
                 elif pattern_type == 'constructor':
-                    # Constructor
                     func_info = self._parse_function_match(groups, match, 'constructor', start_line)
                 elif pattern_type == 'getter':
-                    # Getter method
                     func_info = self._parse_function_match(groups, match, 'getter', start_line)
                 elif pattern_type == 'setter':
-                    # Setter method
                     func_info = self._parse_function_match(groups, match, 'setter', start_line)
                 elif pattern_type == 'express_route':
-                    # Express route handler with asyncHandler
                     func_info = self._parse_express_route_match(groups, match)
                 elif pattern_type == 'express_route_validated':
-                    # Express route handler with validation
                     func_info = self._parse_express_route_match(groups, match, start_line)
                 elif pattern_type == 'express_middleware':
-                    # Express middleware with asyncHandler
                     func_info = self._parse_express_middleware_match(groups, match, start_line)
                 elif pattern_type == 'vue_config':
-                    # Vue configuration handlers
                     func_info = self._parse_vue_config_match(groups, match, start_line)
+                elif pattern_type == 'vue_app_usage':
+                    func_info = self._parse_vue_app_usage_match(groups, match, start_line)
                 else:
-                    # Unknown pattern type
-                    continue
+                    func_info = None
 
                 if func_info:
-                    functions.append(func_info)
+                        functions.append(func_info)
 
         return functions
 
@@ -716,9 +662,12 @@ class TypeScriptASTVisitor:
         try:
             num_groups = len(groups)
 
-            # Extract config type
-            config_match = re.search(r'config\.(\w+)\s*=', match.group(0))
-            config_type = config_match.group(1) if config_match else 'handler'
+            # Extract config type - use groups if available, otherwise extract from match
+            if num_groups > 0 and groups[0]:
+                config_type = groups[0]
+            else:
+                config_match = re.search(r'config\.(\w+)\s*=', match.group(0))
+                config_type = config_match.group(1) if config_match else 'handler'
 
             return {
                 'name': f'{config_type}_handler',
@@ -739,6 +688,40 @@ class TypeScriptASTVisitor:
             }
         except Exception as e:
             print(f"   Warning: Error parsing Vue config match: {e}", file=sys.stderr)
+            return None
+
+    def _parse_vue_app_usage_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
+        """Parse Vue app usage patterns like app.use(), app.component(), etc."""
+        try:
+            num_groups = len(groups)
+
+            # Extract usage type - use groups if available, otherwise extract from match
+            if num_groups > 0 and groups[0]:
+                usage_type = groups[0]
+            else:
+                usage_match = re.search(r'app\.(\w+)\s*\(', match.group(0))
+                usage_type = usage_match.group(1) if usage_match else 'use'
+
+            return {
+                'name': f'vue_app_{usage_type}',
+                'generics': [],
+                'params': '',
+                'return_type': 'void',
+                'is_async': False,
+                'is_static': False,
+                'is_generator': False,
+                'is_abstract': False,
+                'is_getter': False,
+                'is_setter': False,
+                'is_constructor': False,
+                'is_exported': False,
+                'start_line': start_line,
+                'match_text': match.group(0),
+                'function_type': 'vue_app_usage',
+                'usage_type': usage_type
+            }
+        except Exception as e:
+            print(f"   Warning: Error parsing Vue app usage match: {e}", file=sys.stderr)
             return None
 
     def _parse_lifecycle_method_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -1389,38 +1372,74 @@ class TypeScriptASTVisitor:
         self.current_file = file_path
         self.elements = []
 
+        # Track file type for performance monitoring
+        is_tsx = file_path.endswith('.tsx')
+        file_type = 'tsx' if is_tsx else 'ts'
+
         try:
             # Extract file-level imports
             self.file_level_imports, self.file_level_import_from_targets = extract_file_imports_typescript(source)
 
-            # Parse complex types (interfaces, enums, etc.)
-            complex_types = self._parse_complex_types(source)
+            # Use TSX-optimized parsing for React files
+            if is_tsx:
+                # Parse complex types (interfaces, enums, etc.)
+                complex_types = self._parse_complex_types(source)
 
-            # Create interface elements
-            for interface_info in complex_types['interfaces']:
-                interface_element = self._create_interface_element(interface_info, source, file_path)
-                if interface_element:
-                    self.elements.append(interface_element)
+                # Create interface elements
+                for interface_info in complex_types['interfaces']:
+                    interface_element = self._create_interface_element(interface_info, source, file_path)
+                    if interface_element:
+                        self.elements.append(interface_element)
 
-            # Create enum elements
-            for enum_info in complex_types['enums']:
-                enum_element = self._create_enum_element(enum_info, source, file_path)
-                if enum_element:
-                    self.elements.append(enum_element)
+                # Create enum elements
+                for enum_info in complex_types['enums']:
+                    enum_element = self._create_enum_element(enum_info, source, file_path)
+                    if enum_element:
+                        self.elements.append(enum_element)
 
-            # Create type alias elements
-            for type_alias_info in complex_types['type_aliases']:
-                type_alias_element = self._create_type_alias_element(type_alias_info, source, file_path)
-                if type_alias_element:
-                    self.elements.append(type_alias_element)
+                # Create type alias elements
+                for type_alias_info in complex_types['type_aliases']:
+                    type_alias_element = self._create_type_alias_element(type_alias_info, source, file_path)
+                    if type_alias_element:
+                        self.elements.append(type_alias_element)
 
-            # Parse the file for classes and functions using fast regex-based extraction
-            elements = self._parse_typescript_ast(file_path, source)
-            self.elements.extend(elements)
+                # Use TSX-optimized element extraction
+                elements = self._parse_tsx_elements(file_path, source)
+                self.elements.extend(elements)
+            else:
+                # Standard parsing for regular TS files
+                complex_types = self._parse_complex_types(source)
 
-            # Log parsing results
+                # Create interface elements
+                for interface_info in complex_types['interfaces']:
+                    interface_element = self._create_interface_element(interface_info, source, file_path)
+                    if interface_element:
+                        self.elements.append(interface_element)
+
+                # Create enum elements
+                for enum_info in complex_types['enums']:
+                    enum_element = self._create_enum_element(enum_info, source, file_path)
+                    if enum_element:
+                        self.elements.append(enum_element)
+
+                # Create type alias elements
+                for type_alias_info in complex_types['type_aliases']:
+                    type_alias_element = self._create_type_alias_element(type_alias_info, source, file_path)
+                    if type_alias_element:
+                        self.elements.append(type_alias_element)
+
+                # Parse the file for classes and functions using fast regex-based extraction
+                elements = self._parse_typescript_ast(file_path, source)
+                self.elements.extend(elements)
+
+            # Track performance by file type
             parsing_time = time.time() - start_time
-            print(f"   Info: Parsed {file_path} using fast regex extraction ({len(self.elements)} elements, {parsing_time:.2f}s)")
+            if is_tsx:
+                self._update_tsx_metrics(parsing_time)
+            else:
+                self._update_ts_metrics(parsing_time)
+
+            print(f"   Info: Parsed {file_path} using {'TSX-optimized' if is_tsx else 'standard'} regex extraction ({len(self.elements)} elements, {parsing_time:.2f}s)")
 
             # Log framework detection if any
             if self.elements:
@@ -1436,6 +1455,10 @@ class TypeScriptASTVisitor:
 
         except Exception as e:
             parsing_time = time.time() - start_time
+            if is_tsx:
+                self._update_tsx_metrics(parsing_time)
+            else:
+                self._update_ts_metrics(parsing_time)
             print(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
             return []
 
@@ -1747,6 +1770,160 @@ class TypeScriptASTVisitor:
 
         return type_alias_element
 
+    def _parse_tsx_elements(self, file_path: str, source: str) -> List[CodeElement]:
+        """Parse TSX elements using React-optimized patterns for better performance."""
+        elements = []
+        lines = source.splitlines()
+
+        # Use TSX-optimized patterns for better React component detection
+        tsx_patterns = {
+            'react_components': [
+                # React.FC components with explicit typing
+                r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*React\.FC\s*<\s*([^>]+)\s*>\s*=\s*\(([^)]*)\)\s*=>',
+                # FC components (shorthand)
+                r'const\s+(\w+)(?:<[^>]*>)?\s*:\s*FC\s*<\s*([^>]+)\s*>\s*=\s*\(([^)]*)\)\s*=>',
+                # Simple React components without explicit typing
+                r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*=>(?:\s*return\s*)?[\s\S]*?(?=<|function|class|$)',
+                # React components with forwardRef
+                r'const\s+(\w+)(?:<[^>]*>)?\s*=\s*forwardRef\s*\(([^)]*)\)\s*=>',
+                # React hooks (custom hooks)
+                r'(?:export\s+)?(?:function\s+|const\s+\w+\s*=\s*(?:async\s*)?)\s*use(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)',
+            ],
+            'jsx_elements': [
+                # JSX return statements
+                r'return\s*\(\s*<\s*(\w+)(?:\s+[^>]*)?\s*>(.*?)<\s*/\s*\1\s*>',
+                # JSX fragments
+                r'<>\s*(.*?)\s*</>',
+                # JSX expressions
+                r'{\s*([^}]+)\s*}',
+            ]
+        }
+
+        # Extract React components using optimized patterns
+        for pattern in tsx_patterns['react_components']:
+            for match in re.finditer(pattern, source, re.MULTILINE | re.DOTALL):
+                component_info = self._parse_react_component_match(match, lines, file_path, source)
+                if component_info:
+                    elements.append(component_info)
+
+        # Extract classes (using standard patterns as they're less React-specific)
+        class_matches = self._find_classes_regex(source)
+        for match in class_matches:
+            class_element = self._create_class_element(match, lines, file_path)
+            if class_element:
+                elements.append(class_element)
+
+        return elements
+
+    def _parse_react_component_match(self, match: re.Match, lines: List[str], file_path: str, source: str) -> Optional[FunctionElement]:
+        """Parse a React component match into a FunctionElement."""
+        try:
+            groups = match.groups()
+            num_groups = len(groups)
+
+            if num_groups >= 2:
+                name = groups[0]
+                params = groups[-1] if num_groups > 1 else ''
+
+                # Calculate start line
+                start_line = source[:match.start()].count('\n') + 1
+
+                # Estimate end line by finding the matching closing brace
+                end_line = find_closing_brace(lines, start_line - 1)
+                if end_line <= start_line:
+                    end_line = start_line + 20
+
+                # Extract JSDoc comment
+                docstring = extract_jsdoc_comment(lines, start_line - 1)
+
+                # Extract parameters
+                parameters = extract_typescript_parameters(f'({params})')
+
+                # Calculate complexity and NLOC
+                func_source_lines = lines[start_line-1:end_line] if end_line > start_line else lines[start_line-1:start_line]
+                func_source = '\n'.join(func_source_lines)
+                complexity = calculate_complexity_typescript(func_source)
+                nloc = calculate_nloc_typescript(lines, start_line, end_line)
+
+                # Extract dependencies
+                dependencies = extract_typescript_dependencies(func_source, self.file_level_imports)
+
+                # Create React component element
+                func_element = FunctionElement(
+                    name=name,
+                    kind='function',
+                    file_path=file_path,
+                    line_start=start_line,
+                    line_end=end_line,
+                    full_source='\n'.join(lines),
+                    parameters=parameters,
+                    return_type='React.ReactElement',
+                    is_async=False,
+                    is_static=False,
+                    access_modifier=None,
+                    docstring=docstring,
+                    is_method=False,
+                    class_name=None,
+                    complexity=complexity,
+                    nloc=nloc,
+                    external_dependencies=dependencies,
+                    decorators=[],
+                    catches_exceptions=[],
+                    local_variables_declared=[],
+                    hash_body=hash_source_snippet(lines, start_line, end_line),
+                    metadata={
+                        'framework': 'react',
+                        'typescript_features': ['jsx', 'components', 'hooks'],
+                        'function_type': 'react_component',
+                        'confidence': 0.9,
+                        'parsing_method': 'tsx_optimized',
+                        'detected_frameworks': ['react'],
+                        'framework_confidence': 0.9,
+                        'framework_features': ['jsx', 'components']
+                    }
+                )
+
+                return func_element
+
+        except Exception as e:
+            print(f"   Warning: Error parsing React component match: {e}", file=sys.stderr)
+
+        return None
+
+    def _update_tsx_metrics(self, parsing_time: float):
+        """Update TSX-specific performance metrics."""
+        # Initialize performance metrics if not already done
+        if not hasattr(self, 'performance_metrics'):
+            self.performance_metrics = {
+                'total_files': 0, 'total_elements': 0, 'processing_time': 0.0,
+                'regex_compilation_time': 0.0, 'io_time': 0.0, 'parallel_overhead': 0.0,
+                'tsx_files': 0, 'tsx_parsing_time': 0.0, 'ts_files': 0, 'ts_parsing_time': 0.0,
+                'avg_tsx_time_per_file': 0.0, 'avg_ts_time_per_file': 0.0
+            }
+
+        self.performance_metrics['tsx_files'] += 1
+        self.performance_metrics['tsx_parsing_time'] += parsing_time
+        self.performance_metrics['avg_tsx_time_per_file'] = (
+            self.performance_metrics['tsx_parsing_time'] / self.performance_metrics['tsx_files']
+        )
+
+    def _update_ts_metrics(self, parsing_time: float):
+        """Update TS-specific performance metrics."""
+        # Initialize performance metrics if not already done
+        if not hasattr(self, 'performance_metrics'):
+            self.performance_metrics = {
+                'total_files': 0, 'total_elements': 0, 'processing_time': 0.0,
+                'regex_compilation_time': 0.0, 'io_time': 0.0, 'parallel_overhead': 0.0,
+                'tsx_files': 0, 'tsx_parsing_time': 0.0, 'ts_files': 0, 'ts_parsing_time': 0.0,
+                'avg_tsx_time_per_file': 0.0, 'avg_ts_time_per_file': 0.0
+            }
+
+        self.performance_metrics['ts_files'] += 1
+        self.performance_metrics['ts_parsing_time'] += parsing_time
+        self.performance_metrics['avg_ts_time_per_file'] = (
+            self.performance_metrics['ts_parsing_time'] / self.performance_metrics['ts_files']
+        )
+
 
 class TypeScriptASTExtractor:
     def __init__(self, parallel_processing: bool = True, max_workers: Optional[int] = None, batch_size: int = 50):
@@ -1762,14 +1939,20 @@ class TypeScriptASTExtractor:
         self.batch_size = batch_size
         self.enable_performance_monitoring = True
 
-        # Performance metrics
+        # Performance metrics with TSX-specific tracking
         self.performance_metrics = {
             'total_files': 0,
             'total_elements': 0,
             'processing_time': 0.0,
             'regex_compilation_time': 0.0,
             'io_time': 0.0,
-            'parallel_overhead': 0.0
+            'parallel_overhead': 0.0,
+            'tsx_files': 0,
+            'tsx_parsing_time': 0.0,
+            'ts_files': 0,
+            'ts_parsing_time': 0.0,
+            'avg_tsx_time_per_file': 0.0,
+            'avg_ts_time_per_file': 0.0
         }
 
     def _find_tsconfig(self, directory: Path) -> Optional[Path]:
@@ -2098,16 +2281,36 @@ class TypeScriptASTExtractor:
         return all_elements
 
     def _print_performance_summary(self):
-        """Print detailed performance metrics."""
+        """Print detailed performance metrics with TSX-specific analysis."""
         metrics = self.performance_metrics
         print(f"   📊 Performance Summary:")
         print(f"      • Files processed: {metrics['total_files']}")
         print(f"      • Elements found: {metrics['total_elements']}")
         print(f"      • Total time: {metrics['processing_time']:.3f}s")
         print(f"      • Parallel overhead: {metrics['parallel_overhead']:.3f}s")
+
         if metrics['total_files'] > 0:
             avg_time_per_file = metrics['processing_time'] / metrics['total_files']
             print(f"      • Avg time per file: {avg_time_per_file:.3f}s")
+
+        # TSX vs TS performance comparison
+        if metrics['tsx_files'] > 0:
+            print(f"      • TSX files: {metrics['tsx_files']} ({metrics['tsx_parsing_time']:.3f}s total, {metrics['avg_tsx_time_per_file']:.3f}s avg)")
+
+        if metrics['ts_files'] > 0:
+            print(f"      • TS files: {metrics['ts_files']} ({metrics['ts_parsing_time']:.3f}s total, {metrics['avg_ts_time_per_file']:.3f}s avg)")
+
+        # Performance ratio
+        if metrics['tsx_files'] > 0 and metrics['ts_files'] > 0:
+            tsx_ratio = metrics['avg_tsx_time_per_file'] / metrics['avg_ts_time_per_file']
+            print(f"      • TSX/TS performance ratio: {tsx_ratio:.2f}x")
+
+            if tsx_ratio > 2.0:
+                print(f"      • ⚠️  TSX files are significantly slower - optimization recommended")
+            elif tsx_ratio > 1.5:
+                print(f"      • ⚡ TSX files are slower - minor optimization may help")
+            else:
+                print(f"      • ✅ TSX performance is acceptable")
 
         # Calculate speedup if we have baseline
         if hasattr(self, '_sequential_baseline'):
@@ -2126,8 +2329,15 @@ class TypeScriptASTExtractor:
             'processing_time': 0.0,
             'regex_compilation_time': 0.0,
             'io_time': 0.0,
-            'parallel_overhead': 0.0
+            'parallel_overhead': 0.0,
+            'tsx_files': 0,
+            'tsx_parsing_time': 0.0,
+            'ts_files': 0,
+            'ts_parsing_time': 0.0,
+            'avg_tsx_time_per_file': 0.0,
+            'avg_ts_time_per_file': 0.0
         }
+
 
     def enable_detailed_performance_monitoring(self):
         """Enable detailed performance monitoring and metrics collection."""

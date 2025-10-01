@@ -18,8 +18,9 @@ class TestTypeScriptASTVisitor:
         assert typescript_visitor.current_class is None
         assert typescript_visitor.current_file == ""
         assert typescript_visitor.source_lines == []
-        assert isinstance(typescript_visitor.typescript_available, bool)
+        # Note: typescript_available attribute removed for performance optimization
 
+    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
     def test_check_typescript_available_with_node(self, typescript_visitor):
         """Test TypeScript availability detection when Node.js is available."""
         with patch('subprocess.run') as mock_run:
@@ -34,6 +35,7 @@ class TestTypeScriptASTVisitor:
             assert typescript_visitor.typescript_available is True
             assert mock_run.call_count == 2
 
+    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
     def test_check_typescript_available_without_node(self, typescript_visitor):
         """Test TypeScript availability detection when Node.js is not available."""
         with patch('subprocess.run') as mock_run:
@@ -43,6 +45,7 @@ class TestTypeScriptASTVisitor:
             assert result is False
             assert typescript_visitor.typescript_available is False
 
+    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
     def test_check_typescript_available_without_typescript(self, typescript_visitor):
         """Test TypeScript availability detection when TypeScript is not available."""
         with patch('subprocess.run') as mock_run:
@@ -56,14 +59,17 @@ class TestTypeScriptASTVisitor:
             assert result is False
             assert typescript_visitor.typescript_available is False
 
-    def test_visitor_initialization(self, typescript_visitor):
-        """Test TypeScriptASTVisitor initializes correctly."""
+    def test_visitor_optimization_features(self, typescript_visitor):
+        """Test that performance optimization features are available."""
         assert typescript_visitor.elements == []
         assert typescript_visitor.current_class is None
         assert typescript_visitor.current_file == ""
         assert typescript_visitor.source_lines == []
-        assert isinstance(typescript_visitor.typescript_available, bool)
+        # Test that performance metrics are available for tracking
+        assert hasattr(typescript_visitor, '_update_tsx_metrics')
+        assert hasattr(typescript_visitor, '_update_ts_metrics')
 
+    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
     def test_typescript_availability_check(self, typescript_visitor):
         """Test TypeScript availability detection methods exist."""
         assert hasattr(typescript_visitor, '_check_typescript_available')
