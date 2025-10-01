@@ -32,6 +32,7 @@ The tool provides three main interfaces:
   - Stores all extracted code elements and call edges as semantic embeddings.
   - Enables rapid semantic search and filtered queries over the codebase's functions and their metadata.
   - Persists analysis results to disk, allowing instant querying of previously analyzed projects without re-parsing.
+  - **Automatic Cleanup:** Background process removes stale references to deleted files, keeping the index accurate and efficient.
 
 ### Visualization and Output
 - **Mermaid Diagram Visualization:**
@@ -41,6 +42,7 @@ The tool provides three main interfaces:
 
 ### MCP Server Features
 - **Real-time Analysis:** File watching with incremental updates for dynamic codebases.
+- **Background Maintenance:** Automatic cleanup of stale file references in the vector store to maintain index accuracy.
 - **Tool-based API:** Exposes analysis capabilities through MCP tools for AI assistants.
 - **Session Context:** Maintains per-session state for complex analysis workflows.
 - **Comprehensive Tools:** Semantic search, call graph generation, function metadata retrieval, entry point identification, and Mermaid graph generation.
@@ -59,6 +61,14 @@ The tool provides three main interfaces:
 - **Minimal Background Knowledge:** Self-describing data, common patterns, reduced need for memorization.
 - **Strategic Abstraction:** Layers introduced only when they genuinely reduce overall complexity.
 - **Linear Understanding:** Code and output structured for easy top-to-bottom reading.
+
+## Comparison
+
+| System  | Project Size | Indexing Time |
+|---------|--------------|---------------|
+| RooCode | 40k LOC      | 2.2 min       |
+| CodeFlow| 40k LOC      | 8.6s          |
+
 
 ## Requirements
 
@@ -193,6 +203,7 @@ The server exposes the following tools through the MCP protocol:
 - **`get_function_metadata`**: Get detailed metadata for a specific function
 - **`query_entry_points`**: Get all identified entry points in the codebase
 - **`generate_mermaid_graph`**: Generate Mermaid diagram for call graph visualization
+- **`cleanup_stale_references`**: Manually trigger cleanup of stale file references in the vector store
 - **`update_context`**: Update session context with key-value pairs
 - **`get_context`**: Retrieve current session context
 
@@ -218,6 +229,7 @@ ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analys
 chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
 embedding_model: "all-MiniLM-L6-v2" # Embedding model to use
+cleanup_interval_minutes: 30  # Background cleanup interval for stale references
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.

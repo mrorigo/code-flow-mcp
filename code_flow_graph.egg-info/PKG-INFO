@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: code-flow-graph
+Version: 0.1.0
+Requires-Dist: mcp[cli]
+Requires-Dist: pyyaml
+Requires-Dist: watchdog>=2.0
+Requires-Dist: pytest
+Requires-Dist: pytest-asyncio
+Requires-Dist: pydantic
+Requires-Dist: chromadb>=1.1.0
+Requires-Dist: sentence-transformers>=5.1.0

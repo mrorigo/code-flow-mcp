@@ -240,9 +240,44 @@ class CodeGraphAnalyzer:
             if meta.get('complexity') is not None: print(f"   Complexity: {meta['complexity']}")
             if meta.get('nloc') is not None: print(f"   NLOC: {meta['nloc']}")
             if meta.get('external_dependencies'): print(f"   External Deps: {', '.join(meta['external_dependencies'])}")
-            if meta.get('decorators'): print(f"   Decorators: {', '.join([d.get('name', 'unknown') for d in meta['decorators']])}")
-            if meta.get('catches_exceptions'): print(f"   Catches: {', '.join(meta['catches_exceptions'])}")
-            if meta.get('local_variables_declared'): print(f"   Local Vars: {', '.join(meta['local_variables_declared'])}")
+            # Deserialize JSON string metadata fields for display
+            decorators = meta.get('decorators')
+            if decorators:
+                try:
+                    if isinstance(decorators, str):
+                        decorators = json.loads(decorators)
+                    decorator_names = [d.get('name', 'unknown') if isinstance(d, dict) else str(d) for d in decorators]
+                    print(f"   Decorators: {', '.join(decorator_names)}")
+                except (json.JSONDecodeError, AttributeError):
+                    print(f"   Decorators: {decorators}")
+
+            catches = meta.get('catches_exceptions')
+            if catches:
+                try:
+                    if isinstance(catches, str):
+                        catches = json.loads(catches)
+                    print(f"   Catches: {', '.join(catches) if isinstance(catches, list) else catches}")
+                except (json.JSONDecodeError, AttributeError):
+                    print(f"   Catches: {catches}")
+
+            local_vars = meta.get('local_variables_declared')
+            if local_vars:
+                try:
+                    if isinstance(local_vars, str):
+                        local_vars = json.loads(local_vars)
+                    print(f"   Local Vars: {', '.join(local_vars) if isinstance(local_vars, list) else local_vars}")
+                except (json.JSONDecodeError, AttributeError):
+                    print(f"   Local Vars: {local_vars}")
+
+            # Handle external dependencies
+            ext_deps = meta.get('external_dependencies')
+            if ext_deps:
+                try:
+                    if isinstance(ext_deps, str):
+                        ext_deps = json.loads(ext_deps)
+                    print(f"   External Deps: {', '.join(ext_deps) if isinstance(ext_deps, list) else ext_deps}")
+                except (json.JSONDecodeError, AttributeError):
+                    print(f"   External Deps: {ext_deps}")
         print("-" * 20)
 
         if generate_mermaid:

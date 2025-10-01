@@ -77,10 +77,9 @@ class AppContext:
 
 async def on_shutdown():
     logger.info("Server shutdown")
-    # Stop file watcher
-    if hasattr(server, 'analyzer') and server.analyzer and server.analyzer.observer:
-        server.analyzer.observer.stop()
-        server.analyzer.observer.join()
+    # Shutdown analyzer (which handles file watcher and background cleanup)
+    if hasattr(server, 'analyzer') and server.analyzer:
+        server.analyzer.shutdown()
 
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
@@ -233,7 +232,7 @@ async def query_entry_points() -> EntryPointsResponse:
 
 @server.tool(name="generate_mermaid_graph")
 async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description="List of fully qualified names to highlight in the graph"),
-                                 llm_optimized: bool = Field(description="Whether to optimize the graph for LLM consumption")) -> MermaidResponse:
+                                  llm_optimized: bool = Field(description="Whether to optimize the graph for LLM consumption")) -> MermaidResponse:
     """
     Generate a Mermaid diagram for the call graph.
     """
@@ -241,3 +240,37 @@ async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     graph = server.analyzer.builder.export_mermaid_graph(highlight_fqns=fqns, llm_optimized=llm_optimized)
     return MermaidResponse(graph=graph)
+
+
+class CleanupResponse(BaseModel):
+    removed_documents: int
+    errors: int
+    stale_paths: int
+    message: str
+
+
+@server.tool(name="cleanup_stale_references")
+async def cleanup_stale_references() -> CleanupResponse:
+    """
+    Manually trigger cleanup of stale file references in the vector store.
+    Removes documents that reference files that no longer exist on the filesystem.
+    """
+    if not server.analyzer:
+        raise MCPError(5001, "Analyzer unavailable", "Ensure the analyzer is properly initialized")
+
+    try:
+        cleanup_stats = await server.analyzer.cleanup_stale_references()
+        message = f"Cleanup completed: removed {cleanup_stats['removed_documents']} documents"
+        if cleanup_stats['errors'] > 0:
+            message += f", {cleanup_stats['errors']} errors"
+        if cleanup_stats['stale_paths'] > 0:
+            message += f", found {cleanup_stats['stale_paths']} stale paths"
+
+        return CleanupResponse(
+            removed_documents=cleanup_stats['removed_documents'],
+            errors=cleanup_stats['errors'],
+            stale_paths=cleanup_stats.get('stale_paths', 0),
+            message=message
+        )
+    except Exception as e:
+        raise MCPError(5001, f"Cleanup failed: {str(e)}", "Check server logs for details")

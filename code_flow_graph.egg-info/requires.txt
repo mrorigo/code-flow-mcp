@@ -1,0 +1,8 @@
+mcp[cli]
+pyyaml
+watchdog>=2.0
+pytest
+pytest-asyncio
+pydantic
+chromadb>=1.1.0
+sentence-transformers>=5.1.0

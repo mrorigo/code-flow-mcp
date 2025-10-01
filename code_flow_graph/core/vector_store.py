@@ -3,11 +3,15 @@ Vector store integration for code graph elements using ChromaDB.
 This version is type-safe and expects enriched FunctionNode objects.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 import chromadb
 from sentence_transformers import SentenceTransformer
 import uuid
 import json # For serializing complex metadata
+import os
+import asyncio
+from pathlib import Path
+import logging
 
 # Import the specific, enriched data types from the call graph builder
 from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
@@ -456,49 +460,218 @@ class CodeVectorStore:
 
     def query_functions(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
         """
-        Query for functions using semantic search.
+        Query for functions using semantic search with automatic chunk grouping.
+        
+        This method now automatically groups chunks by fully_qualified_name and returns
+        complete documents reconstructed from all chunks belonging to each function.
+        This solves the document fragmentation problem where searches would only return
+        partial chunks instead of complete original documents.
 
         Args:
             query: Search query (e.g., "functions that handle user authentication").
-            n_results: Number of results to return.
+            n_results: Number of complete documents to return.
             where_filter: Optional ChromaDB filter (e.g., {"is_entry_point": True}).
-                          Note: For list/dict metadata stored as JSON strings,
-                          you'll need to use `$contains` with a substring of the JSON.
 
         Returns:
-            List of matching documents with metadata and distance.
+            List of complete function documents with metadata and distance.
+            Each document is reconstructed from all its chunks using the reference ID
+            (fully_qualified_name) to link related chunks together.
         """
         effective_filter = {"type": "function"}
         if where_filter:
             effective_filter.update(where_filter)
 
-        results = self.collection.query(
+        # Request more raw results to account for chunk grouping
+        # We'll group by document and return the top n_results complete documents
+        raw_results = self.collection.query(
             query_texts=[query],
-            n_results=n_results,
+            n_results=n_results * 4,  # Request more to account for grouping
             where=effective_filter
         )
 
-        formatted_results = []
+        return self._group_chunks_by_document(raw_results, n_results)
+
+    def _group_chunks_by_document(self, results: Dict, max_results: int) -> List[Dict]:
+        """
+        Group chunks by fully_qualified_name and reconstruct complete documents.
+        
+        Args:
+            results: Raw ChromaDB query results
+            max_results: Maximum number of complete documents to return
+        
+        Returns:
+            List of complete documents with all chunks consolidated
+        """
         if not results or not results.get('documents') or not results['documents'][0]:
             return []
 
+        # Group chunks by fully_qualified_name (document reference ID)
+        document_groups = {}
+        
         for i in range(len(results['documents'][0])):
             meta = results['metadatas'][0][i]
-            # Deserialize JSON string attributes back into Python objects
-            if 'external_dependencies' in meta: meta['external_dependencies'] = json.loads(meta['external_dependencies'])
-            if 'decorators' in meta: meta['decorators'] = json.loads(meta['decorators'])
-            if 'catches_exceptions' in meta: meta['catches_exceptions'] = json.loads(meta['catches_exceptions'])
-            if 'local_variables_declared' in meta: meta['local_variables_declared'] = json.loads(meta['local_variables_declared'])
-            if 'parameters' in meta: meta['parameters'] = json.loads(meta['parameters']) # for edges
-
-            formatted_results.append({
-                "document": results['documents'][0][i],
-                "distance": results['distances'][0][i],
-                "metadata": meta,
-                "id": results['ids'][0][i]
+            fqn = meta.get('fully_qualified_name')
+            
+            if not fqn:
+                continue
+                
+            if fqn not in document_groups:
+                document_groups[fqn] = {
+                    'chunks': [],
+                    'best_distance': float('inf'),
+                    'metadata': meta.copy()
+                }
+            
+            document_groups[fqn]['chunks'].append({
+                'document': results['documents'][0][i],
+                'distance': results['distances'][0][i],
+                'metadata': meta,
+                'id': results['ids'][0][i]
             })
+            
+            # Track the best (lowest) distance for this document
+            if results['distances'][0][i] < document_groups[fqn]['best_distance']:
+                document_groups[fqn]['best_distance'] = results['distances'][0][i]
 
+        # Sort documents by best distance and take top max_results
+        sorted_documents = sorted(document_groups.values(), key=lambda x: x['best_distance'])
+        
+        formatted_results = []
+        for doc_group in sorted_documents[:max_results]:
+            # Sort chunks by chunk_index to reconstruct in proper order
+            sorted_chunks = sorted(doc_group['chunks'], key=lambda x: x['metadata'].get('chunk_index', 0))
+            
+            # Reconstruct complete document from chunks
+            complete_content = self._reconstruct_document_from_chunks(sorted_chunks)
+            
+            # Use metadata from chunk 0 (first chunk) as the primary metadata
+            primary_meta = doc_group['metadata'].copy()
+            primary_meta['chunk_count'] = len(sorted_chunks)
+            primary_meta['document_reconstructed'] = True
+            primary_meta['chunk_indices'] = [chunk['metadata'].get('chunk_index', 0) for chunk in sorted_chunks]
+            
+            formatted_results.append({
+                'document': complete_content,
+                'distance': doc_group['best_distance'],
+                'metadata': primary_meta,
+                'id': results['ids'][0][sorted_chunks[0]['metadata'].get('chunk_index', 0)],
+                'chunk_info': {
+                    'total_chunks': len(sorted_chunks),
+                    'reconstructed': True
+                }
+            })
+        
         return formatted_results
+
+    def _reconstruct_document_from_chunks(self, sorted_chunks: List[Dict]) -> str:
+        """
+        Reconstruct a complete document from its sorted chunks.
+        
+        Args:
+            sorted_chunks: List of chunk dictionaries sorted by chunk_index
+        
+        Returns:
+            Reconstructed complete document
+        """
+        if not sorted_chunks:
+            return ""
+        
+        # Join chunks with the same separator used in _split_document
+        # This preserves the original document structure
+        chunk_texts = [chunk['document'] for chunk in sorted_chunks]
+        return " | ".join(chunk_texts)
+
+    def get_all_file_paths(self) -> Set[str]:
+        """
+        Get all unique file paths referenced in the vector store.
+        This is used for cleanup operations to identify potentially stale references.
+
+        Returns:
+            Set of unique file paths from all documents in the collection
+        """
+        try:
+            # Get all documents with file_path metadata
+            all_docs = self.collection.get(include=['metadatas'])
+
+            file_paths = set()
+            if all_docs and all_docs.get('metadatas'):
+                for metadata in all_docs['metadatas']:
+                    file_path = metadata.get('file_path')
+                    if file_path:
+                        file_paths.add(file_path)
+
+            return file_paths
+        except Exception as e:
+            logging.warning(f"Error retrieving file paths from vector store: {e}")
+            return set()
+
+    def cleanup_stale_references(self, valid_file_paths: Set[str] = None) -> Dict[str, Any]:
+        """
+        Remove documents that reference files that no longer exist on the filesystem.
+
+        Args:
+            valid_file_paths: Optional set of known valid file paths to check against.
+                            If None, will check all file paths in the store.
+
+        Returns:
+            Dict with cleanup statistics: {'removed_documents': int, 'errors': int}
+        """
+        try:
+            removed_count = 0
+            errors = 0
+
+            # Get all file paths to check if not provided
+            if valid_file_paths is None:
+                file_paths_to_check = self.get_all_file_paths()
+            else:
+                file_paths_to_check = valid_file_paths
+
+            # Find stale file paths (files that don't exist)
+            stale_paths = set()
+            for file_path in file_paths_to_check:
+                if not os.path.exists(file_path):
+                    stale_paths.add(file_path)
+
+            if not stale_paths:
+                logging.info("No stale file references found in vector store")
+                return {'removed_documents': 0, 'errors': 0, 'stale_paths': 0}
+
+            logging.info(f"Found {len(stale_paths)} stale file paths to clean up")
+
+            # Remove documents for each stale file path in batches
+            batch_size = 100
+            for stale_path in stale_paths:
+                try:
+                    # Find all documents with this file path
+                    docs_to_delete = self.collection.get(
+                        where={"file_path": stale_path},
+                        include=['ids']
+                    )
+
+                    if docs_to_delete and docs_to_delete.get('ids'):
+                        # Delete in batches to avoid memory issues
+                        ids_to_delete = docs_to_delete['ids']
+                        for i in range(0, len(ids_to_delete), batch_size):
+                            batch_ids = ids_to_delete[i:i + batch_size]
+                            self.collection.delete(ids=batch_ids)
+                            removed_count += len(batch_ids)
+
+                        logging.info(f"Removed {len(ids_to_delete)} documents for stale file: {stale_path}")
+
+                except Exception as e:
+                    errors += 1
+                    logging.warning(f"Error removing documents for stale file {stale_path}: {e}")
+
+            logging.info(f"Cleanup completed: removed {removed_count} documents, {errors} errors")
+            return {
+                'removed_documents': removed_count,
+                'errors': errors,
+                'stale_paths': len(stale_paths)
+            }
+
+        except Exception as e:
+            logging.error(f"Error during stale reference cleanup: {e}")
+            return {'removed_documents': 0, 'errors': 1, 'stale_paths': 0}
 
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about the vector collection."""

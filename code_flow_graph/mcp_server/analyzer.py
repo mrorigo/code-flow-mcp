@@ -2,6 +2,8 @@ from pathlib import Path
 from typing import Optional
 import asyncio
 import logging
+import threading
+import time
 
 import watchdog.observers
 from watchdog.events import FileSystemEventHandler
@@ -48,6 +50,52 @@ class MCPAnalyzer:
         else:
             logging.warning(f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization")
 
+        # Background cleanup configuration
+        self.cleanup_interval = config.get('cleanup_interval_minutes', 30)  # Default: 30 minutes
+        self.cleanup_task = None
+        self.cleanup_shutdown_event = asyncio.Event()
+
+    def start_background_cleanup(self) -> None:
+        """
+        Start the background cleanup task that periodically removes stale file references.
+        This runs in a separate thread to avoid blocking the main event loop.
+        """
+        if not self.vector_store:
+            logging.info("Vector store not available, skipping background cleanup")
+            return
+
+        def cleanup_worker():
+            """Background worker function that runs the cleanup periodically."""
+            while not self.cleanup_shutdown_event.is_set():
+                try:
+                    # Run cleanup if vector store is available
+                    if self.vector_store:
+                        logging.info("Running background cleanup of stale file references")
+                        cleanup_stats = self.vector_store.cleanup_stale_references()
+                        if cleanup_stats['removed_documents'] > 0:
+                            logging.info(f"Cleanup removed {cleanup_stats['removed_documents']} stale references")
+
+                    # Wait for next cleanup interval or shutdown event
+                    self.cleanup_shutdown_event.wait(timeout=self.cleanup_interval * 60)
+
+                except Exception as e:
+                    logging.error(f"Error in background cleanup: {e}")
+                    # Wait a bit before retrying on error
+                    time.sleep(60)
+
+        # Start cleanup thread
+        cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+        cleanup_thread.start()
+        self.cleanup_task = cleanup_thread
+        logging.info(f"Background cleanup started (interval: {self.cleanup_interval} minutes)")
+
+    def stop_background_cleanup(self) -> None:
+        """Stop the background cleanup task."""
+        if self.cleanup_task and self.cleanup_task.is_alive():
+            self.cleanup_shutdown_event.set()
+            self.cleanup_task.join(timeout=10)  # Wait up to 10 seconds
+            logging.info("Background cleanup stopped")
+
     async def analyze(self) -> None:
         """Analyze the codebase by extracting elements, building graph, and populating vector store."""
         # Extract code elements
@@ -68,6 +116,9 @@ class MCPAnalyzer:
         observer.schedule(WatcherHandler(analyzer=self), self.config['watch_directories'][0], recursive=True)
         observer.start()
         self.observer = observer
+
+        # Start background cleanup task
+        self.start_background_cleanup()
 
     def _populate_vector_store(self) -> None:
         """Populate the vector store with functions and edges from the builder."""
@@ -123,3 +174,26 @@ class MCPAnalyzer:
                 with open(element.file_path, 'r', encoding='utf-8') as f:
                     source = f.read()
                 self.vector_store.add_function_node(element, source)
+
+    async def cleanup_stale_references(self) -> Dict[str, Any]:
+        """
+        Manually trigger cleanup of stale file references.
+        Useful for immediate cleanup without waiting for the background task.
+
+        Returns:
+            Dict with cleanup statistics
+        """
+        if not self.vector_store:
+            return {'removed_documents': 0, 'errors': 0, 'message': 'Vector store not available'}
+
+        return self.vector_store.cleanup_stale_references()
+
+    def shutdown(self) -> None:
+        """Shutdown the analyzer and cleanup resources."""
+        # Stop background cleanup
+        self.stop_background_cleanup()
+
+        # Stop file watcher
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
