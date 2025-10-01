@@ -7,6 +7,9 @@ and extracting type information using regex-based parsing and TypeScript compile
 import re
 import json
 import sys
+import time
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Set, Tuple
 from pathlib import Path
 
@@ -142,7 +145,7 @@ class TypeScriptASTVisitor:
 
     def _parse_typescript_ast(self, file_path: str, source: str) -> List[CodeElement]:
         """Parse TypeScript AST using fast regex-based parsing."""
-        print(f"   Info: Parsing {file_path} using fast regex-based extraction")
+        # print(f"   Info: Parsing {file_path} using fast regex-based extraction")
         # Use fast regex-based parsing for optimal performance
         return self._parse_with_regex(file_path, source)
 
@@ -1746,12 +1749,28 @@ class TypeScriptASTVisitor:
 
 
 class TypeScriptASTExtractor:
-    def __init__(self):
+    def __init__(self, parallel_processing: bool = False, max_workers: Optional[int] = None, batch_size: int = 50):
         self.visitor = TypeScriptASTVisitor()
         self.project_root: Optional[Path] = None
         self.tsconfig: Optional[Dict[str, Any]] = None
         self.project_references: List[Dict[str, Any]] = []
         self.path_mappings: Dict[str, List[str]] = {}
+
+        # Performance optimization settings
+        self.parallel_processing = parallel_processing
+        self.max_workers = max_workers or min(12, multiprocessing.cpu_count() - 1)
+        self.batch_size = batch_size
+        self.enable_performance_monitoring = True
+
+        # Performance metrics
+        self.performance_metrics = {
+            'total_files': 0,
+            'total_elements': 0,
+            'processing_time': 0.0,
+            'regex_compilation_time': 0.0,
+            'io_time': 0.0,
+            'parallel_overhead': 0.0
+        }
 
     def _find_tsconfig(self, directory: Path) -> Optional[Path]:
         """Find tsconfig.json file in directory or parent directories."""
@@ -1884,6 +1903,149 @@ class TypeScriptASTExtractor:
         # For now, return empty resolution map
         return {}
 
+    def _get_filtered_files(self, directory: Path) -> List[Path]:
+        """Get filtered list of TypeScript files for processing."""
+        ts_files = list(directory.rglob('*.ts')) + list(directory.rglob('*.tsx'))
+
+        # Apply gitignore filtering (reuse Python implementation logic)
+        ignored_patterns_with_dirs = get_gitignore_patterns(directory)
+
+        filtered_files = [
+            file_path
+            for file_path in ts_files
+            if not any(
+                match_file_against_pattern(file_path, pattern, gitignore_dir, directory)
+                for pattern, gitignore_dir in ignored_patterns_with_dirs
+            )
+        ]
+
+        return filtered_files
+
+    def _process_files_parallel(self, file_paths: List[Path]) -> List[CodeElement]:
+        """Process multiple files in parallel using multiprocessing."""
+        if not self.parallel_processing or len(file_paths) == 1:
+            # Fall back to sequential processing
+            return self._process_files_sequential(file_paths)
+
+        start_time = time.time()
+
+        # Create optimal batches for parallel processing
+        batches = self._create_optimal_batches(file_paths)
+
+        print(f"   Info: Processing {len(file_paths)} files in {len(batches)} batches using {self.max_workers} workers")
+
+        all_elements = []
+
+        try:
+            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+                # Submit all batches for processing
+                future_to_batch = {
+                    executor.submit(self._process_file_batch, batch): batch
+                    for batch in batches
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_batch):
+                    try:
+                        batch_elements = future.result()
+                        all_elements.extend(batch_elements)
+                    except Exception as e:
+                        batch = future_to_batch[future]
+                        print(f"   Warning: Failed to process batch {batch}: {e}", file=sys.stderr)
+
+        except Exception as e:
+            print(f"   Warning: Parallel processing failed, falling back to sequential: {e}", file=sys.stderr)
+            return self._process_files_sequential(file_paths)
+
+        parallel_time = time.time() - start_time
+        self.performance_metrics['parallel_overhead'] += parallel_time
+
+        print(f"   Info: Parallel processing completed in {parallel_time:.3f}s")
+        return all_elements
+
+    def _process_files_sequential(self, file_paths: List[Path]) -> List[CodeElement]:
+        """Process files sequentially (fallback method)."""
+        start_time = time.time()
+        all_elements = []
+
+        for file_path in file_paths:
+            elements = self.extract_from_file(file_path)
+            all_elements.extend(elements)
+
+        sequential_time = time.time() - start_time
+        print(f"   Info: Sequential processing completed in {sequential_time:.3f}s")
+        return all_elements
+
+    def _create_optimal_batches(self, file_paths: List[Path]) -> List[List[Path]]:
+        """Create optimal batches for parallel processing based on file sizes."""
+        if not file_paths:
+            return []
+
+        # Sort files by size (largest first) for better load balancing
+        file_sizes = []
+        for file_path in file_paths:
+            try:
+                size = file_path.stat().st_size
+                file_sizes.append((file_path, size))
+            except OSError:
+                file_sizes.append((file_path, 0))
+
+        # Sort by size (largest first)
+        file_sizes.sort(key=lambda x: x[1], reverse=True)
+
+        # Create batches trying to balance total size
+        batches = []
+        current_batch = []
+        current_batch_size = 0
+        target_batch_size = sum(size for _, size in file_sizes) // self.max_workers
+
+        for file_path, size in file_sizes:
+            current_batch.append(file_path)
+            current_batch_size += size
+
+            # Create new batch if current batch is large enough or we have too many files
+            if (current_batch_size >= target_batch_size and len(current_batch) >= 5) or len(current_batch) >= self.batch_size:
+                batches.append(current_batch)
+                current_batch = []
+                current_batch_size = 0
+
+        # Add remaining files
+        if current_batch:
+            batches.append(current_batch)
+
+        print(f"   Debug: Created {len(batches)} batches for parallel processing")
+        return batches
+
+    def _process_file_batch(self, file_paths: List[Path]) -> List[CodeElement]:
+        """Process a batch of files (called by worker processes)."""
+        elements = []
+
+        # Create a new visitor instance for this process
+        visitor = TypeScriptASTVisitor()
+
+        for file_path in file_paths:
+            try:
+                file_elements = self._extract_file_with_visitor(file_path, visitor)
+                elements.extend(file_elements)
+            except Exception as e:
+                print(f"   Warning: Failed to process {file_path} in batch: {e}", file=sys.stderr)
+
+        return elements
+
+    def _extract_file_with_visitor(self, file_path: Path, visitor: TypeScriptASTVisitor) -> List[CodeElement]:
+        """Extract elements from a single file using the provided visitor."""
+        if not file_path.exists() or file_path.suffix not in ['.ts', '.tsx']:
+            return []
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+
+            return visitor.visit_file(str(file_path.resolve()), source)
+        except Exception as e:
+            print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
+            return []
+
     def extract_from_file(self, file_path: Path) -> List[CodeElement]:
         """Extract code elements from a single TypeScript file."""
         if not file_path.exists() or file_path.suffix not in ['.ts', '.tsx']:
@@ -1899,37 +2061,89 @@ class TypeScriptASTExtractor:
             return []
 
     def extract_from_directory(self, directory: Path) -> List[CodeElement]:
-        """Extract code elements from all TypeScript files in directory."""
+        """Extract code elements from all TypeScript files in directory using parallel processing."""
         self.project_root = directory.resolve()
 
         # Setup TypeScript project integration
         self._setup_project_integration(directory)
 
-        elements = []
-        ts_files = list(directory.rglob('*.ts')) + list(directory.rglob('*.tsx'))
-
-        # Apply gitignore filtering (reuse Python implementation logic)
-        ignored_patterns_with_dirs = get_gitignore_patterns(directory)
-
-        filtered_files = [
-            file_path
-            for file_path in ts_files
-            if not any(
-                match_file_against_pattern(file_path, pattern, gitignore_dir, directory)
-                for pattern, gitignore_dir in ignored_patterns_with_dirs
-            )
-        ]
-
+        # Get filtered files
+        filtered_files = self._get_filtered_files(directory)
         print(f"Found {len(filtered_files)} TypeScript files to analyze (after filtering .gitignore).")
 
-        # Extract TypeScript-specific elements (interfaces, enums, namespaces)
+        start_time = time.time()
+
+        # Extract TypeScript-specific elements (interfaces, enums, namespaces) - sequential for now
+        # These need project-wide context so parallelizing would be complex
         ts_elements = self._extract_typescript_specific_elements(directory, filtered_files)
-        elements.extend(ts_elements)
 
-        for file_path in filtered_files:
-            elements.extend(self.extract_from_file(file_path))
+        # Process files in parallel for maximum performance
+        file_elements = self._process_files_parallel(filtered_files)
 
-        return elements
+        # Combine all elements
+        all_elements = ts_elements + file_elements
+
+        # Update performance metrics
+        total_time = time.time() - start_time
+        self.performance_metrics['total_files'] = len(filtered_files)
+        self.performance_metrics['total_elements'] = len(all_elements)
+        self.performance_metrics['processing_time'] = total_time
+
+        print(f"   Info: Analysis completed in {total_time:.3f}s - {len(all_elements)} elements found")
+
+        # Print performance summary if enabled
+        if self.enable_performance_monitoring:
+            self._print_performance_summary()
+
+        return all_elements
+
+    def _print_performance_summary(self):
+        """Print detailed performance metrics."""
+        metrics = self.performance_metrics
+        print(f"   📊 Performance Summary:")
+        print(f"      • Files processed: {metrics['total_files']}")
+        print(f"      • Elements found: {metrics['total_elements']}")
+        print(f"      • Total time: {metrics['processing_time']:.3f}s")
+        print(f"      • Parallel overhead: {metrics['parallel_overhead']:.3f}s")
+        if metrics['total_files'] > 0:
+            avg_time_per_file = metrics['processing_time'] / metrics['total_files']
+            print(f"      • Avg time per file: {avg_time_per_file:.3f}s")
+
+        # Calculate speedup if we have baseline
+        if hasattr(self, '_sequential_baseline'):
+            speedup = self._sequential_baseline / metrics['processing_time']
+            print(f"      • Parallel speedup: {speedup:.2f}x")
+
+    def get_performance_metrics(self) -> Dict[str, float]:
+        """Get current performance metrics."""
+        return self.performance_metrics.copy()
+
+    def reset_performance_metrics(self):
+        """Reset performance metrics for new analysis."""
+        self.performance_metrics = {
+            'total_files': 0,
+            'total_elements': 0,
+            'processing_time': 0.0,
+            'regex_compilation_time': 0.0,
+            'io_time': 0.0,
+            'parallel_overhead': 0.0
+        }
+
+    def enable_detailed_performance_monitoring(self):
+        """Enable detailed performance monitoring and metrics collection."""
+        self.enable_performance_monitoring = True
+
+    def disable_parallel_processing(self):
+        """Disable parallel processing for debugging or single-threaded environments."""
+        self.parallel_processing = False
+
+    def set_worker_count(self, max_workers: int):
+        """Set the maximum number of worker processes for parallel processing."""
+        self.max_workers = max_workers
+
+    def set_batch_size(self, batch_size: int):
+        """Set the batch size for parallel processing optimization."""
+        self.batch_size = batch_size
 
     def _extract_typescript_specific_elements(self, directory: Path, ts_files: List[Path]) -> List[CodeElement]:
         """Extract TypeScript-specific elements like interfaces, enums, and namespaces."""
