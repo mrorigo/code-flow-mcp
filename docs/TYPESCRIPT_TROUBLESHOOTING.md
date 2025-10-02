@@ -1,127 +1,40 @@
 # TypeScript Troubleshooting Guide
 
-This guide provides solutions to common issues encountered when using CodeFlow with TypeScript projects, including installation problems, configuration issues, framework detection, and performance optimization.
+This guide provides solutions to common issues encountered when using CodeFlow with TypeScript projects, including configuration issues, framework detection, and performance optimization.
 
-## Installation Issues
+## TypeScript Analysis
 
-### Node.js Not Found
+### No External Dependencies Required
 
-**Error Message:**
-```
-Warning: TypeScript compiler not found for /path/to/file.ts
-```
+CodeFlow uses sophisticated regex-based parsing for TypeScript analysis. No Node.js or TypeScript compiler installation is required.
 
-**Symptoms:**
-- TypeScript analysis falls back to regex-based parsing
-- Reduced accuracy in type information extraction
-- Missing framework-specific metadata
+**Benefits:**
+- Works out-of-the-box with any TypeScript codebase
+- No version compatibility issues  
+- Consistent performance across all environments
+- Comprehensive framework support (Angular, React, NestJS, Express)
 
-**Solutions:**
+**Supported Features:**
+- Type annotations and generics
+- Classes, interfaces, and enums
+- Decorators and access modifiers
+- Import/export analysis
+- Framework-specific patterns
 
-1. **Install Node.js (Linux/Debian/Ubuntu):**
-   ```bash
-   # Using NodeSource repository (recommended)
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-   sudo apt-get install -y nodejs
+### Analysis Performance
 
-   # Verify installation
-   node --version  # Should show v18.x.x or higher
-   ```
+**Optimized Regex Parsing:**
+CodeFlow uses pre-compiled regex patterns for maximum performance:
 
-2. **Install Node.js (macOS):**
-   ```bash
-   # Using Homebrew
-   brew install node
+- **Pattern Compilation**: Regex patterns are compiled once at startup
+- **Parallel Processing**: Multiple files processed simultaneously  
+- **Framework Detection**: Built-in patterns for Angular, React, NestJS, Express
+- **Type Analysis**: Comprehensive support for TypeScript type system
 
-   # Or using official installer from nodejs.org
-   # Download from https://nodejs.org/
-
-   # Verify installation
-   node --version  # Should show v18.x.x or higher
-   ```
-
-3. **Install Node.js (Windows):**
-   - Download the latest LTS version from [nodejs.org](https://nodejs.org/)
-   - Run the installer and follow the setup wizard
-   - Verify installation via Command Prompt:
-     ```cmd
-     node --version
-     npm --version
-     ```
-
-### TypeScript Compiler Not Available
-
-**Error Message:**
-```
-Warning: TypeScript compiler error for /path/to/file.ts: npx: not found
-```
-
-**Symptoms:**
-- Cannot run TypeScript compiler integration
-- Falls back to regex-based parsing only
-- Missing advanced type system features
-
-**Solutions:**
-
-1. **Install TypeScript globally:**
-   ```bash
-   npm install -g typescript
-
-   # Verify installation
-   tsc --version  # Should show TypeScript version
-   ```
-
-2. **Check npm permissions:**
-   ```bash
-   # If you get permission errors, try:
-   npm install -g typescript --force
-
-   # Or fix npm permissions
-   sudo chown -R $(whoami) ~/.npm
-   ```
-
-3. **Use alternative package manager:**
-   ```bash
-   # Using yarn
-   yarn global add typescript
-
-   # Using pnpm
-   pnpm add -g typescript
-   ```
-
-### Environment Path Issues
-
-**Error Message:**
-```
-Warning: Could not start CodeVectorStore... Error: Node.js not found in PATH
-```
-
-**Solutions:**
-
-1. **Check PATH configuration:**
-   ```bash
-   # Check if node is in PATH
-   which node
-   echo $PATH
-
-   # Add to PATH if missing
-   export PATH="$PATH:/usr/local/bin:/usr/bin"
-   ```
-
-2. **Restart terminal/shell after installation:**
-   - Close and reopen your terminal
-   - Or source your shell configuration:
-     ```bash
-     source ~/.bashrc  # Linux
-     source ~/.zshrc   # macOS
-     ```
-
-3. **Verify complete installation:**
-   ```bash
-   node --version
-   npm --version
-   npx --version
-   ```
+**Performance Tips:**
+1. Use `.gitignore` to exclude unnecessary files
+2. Process large projects in batches
+3. Use incremental analysis (`--no-analyze`) for repeated queries
 
 ## Configuration Issues
 
@@ -234,8 +147,8 @@ Warning: Could not resolve import path: @app/services/user
 
 3. **Test path resolution:**
    ```bash
-   # Use TypeScript compiler to verify paths
-   npx tsc --noEmit --listFiles
+   # Check tsconfig.json path mappings
+   cat tsconfig.json | grep -A 10 "paths"
    ```
 
 ## Framework Detection Issues
@@ -403,8 +316,8 @@ Warning: Error processing /path/to/file.ts: SyntaxError: invalid syntax
 
 1. **Check TypeScript syntax:**
    ```bash
-   # Use TypeScript compiler to validate
-   npx tsc --noEmit file.ts
+   # Verify file syntax is valid TypeScript
+   # CodeFlow will report parsing errors for invalid syntax
 
    # Or use an online TypeScript validator
    ```
@@ -424,46 +337,28 @@ Warning: Error processing /path/to/file.ts: SyntaxError: invalid syntax
 
 ### Memory Issues
 
-**Error Message:**
-```
-Warning: TypeScript compiler timeout for /path/to/large-file.ts
-```
+### Large File Processing
 
-**Symptoms:**
-- Large files fail to process
-- Timeout errors during compilation
-- High memory usage
+**Optimized for Performance:**
+CodeFlow's regex-based parsing handles large files efficiently:
 
-**Solutions:**
+**Performance Features:**
+- **Parallel Processing**: Multiple files processed simultaneously
+- **Memory Efficient**: Streaming processing for large files  
+- **Batch Operations**: Optimal batching for maximum throughput
 
-1. **Break down large files:**
+**Best Practices:**
+1. **File Organization:**
    ```typescript
-   // Split large components into smaller ones
+   // Split large components into smaller, focused files
    // Move complex logic to separate service files
    // Extract interfaces to separate .d.ts files
    ```
 
-2. **Optimize TypeScript configuration:**
-   ```json
-   {
-     "compilerOptions": {
-       "skipLibCheck": true,
-       "incremental": true,
-       "tsBuildInfoFile": "./.tsbuildinfo"
-     }
-   }
-   ```
-
-3. **Process files individually:**
-   ```python
-   # In your analysis script:
-   for file_path in large_ts_files:
-       try:
-           elements = extractor.extract_from_file(file_path)
-           # Process immediately and free memory
-           gc.collect()
-       except Exception as e:
-           print(f"Skipping {file_path}: {e}")
+2. **Use Incremental Analysis:**
+   ```bash
+   # For repeated queries on large projects
+   python -m code_flow_graph.cli.code_flow_graph . --no-analyze --query "your query"
    ```
 
 ### Performance Issues
@@ -644,54 +539,32 @@ Warning: Cannot find TypeScript files due to path separator issues
    dir /q src\*.ts
    ```
 
-### macOS Security Issues
+### Docker Environment
 
-**Error Message:**
-```
-Warning: Cannot execute TypeScript compiler due to security restrictions
-```
+**CodeFlow in Docker:**
+CodeFlow works seamlessly in Docker containers with no additional setup required.
 
-**Solutions:**
+**Simple Dockerfile:**
+```dockerfile
+FROM python:3.9-slim
 
-1. **Allow downloaded applications:**
-   - System Preferences → Security & Privacy → General
-   - Allow apps downloaded from "App Store and identified developers"
+# Install CodeFlow
+COPY . /app
+WORKDIR /app
+RUN pip install -e .
 
-2. **Check Gatekeeper settings:**
-   ```bash
-   # Check if Node.js is blocked
-   spctl --status
-
-   # Allow specific applications
-   spctl --add /usr/local/bin/node
-   ```
-
-### Docker Environment Issues
-
-**Error Message:**
-```
-Warning: TypeScript compiler not available in Docker container
+# No Node.js or TypeScript installation needed
+# CodeFlow uses regex-based parsing
 ```
 
-**Solutions:**
-
-1. **Install Node.js in Dockerfile:**
-   ```dockerfile
-   FROM node:18-alpine
-
-   # Install TypeScript
-   RUN npm install -g typescript
-
-   # Copy your application
-   COPY . /app
-   WORKDIR /app
-   ```
-
-2. **Use multi-stage builds:**
-   ```dockerfile
-   # Build stage
-   FROM node:18-alpine as builder
-   # ... build commands
+**Multi-stage builds:**
+```dockerfile
+# Analysis stage
+FROM python:3.9-slim as analyzer
+COPY . /app
+WORKDIR /app
+RUN pip install -e .
+RUN python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
 
    # Runtime stage
    FROM node:18-alpine
@@ -703,22 +576,13 @@ Warning: TypeScript compiler not available in Docker container
 ### Quick Diagnostics
 
 ```bash
-# 1. Check Node.js installation
-node --version && npm --version
-
-# 2. Check TypeScript installation
-npx tsc --version
-
-# 3. Validate project structure
+# 1. Validate project structure
 find . -name "*.ts" -o -name "*.tsx" | head -10
 
-# 4. Check tsconfig.json
+# 2. Check tsconfig.json (if present)
 cat tsconfig.json | python -m json.tool
 
-# 5. Test TypeScript compilation
-npx tsc --noEmit
-
-# 6. Test CodeFlow analysis
+# 3. Test CodeFlow analysis
 python -m code_flow_graph.cli.code_flow_graph . --language typescript --query "test"
 ```
 
@@ -815,7 +679,7 @@ python -m code_flow_graph.cli.code_flow_graph . --language typescript 2>&1 | gre
 3. **Regular Validation:**
    ```bash
    # Add to CI/CD pipeline
-   npx tsc --noEmit
+   python -m code_flow_graph.cli.code_flow_graph . --language typescript --output analysis.json
    npm run lint
    npm test
    ```

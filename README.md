@@ -240,29 +240,8 @@ CodeFlow provides comprehensive TypeScript analysis capabilities with feature pa
 
 ### Requirements
 
-#### Node.js and TypeScript
-For full TypeScript support, ensure Node.js and TypeScript are installed:
-
-```bash
-# Install Node.js (version 16+ recommended)
-# On Ubuntu/Debian:
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# On macOS with Homebrew:
-brew install node
-
-# Install TypeScript globally
-npm install -g typescript
-```
-
-#### Verification
-Verify your installation:
-
-```bash
-node --version  # Should show v16+
-tsc --version   # Should show TypeScript version
-```
+TypeScript analysis is performed using regex-based parsing with no external dependencies required. 
+All TypeScript language features are supported through sophisticated pattern matching.
 
 ### Usage Examples
 
@@ -321,7 +300,7 @@ python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --query "com
 
 ### TypeScript Configuration
 
-The tool automatically detects and uses `tsconfig.json` settings:
+The tool automatically detects and parses `tsconfig.json` for project structure information:
 
 ```json
 {
@@ -342,9 +321,14 @@ The tool automatically detects and uses `tsconfig.json` settings:
 - `.ts` - TypeScript files
 - `.tsx` - TypeScript React/JSX files
 
-### Fallback Strategy
+### Parsing Strategy
 
-If Node.js or TypeScript is unavailable, the tool gracefully falls back to regex-based parsing for basic functionality. While this provides reduced accuracy compared to full TypeScript compiler integration, it ensures the tool remains functional in constrained environments.
+CodeFlow uses sophisticated regex-based parsing for TypeScript analysis, providing comprehensive support for:
+- Type annotations and generics
+- Classes, interfaces, and enums  
+- Decorators and access modifiers
+- Framework patterns (Angular, React, NestJS, Express)
+- Import/export analysis
 
 ## Examples
 

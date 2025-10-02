@@ -6,9 +6,8 @@ This document provides comprehensive examples and step-by-step walkthroughs for 
 
 Before following these examples, ensure you have:
 
-1. **Node.js 18+ installed** (see [Troubleshooting Guide](TYPESCRIPT_TROUBLESHOOTING.md))
-2. **TypeScript installed**: `npm install -g typescript`
-3. **CodeFlow installed** and working
+1. **CodeFlow installed** and working
+2. **TypeScript project files** (no external TypeScript installation required)
 
 ## Example Projects Overview
 
@@ -57,10 +56,7 @@ cd basic-typescript-project
 # Initialize npm project
 npm init -y
 
-# Install dependencies
-npm install --save-dev typescript @types/node
-
-# Create tsconfig.json
+# Create tsconfig.json (optional - CodeFlow will work without it)
 cat > tsconfig.json << 'EOF'
 {
   "compilerOptions": {
@@ -473,8 +469,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install TypeScript
-        run: npm install -g typescript
+      # No TypeScript installation needed - CodeFlow uses regex parsing
 
       - name: Install CodeFlow
         run: pip install codeflow
@@ -523,8 +518,8 @@ npx husky add .husky/pre-commit "python -m code_flow_graph.cli.code_flow_graph .
 ### Project Organization
 
 1. **Consistent Structure**: Use standard directory layouts for each framework
-2. **TypeScript Configuration**: Maintain consistent `tsconfig.json` across projects
-3. **Import Organization**: Use path mappings for clean imports (`@app/*`, `@shared/*`)
+2. **Project Configuration**: Optional `tsconfig.json` for project structure information
+3. **Import Organization**: Use clear import paths for better analysis
 4. **Documentation**: Add JSDoc comments for better analysis results
 
 ### Analysis Optimization
@@ -583,9 +578,9 @@ npx husky add .husky/pre-commit "python -m code_flow_graph.cli.code_flow_graph .
 **Problem**: Type annotations not extracted
 
 **Solutions:**
-1. Check TypeScript compiler availability
-2. Verify tsconfig.json configuration
-3. Ensure proper type annotations in source code
+1. Ensure TypeScript files have proper syntax
+2. Check tsconfig.json configuration (if present)
+3. Verify type annotations are properly formatted
 
 ### Performance Issues
 
@@ -593,17 +588,17 @@ npx husky add .husky/pre-commit "python -m code_flow_graph.cli.code_flow_graph .
 
 **Solutions:**
 1. Use incremental analysis (`--no-analyze`)
-2. Exclude unnecessary files in tsconfig.json
+2. Exclude unnecessary files in tsconfig.json (if present)
 3. Process large projects in smaller batches
 
 ## Summary
 
 This comprehensive guide demonstrates how to use CodeFlow effectively with TypeScript projects across different frameworks and complexity levels. The key takeaways are:
 
-1. **Setup**: Ensure Node.js and TypeScript are properly installed
-2. **Configuration**: Use appropriate tsconfig.json settings for your project type
+1. **Setup**: CodeFlow works out-of-the-box with TypeScript files - no external dependencies required
+2. **Configuration**: Optional tsconfig.json provides project structure information
 3. **Analysis**: Start with broad analysis, then use specific queries for detailed insights
-4. **Framework Support**: Leverage framework-specific detection for Angular, NestJS, React, and Express
+4. **Framework Support**: Leverage built-in framework-specific detection for Angular, NestJS, React, and Express
 5. **Integration**: Incorporate analysis into your development workflow for continuous insights
 
 For more detailed troubleshooting, see the [TypeScript Troubleshooting Guide](TYPESCRIPT_TROUBLESHOOTING.md).

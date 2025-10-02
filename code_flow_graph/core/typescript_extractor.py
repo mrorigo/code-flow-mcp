@@ -1,7 +1,7 @@
 """
 Extracts and represents AST nodes for TypeScript codebases with enhanced metadata.
 Includes logic for parsing TypeScript syntax, calculating complexity, detecting frameworks,
-and extracting type information using regex-based parsing and TypeScript compiler integration.
+and extracting type information using sophisticated regex-based parsing.
 """
 
 import re
@@ -150,41 +150,13 @@ class TypeScriptASTVisitor:
 
 
     def _parse_typescript_ast(self, file_path: str, source: str) -> List[CodeElement]:
-        """Parse TypeScript AST using fast regex-based parsing."""
-        # print(f"   Info: Parsing {file_path} using fast regex-based extraction")
-        # Use fast regex-based parsing for optimal performance
+        """Parse TypeScript AST using regex-based parsing."""
         return self._parse_with_regex(file_path, source)
 
-    def _parse_with_compiler(self, file_path: str, source: str) -> List[CodeElement]:
-        """Parse using TypeScript compiler (placeholder for full implementation)."""
-        elements = []
-        lines = source.splitlines()
 
-        # Extract functions
-        function_matches = self._find_functions_regex(source)
-        for match in function_matches:
-            func_element = self._create_function_element(match, lines, file_path)
-            if func_element:
-                elements.append(func_element)
-
-        # Extract classes
-        class_matches = self._find_classes_regex(source)
-        for match in class_matches:
-            class_element = self._create_class_element(match, lines, file_path)
-            if class_element:
-                elements.append(class_element)
-
-        # Extract variable declarations that might be framework instances
-        variable_matches = self._find_framework_variables(source)
-        for match in variable_matches:
-            var_element = self._create_variable_element(match, lines, file_path)
-            if var_element:
-                elements.append(var_element)
-
-        return elements
 
     def _parse_with_regex(self, file_path: str, source: str) -> List[CodeElement]:
-        """Parse using regex patterns when TypeScript compiler is unavailable."""
+        """Parse using regex patterns for TypeScript analysis."""
         elements = []
         lines = source.splitlines()
 
@@ -2027,7 +1999,7 @@ class TypeScriptASTExtractor:
         print(f"   Info: Loaded TypeScript configuration from {tsconfig_path}")
 
     def _get_compiler_options(self) -> Dict[str, Any]:
-        """Get TypeScript compiler options with defaults."""
+        """Get TypeScript project options from tsconfig.json with defaults."""
         if not self.tsconfig or 'compilerOptions' not in self.tsconfig:
             return {}
 

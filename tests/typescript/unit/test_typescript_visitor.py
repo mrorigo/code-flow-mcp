@@ -18,49 +18,12 @@ class TestTypeScriptASTVisitor:
         assert typescript_visitor.current_class is None
         assert typescript_visitor.current_file == ""
         assert typescript_visitor.source_lines == []
-        # Note: typescript_available attribute removed for performance optimization
+        # Note: Uses regex-based parsing only for optimal performance
 
-    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
-    def test_check_typescript_available_with_node(self, typescript_visitor):
-        """Test TypeScript availability detection when Node.js is available."""
-        with patch('subprocess.run') as mock_run:
-            # Mock successful node --version
-            mock_run.side_effect = [
-                MagicMock(returncode=0, stdout='v18.0.0'),  # node --version
-                MagicMock(returncode=0, stdout='4.9.5')     # npx typescript --version
-            ]
 
-            result = typescript_visitor._check_typescript_available()
-            assert result is True
-            assert typescript_visitor.typescript_available is True
-            assert mock_run.call_count == 2
 
-    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
-    def test_check_typescript_available_without_node(self, typescript_visitor):
-        """Test TypeScript availability detection when Node.js is not available."""
-        with patch('subprocess.run') as mock_run:
-            mock_run.side_effect = FileNotFoundError("node not found")
-
-            result = typescript_visitor._check_typescript_available()
-            assert result is False
-            assert typescript_visitor.typescript_available is False
-
-    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
-    def test_check_typescript_available_without_typescript(self, typescript_visitor):
-        """Test TypeScript availability detection when TypeScript is not available."""
-        with patch('subprocess.run') as mock_run:
-            # Mock successful node but failed typescript
-            mock_run.side_effect = [
-                MagicMock(returncode=0, stdout='v18.0.0'),  # node --version
-                MagicMock(returncode=1, stdout='')           # npx typescript --version fails
-            ]
-
-            result = typescript_visitor._check_typescript_available()
-            assert result is False
-            assert typescript_visitor.typescript_available is False
-
-    def test_visitor_optimization_features(self, typescript_visitor):
-        """Test that performance optimization features are available."""
+    def test_visitor_regex_parsing_features(self, typescript_visitor):
+        """Test that regex-based parsing features are available."""
         assert typescript_visitor.elements == []
         assert typescript_visitor.current_class is None
         assert typescript_visitor.current_file == ""
@@ -69,12 +32,7 @@ class TestTypeScriptASTVisitor:
         assert hasattr(typescript_visitor, '_update_tsx_metrics')
         assert hasattr(typescript_visitor, '_update_ts_metrics')
 
-    @pytest.mark.skip(reason="TypeScript compiler integration removed for performance optimization")
-    def test_typescript_availability_check(self, typescript_visitor):
-        """Test TypeScript availability detection methods exist."""
-        assert hasattr(typescript_visitor, '_check_typescript_available')
-        assert hasattr(typescript_visitor, '_run_typescript_compiler')
-        assert hasattr(typescript_visitor, '_get_typescript_version')
+
 
     def test_visit_file_basic_function(self, typescript_visitor, temp_dir):
         """Test visiting a file with a basic function."""

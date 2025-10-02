@@ -19,11 +19,9 @@ python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --lang
 Before running TypeScript analysis, verify your environment:
 
 ```bash
-# Check Node.js installation
-node --version
+# No external dependencies needed - CodeFlow uses regex-based parsing
 
-# Check TypeScript installation
-tsc --version
+# No TypeScript installation required - CodeFlow uses regex parsing
 
 # Verify project structure
 ls /path/to/typescript/project/

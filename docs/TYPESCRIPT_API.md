@@ -6,7 +6,7 @@ This document provides comprehensive API documentation for CodeFlow's TypeScript
 
 ### TypeScriptASTVisitor
 
-The main AST visitor class that extracts code elements from TypeScript source code using either the TypeScript compiler API or regex-based fallback parsing.
+The main AST visitor class that extracts code elements from TypeScript source code using sophisticated regex-based parsing.
 
 #### Constructor
 
@@ -24,47 +24,42 @@ visitor = TypeScriptASTVisitor()
 | `source_lines` | `List[str]` | Source code lines being parsed |
 | `file_level_imports` | `Dict[str, str]` | File-level import mappings |
 | `file_level_import_from_targets` | `Set[str]` | Direct import targets |
-| `typescript_available` | `bool` | Whether TypeScript compiler is available |
+| `regex_patterns` | `Dict[str, Any]` | Pre-compiled regex patterns for parsing |
 
 #### Methods
 
-##### TypeScript Compiler Integration
+##### Regex Pattern Compilation
 
 ```python
-def _check_typescript_available(self) -> bool:
-    """Check if Node.js and TypeScript compiler are available."""
-    return self.typescript_available
+def _compile_regex_patterns(self) -> Dict[str, Any]:
+    """Pre-compile all regex patterns for maximum performance."""
+    patterns = {}
+    # Compile function patterns, class patterns, etc.
+    print(f"Pre-compiled {len(patterns)} regex patterns")
+    return patterns
 
-def _run_typescript_compiler(self, file_path: str, source: str) -> Optional[Dict[str, Any]]:
-    """Run TypeScript compiler to get AST and type information."""
-    # Returns compiler result dictionary or None if compilation fails
-    result = self._run_typescript_compiler(file_path, source)
-    if result:
-        print(f"TypeScript compilation successful for {file_path}")
-        print(f"Compiler version: {result.get('compiler_version')}")
-    return result
-
-def _get_typescript_version(self) -> Optional[str]:
-    """Get the installed TypeScript compiler version."""
-    return "5.3.2"  # Example return value
+def _find_functions_regex(self, source: str) -> List[Dict[str, Any]]:
+    """Find function definitions using pre-compiled regex patterns."""
+    functions = []
+    # Use compiled patterns for optimal performance
+    print(f"Found {len(functions)} functions using regex patterns")
+    return functions
 ```
 
 ##### Parsing Methods
 
 ```python
 def _parse_typescript_ast(self, file_path: str, source: str) -> List[CodeElement]:
-    """Parse TypeScript AST using compiler API or regex fallback."""
-    elements = self._parse_typescript_ast(file_path, source)
+    """Parse TypeScript AST using regex-based parsing."""
+    elements = self._parse_with_regex(file_path, source)
     print(f"Extracted {len(elements)} code elements")
     return elements
 
-def _parse_with_compiler(self, file_path: str, source: str) -> List[CodeElement]:
-    """Parse using TypeScript compiler (placeholder for full implementation)."""
-    return []
-
 def _parse_with_regex(self, file_path: str, source: str) -> List[CodeElement]:
-    """Parse using regex patterns when TypeScript compiler unavailable."""
-    return []
+    """Parse using sophisticated regex patterns for TypeScript analysis."""
+    elements = []
+    # Extract functions, classes, interfaces, etc.
+    return elements
 ```
 
 ##### Function Detection
@@ -602,15 +597,15 @@ print(f"Found {len(type_aliases)} type aliases")
 
 ## Error Handling
 
-### TypeScript Compiler Unavailable
+### TypeScript Analysis
 
 ```python
 try:
     elements = extractor.extract_from_directory(project_path)
-    print("Analysis completed successfully")
+    print("Analysis completed successfully using regex-based parsing")
 except Exception as e:
     print(f"Analysis failed: {e}")
-    print("Note: Ensure Node.js and TypeScript are installed for full functionality")
+    print("Note: CodeFlow uses regex-based parsing - no external dependencies required")
 ```
 
 ### Malformed TypeScript
