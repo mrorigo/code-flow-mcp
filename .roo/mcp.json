@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "code_flow": {
+      "command": "/codeflowgraph/run.sh",
+      "args": ["--config", "/codeflowgraph/codeflow.config.yaml"],
+      "env": {},
+      "alwaysAllow": [],
+      "disabled": false
+    }
+  }
+}
+
