@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import ast
 import sys
+import logging
 import itertools
 
 from code_flow_graph.core.models import CodeElement, FunctionElement
@@ -133,7 +134,7 @@ class CallGraphBuilder:
             )
         self.modules[module_name].functions.append(node)
 
-        # print(f"   Added function: {fqn} {'(method)' if func_element.is_method else ''}{' (async)' if func_element.is_async else ''}")
+        # logging.info(f"   Added function: {fqn} {'(method)' if func_element.is_method else ''}{' (async)' if func_element.is_async else ''}")
         return node
 
     def build_from_elements(self, elements: List[CodeElement]) -> None:
@@ -141,28 +142,28 @@ class CallGraphBuilder:
         # Note: project_root should be explicitly set by the caller (CLI or MCP analyzer)
         # before calling this method. If not set, _get_module_name will use appropriate fallbacks.
 
-        print(f"Building call graph from {len(elements)} code elements...")
+        logging.info(f"Building call graph from {len(elements)} code elements...")
 
         # for e in elements:
-        #     print(f" - Element: {e.name} ({type(e).__name__}) in {e.file_path}")
+        #     logging.info(f" - Element: {e.name} ({type(e).__name__}) in {e.file_path}")
     
         function_elements = [e for e in elements if hasattr(e, 'kind') and e.kind == 'function']
-        print(f"Step 1: Creating function nodes... {len(function_elements)} functions found")
+        logging.info(f"Step 1: Creating function nodes... {len(function_elements)} functions found")
         for element in function_elements:
             self.add_function(element)
 
-        print(f"   Created {len(self.functions)} function nodes")
-        print(f"   Methods: {sum(1 for f in self.functions.values() if f.is_method)}")
-        print(f"   Async functions: {sum(1 for f in self.functions.values() if f.is_async)}")
-        # print(f"   Available functions: {list(self.functions_by_name.keys())[:10]}...")
+        logging.info(f"   Created {len(self.functions)} function nodes")
+        logging.info(f"   Methods: {sum(1 for f in self.functions.values() if f.is_method)}")
+        logging.info(f"   Async functions: {sum(1 for f in self.functions.values() if f.is_async)}")
+        # logging.info(f"   Available functions: {list(self.functions_by_name.keys())[:10]}...")
 
-        print("Step 2: Extracting call edges...")
+        logging.info("Step 2: Extracting call edges...")
         for element in function_elements:
             self._extract_calls_from_function(element)
 
-        print(f"   Found {len(self.edges)} call edges")
+        logging.info(f"   Found {len(self.edges)} call edges")
 
-        print("Step 3: Identifying entry points...")
+        logging.info("Step 3: Identifying entry points...")
         self._identify_entry_points()
 
     def _extract_calls_from_function(self, func_element: FunctionElement) -> None:
@@ -181,7 +182,7 @@ class CallGraphBuilder:
                 # Find the specific function node using its name and exact start line for precision
                 func_node = self._find_function_node(tree, func_element.name, func_element.line_start)
                 if not func_node:
-                    # print(f"   Warning: Could not find AST node for function {func_element.name} at line {func_element.line_start} in {func_element.file_path}")
+                    # logging.info(f"   Warning: Could not find AST node for function {func_element.name} at line {func_element.line_start} in {func_element.file_path}")
                     return
 
                 calls = self._extract_calls_from_ast_node(func_node, func_element)
@@ -193,7 +194,7 @@ class CallGraphBuilder:
                 self._create_edge_if_valid(caller_fqn, call, func_element)
 
         except Exception as e:
-            print(f"   Warning: Error extracting calls from {func_element.name} in {func_element.file_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error extracting calls from {func_element.name} in {func_element.file_path}: {e}", file=sys.stderr)
 
     def _extract_calls_from_typescript_function(self, func_element: FunctionElement, full_source: str) -> List[PotentialCall]:
         """Extract function calls from TypeScript function using comprehensive regex patterns."""
@@ -210,9 +211,9 @@ class CallGraphBuilder:
 
             # Debug: print function body for problematic cases
             if func_element.name in ['getUser', 'processUser', 'main']:
-                print(f"     Function {func_element.name} body (lines {func_start+1}-{func_end}):")
+                logging.info(f"     Function {func_element.name} body (lines {func_start+1}-{func_end}):")
                 for i, line in enumerate(func_body_lines):
-                    print(f"       {func_start + i + 1}: {line}")
+                    logging.info(f"       {func_start + i + 1}: {line}")
 
             # Enhanced patterns to match various TypeScript function call patterns
             import re
@@ -254,7 +255,7 @@ class CallGraphBuilder:
                         calls.append(call)
 
         except Exception as e:
-            print(f"   Warning: Error in TypeScript call extraction for {func_element.name}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error in TypeScript call extraction for {func_element.name}: {e}", file=sys.stderr)
 
         return calls
 
@@ -434,7 +435,7 @@ class CallGraphBuilder:
         extractor = CallExtractor(func_element, func_element.full_source.splitlines())
         extractor.visit(node)
 
-        # print(f"     Found {len(extractor.calls)} potential calls in {func_element.name}")
+        # logging.info(f"     Found {len(extractor.calls)} potential calls in {func_element.name}")
         return extractor.calls
 
     def _create_edge_if_valid(self, caller_fqn: str, call: PotentialCall,
@@ -524,9 +525,9 @@ class CallGraphBuilder:
             self.edges.append(edge)
             self.functions[caller_fqn].outgoing_edges.append(edge)
             self.functions[target_fqn].incoming_edges.append(edge)
-            # print(f"     ✓ Created edge: {caller_fqn} -> {target_fqn} ({call_type}, {confidence:.2f})")
+            # logging.info(f"     ✓ Created edge: {caller_fqn} -> {target_fqn} ({call_type}, {confidence:.2f})")
         # else:
-            # print(f"     Info: Could not resolve call target for '{call.callee}' from '{caller_fqn}'")
+            # logging.info(f"     Info: Could not resolve call target for '{call.callee}' from '{caller_fqn}'")
 
 
     def _get_module_name(self, file_path: Path) -> str:
@@ -565,7 +566,7 @@ class CallGraphBuilder:
                 return module_path
             except ValueError:
                 # Last resort: use full path, but this often results in very long FQNs
-                print(f"   Warning: Could not determine relative module name for {file_path}. Using absolute path segment.", file=sys.stderr)
+                logging.info(f"   Warning: Could not determine relative module name for {file_path}. Using absolute path segment.", file=sys.stderr)
                 return str(file_path.stem) # Use just the file name as module name, without path
 
     def _identify_entry_points(self) -> None:
@@ -579,7 +580,7 @@ class CallGraphBuilder:
         has_ts_files = any(f.file_path.endswith(('.ts', '.tsx')) for f in self.functions.values())
         patterns = entry_point_patterns['typescript'] if has_ts_files else entry_point_patterns['python']
 
-        print("   Identifying entry points using multiple strategies...")
+        logging.info("   Identifying entry points using multiple strategies...")
 
         # Determine all callable FQNs in the graph for quicker lookup
         all_fqns = set(self.functions.keys())
@@ -595,7 +596,7 @@ class CallGraphBuilder:
             if any(pattern in func.name.lower() for pattern in patterns):
                 func.is_entry_point = True
                 potential_entry_points.append(func)
-                print(f"     ✓ Entry point (name): {func.name} ({fqn})")
+                logging.info(f"     ✓ Entry point (name): {func.name} ({fqn})")
 
             # Strategy 2: Functions with no incoming edges (likely entry points), but not methods
             # and not common dunder methods that might not have explicit calls but aren't entry points
@@ -606,7 +607,7 @@ class CallGraphBuilder:
                 not func.is_entry_point):
                 func.is_entry_point = True
                 potential_entry_points.append(func)
-                print(f"     ✓ Entry point (no incoming): {func.name} ({fqn})")
+                logging.info(f"     ✓ Entry point (no incoming): {func.name} ({fqn})")
 
             # Strategy 3: Functions in '__main__' modules or files containing 'main' or 'app'
             if ('__main__' in fqn or
@@ -616,7 +617,7 @@ class CallGraphBuilder:
                 (has_ts_files and ('main.ts' in func.file_path or 'index.ts' in func.file_path))) and not func.is_entry_point:
                 func.is_entry_point = True
                 potential_entry_points.append(func)
-                print(f"     ✓ Entry point (location): {func.name} ({fqn})")
+                logging.info(f"     ✓ Entry point (location): {func.name} ({fqn})")
 
             # Strategy 4: Functions with common 'cli' patterns or called by Typer/Argparse
             if 'cli' in func.name.lower() or 'command' in func.name.lower():
@@ -639,24 +640,24 @@ class CallGraphBuilder:
 
         # Fallback Strategy: If no entry points found, mark the first few functions as entry points
         if not potential_entry_points and self.functions:
-            print("   No entry points found with standard strategies, applying fallback...")
+            logging.info("   No entry points found with standard strategies, applying fallback...")
             # Mark all functions with no incoming edges as entry points (up to 5)
             no_incoming_functions = [f for f in self.functions.values() if len(f.incoming_edges) == 0]
             for func in no_incoming_functions[:5]:  # Limit to first 5
                 if not func.is_entry_point:
                     func.is_entry_point = True
                     potential_entry_points.append(func)
-                    print(f"     ✓ Entry point (fallback): {func.name} ({func.fully_qualified_name})")
+                    logging.info(f"     ✓ Entry point (fallback): {func.name} ({func.fully_qualified_name})")
 
         # Final fallback: if still no entry points, mark the first function as entry point
         if not potential_entry_points and self.functions:
             first_func = next(iter(self.functions.values()))
             if not first_func.is_entry_point:
                 first_func.is_entry_point = True
-                print(f"     ✓ Entry point (final fallback): {first_func.name} ({first_func.fully_qualified_name})")
+                logging.info(f"     ✓ Entry point (final fallback): {first_func.name} ({first_func.fully_qualified_name})")
 
         entry_points = self.get_entry_points()
-        print(f"   Total entry points identified: {len(entry_points)}")
+        logging.info(f"   Total entry points identified: {len(entry_points)}")
 
     def get_entry_points(self) -> List[FunctionNode]:
         """Get all identified entry points."""
@@ -665,7 +666,7 @@ class CallGraphBuilder:
     def export_graph(self, format: str = 'json') -> Optional[Dict | str]:
         """Export the call graph in various formats."""
         if not self.functions:
-            print("Warning: No functions in graph to export", file=sys.stderr)
+            logging.info("Warning: No functions in graph to export", file=sys.stderr)
             return None
 
         if format == 'json':
@@ -861,26 +862,26 @@ class CallGraphBuilder:
 
     def print_summary(self) -> None:
         """Print a human-readable summary of the call graph."""
-        print("\n📊 Call Graph Summary:")
-        print(f"   Functions: {len(self.functions)}")
-        print(f"   Methods: {sum(1 for f in self.functions.values() if f.is_method)}")
-        print(f"   Async functions: {sum(1 for f in self.functions.values() if f.is_async)}")
-        print(f"   Modules: {len(self.modules)}")
-        print(f"   Edges: {len(self.edges)}")
-        print(f"   Entry points: {len(self.get_entry_points())}")
+        logging.info("\n📊 Call Graph Summary:")
+        logging.info(f"   Functions: {len(self.functions)}")
+        logging.info(f"   Methods: {sum(1 for f in self.functions.values() if f.is_method)}")
+        logging.info(f"   Async functions: {sum(1 for f in self.functions.values() if f.is_async)}")
+        logging.info(f"   Modules: {len(self.modules)}")
+        logging.info(f"   Edges: {len(self.edges)}")
+        logging.info(f"   Entry points: {len(self.get_entry_points())}")
 
         if self.edges and self.functions:
             avg_degree = len(self.edges) / len(self.functions)
-            print(f"   Average degree: {avg_degree:.1f}")
+            logging.info(f"   Average degree: {avg_degree:.1f}")
 
-        print("\n🏁 Top Entry Points:")
+        logging.info("\n🏁 Top Entry Points:")
         entry_points = self.get_entry_points()
         for ep in entry_points[:5]:  # Show top 5
-            print(f"   • {ep.name} ({ep.fully_qualified_name})")
-            print(f"     Location: {ep.file_path}:{ep.line_start}")
-            print(f"     Type: {'Method' if ep.is_method else 'Function'}{' (async)' if ep.is_async else ''}")
-            print(f"     Class: {ep.class_name if ep.class_name else 'N/A'}")
-            print(f"     Connections: {len(ep.incoming_edges)} in, {len(ep.outgoing_edges)} out")
+            logging.info(f"   • {ep.name} ({ep.fully_qualified_name})")
+            logging.info(f"     Location: {ep.file_path}:{ep.line_start}")
+            logging.info(f"     Type: {'Method' if ep.is_method else 'Function'}{' (async)' if ep.is_async else ''}")
+            logging.info(f"     Class: {ep.class_name if ep.class_name else 'N/A'}")
+            logging.info(f"     Connections: {len(ep.incoming_edges)} in, {len(ep.outgoing_edges)} out")
             if ep.docstring:
-                print(f"     Docstring: {ep.docstring[:80]}{'...' if len(ep.docstring) > 80 else ''}")
-            print()
+                logging.info(f"     Docstring: {ep.docstring[:80]}{'...' if len(ep.docstring) > 80 else ''}")
+            logging.info()

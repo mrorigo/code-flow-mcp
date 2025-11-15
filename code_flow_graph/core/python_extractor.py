@@ -7,6 +7,7 @@ functions, classes, and their metadata.
 """
 
 import ast
+import logging
 import re
 import sys
 import time
@@ -228,7 +229,7 @@ class PythonASTVisitor(ast.NodeVisitor):
 
         compilation_time = time.time() - start_time
         pattern_count = sum(len(p) if isinstance(p, list) else 1 for p in patterns.values())
-        print(f"   Info: Pre-compiled {pattern_count} regex patterns for Python analysis in {compilation_time:.4f}s")
+        logging.info(f"   Info: Pre-compiled {pattern_count} regex patterns for Python analysis in {compilation_time:.4f}s")
 
         return patterns
 
@@ -459,7 +460,7 @@ class PythonASTExtractor:
 
             # Re-raise to show the error if it's critical, or return empty if tolerable
             # For now, print a warning with the specific file if errors occur
-            print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
             return []
 
     def extract_from_directory(self, directory: Path) -> List[CodeElement]:
@@ -488,7 +489,7 @@ class PythonASTExtractor:
             )
         ]
 
-        print(f"Found {len(filtered_files)} Python files to analyze (after filtering .gitignore).")
+        logging.info(f"Found {len(filtered_files)} Python files to analyze (after filtering .gitignore).")
 
         start_time = time.time()
 
@@ -507,27 +508,27 @@ class PythonASTExtractor:
     def _print_performance_summary(self, total_time: float):
         """Print detailed performance metrics for Python analysis."""
         metrics = self.performance_metrics
-        print(f"   📊 Python Analysis Performance Summary:")
-        print(f"      • Files processed: {metrics['total_files']}")
-        print(f"      • Elements found: {metrics['total_elements']}")
-        print(f"      • Total time: {total_time:.3f}s")
-        print(f"      • AST parsing time: {metrics['ast_parsing_time']:.3f}s")
-        print(f"      • I/O time: {metrics['io_time']:.3f}s")
+        logging.info(f"   📊 Python Analysis Performance Summary:")
+        logging.info(f"      • Files processed: {metrics['total_files']}")
+        logging.info(f"      • Elements found: {metrics['total_elements']}")
+        logging.info(f"      • Total time: {total_time:.3f}s")
+        logging.info(f"      • AST parsing time: {metrics['ast_parsing_time']:.3f}s")
+        logging.info(f"      • I/O time: {metrics['io_time']:.3f}s")
 
         if metrics['total_files'] > 0:
             avg_time_per_file = total_time / metrics['total_files']
-            print(f"      • Avg time per file: {avg_time_per_file:.3f}s")
+            logging.info(f"      • Avg time per file: {avg_time_per_file:.3f}s")
 
         if metrics['total_elements'] > 0:
             avg_time_per_element = total_time / metrics['total_elements']
-            print(f"      • Avg time per element: {avg_time_per_element:.4f}s")
+            logging.info(f"      • Avg time per element: {avg_time_per_element:.4f}s")
 
         # Calculate efficiency metrics
         if total_time > 0:
             ast_efficiency = (metrics['ast_parsing_time'] / total_time) * 100
             io_efficiency = (metrics['io_time'] / total_time) * 100
-            print(f"      • AST parsing efficiency: {ast_efficiency:.1f}%")
-            print(f"      • I/O efficiency: {io_efficiency:.1f}%")
+            logging.info(f"      • AST parsing efficiency: {ast_efficiency:.1f}%")
+            logging.info(f"      • I/O efficiency: {io_efficiency:.1f}%")
 
     def get_performance_metrics(self) -> Dict[str, float]:
         """Get current performance metrics."""

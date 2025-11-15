@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 import mcp.types as types
 import logging
+import sys
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -68,7 +69,7 @@ class MermaidResponse(BaseModel):
 
 # Global logger for MCP
 logger = logging.getLogger("mcp")
-logger.addHandler(logging.StreamHandler())
+logger.addHandler(logging.StreamHandler(sys.stderr))
 logger.setLevel(logging.INFO)
 
 @dataclass

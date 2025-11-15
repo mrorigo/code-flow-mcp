@@ -27,7 +27,7 @@ class CodeVectorStore:
             persist_directory: Where to persist the vector database on disk.
             embedding_model_name: Model to use for embeddings (defaults to 384-dim for consistency)
         """
-        print(f"Initializing ChromaDB client at: {persist_directory}")
+        logging.info(f"Initializing ChromaDB client at: {persist_directory}")
         try:
             self.client = chromadb.PersistentClient(path=persist_directory)
 
@@ -42,21 +42,21 @@ class CodeVectorStore:
                     if existing_collection.count() > 0:
                         # Get a sample to check dimensions
                         sample = existing_collection.peek(1)
-                        if sample['embeddings'] and len(sample['embeddings']) > 0:
+                        if sample['embeddings'] is not None and len(sample['embeddings']) > 0:
                             existing_dim = len(sample['embeddings'][0])
-                            print(f"   Info: Existing collection has {existing_dim}D embeddings")
+                            logging.info(f"   Info: Existing collection has {existing_dim}D embeddings")
 
                             # Use the same dimension as existing collection for consistency
                             if existing_dim == 768:
                                 embedding_model_name = 'all-mpnet-base-v2'
-                                print(f"   Info: Using all-mpnet-base-v2 to match existing 768D collection")
+                                logging.info(f"   Info: Using all-mpnet-base-v2 to match existing 768D collection")
                             elif existing_dim == 384:
                                 embedding_model_name = 'all-MiniLM-L6-v2'
-                                print(f"   Info: Using all-MiniLM-L6-v2 to match existing 384D collection")
+                                logging.info(f"   Info: Using all-MiniLM-L6-v2 to match existing 384D collection")
                             else:
-                                print(f"   Warning: Unknown embedding dimension {existing_dim}, using default model")
+                                logging.warning(f"   Warning: Unknown embedding dimension {existing_dim}, using default model")
                 except Exception as e:
-                    print(f"   Warning: Could not determine existing collection dimensions: {e}")
+                    logging.warning(f"   Warning: Could not determine existing collection dimensions: {e}")
 
             self.collection = self.client.get_or_create_collection(
                 name="code_graph_v2",
@@ -68,11 +68,11 @@ class CodeVectorStore:
             self.tokenizer = self.embedding_model.tokenizer
             self.max_tokens = max_tokens
 
-            print(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
-            print(f"   Using embedding model: {embedding_model_name} ({self.embedding_model.get_sentence_embedding_dimension()} dimensions)")
+            logging.info(f"✅ ChromaDB collection '{self.collection.name}' and Sentence Transformers loaded successfully.")
+            logging.info(f"   Using embedding model: {embedding_model_name} ({self.embedding_model.get_sentence_embedding_dimension()} dimensions)")
         except Exception as e:
-            print(f"❌ Failed to initialize ChromaDB or SentenceTransformer at {persist_directory}: {e}")
-            print("   Please ensure you have run 'pip install chromadb sentence-transformers'")
+            logging.error(f"❌ Failed to initialize ChromaDB or SentenceTransformer at {persist_directory}: {e}")
+            logging.error("   Please ensure you have run 'pip install chromadb sentence-transformers'")
             raise
 
     def _count_tokens(self, text: str) -> int:
@@ -143,7 +143,7 @@ class CodeVectorStore:
         for i, chunk in enumerate(chunks):
             # Skip empty chunks
             if not chunk.strip():
-                print(f"WARNING: Skipping empty chunk {i} for {node.fully_qualified_name}")
+                logging.warning(f"WARNING: Skipping empty chunk {i} for {node.fully_qualified_name}")
                 continue
 
             # Generate embedding for each chunk
@@ -205,7 +205,7 @@ class CodeVectorStore:
         Returns:
             List of unique IDs of the stored documents (one per chunk).
         """
-        print(f"Adding {len(nodes)} function nodes to vector store in batches of {batch_size}...")
+        logging.info(f"Adding {len(nodes)} function nodes to vector store in batches of {batch_size}...")
         all_doc_ids = []
         doc_sizes = []
         for i in range(0, len(nodes), batch_size):
@@ -246,14 +246,14 @@ class CodeVectorStore:
 
                 # Debug: Check source availability
                 if not full_file_source or not full_file_source.strip():
-                    print(f"WARNING: No source code available for {node.file_path}")
+                    logging.warning(f"WARNING: No source code available for {node.file_path}")
 
                 # Create a descriptive document for this function
                 document = self._create_function_document(node, full_file_source)
 
                 # Debug: Check document content
                 if not document or not document.strip():
-                    print(f"WARNING: Empty document created for {node.fully_qualified_name}")
+                    logging.warning(f"WARNING: Empty document created for {node.fully_qualified_name}")
                     continue
 
                 # Split into chunks
@@ -261,14 +261,14 @@ class CodeVectorStore:
 
                 # Debug: Check chunks
                 if not chunks:
-                    print(f"WARNING: No chunks created for {node.fully_qualified_name}")
+                    logging.warning(f"WARNING: No chunks created for {node.fully_qualified_name}")
                     continue
-                # print(f"Chunks for {node.fully_qualified_name}: {len(chunks)}")
+                # logging.info(f"Chunks for {node.fully_qualified_name}: {len(chunks)}")
 
                 for j, chunk in enumerate(chunks):
                     # Skip empty chunks
                     if not chunk.strip():
-                        print(f"WARNING: Skipping empty chunk {j} for {node.fully_qualified_name}")
+                        logging.warning(f"WARNING: Skipping empty chunk {j} for {node.fully_qualified_name}")
                         continue
 
                     # Track actual chunk size
@@ -320,7 +320,7 @@ class CodeVectorStore:
                     ids=batch_ids
                 )
 
-        print(f"   Batch added {len(all_doc_ids)} function chunks with average chunk size {sum(doc_sizes)//len(doc_sizes) if doc_sizes else 0} chars")
+        logging.info(f"   Batch added {len(all_doc_ids)} function chunks with average chunk size {sum(doc_sizes)//len(doc_sizes) if doc_sizes else 0} chars")
 
         return all_doc_ids
 

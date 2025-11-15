@@ -5,6 +5,7 @@ and extracting type information using sophisticated regex-based parsing.
 """
 
 import re
+import logging
 import json
 import sys
 import time
@@ -143,7 +144,7 @@ class TypeScriptASTVisitor:
 
         compilation_time = time.time() - start_time
         pattern_count = sum(len(p) if isinstance(p, list) else 1 for p in patterns.values())
-        print(f"   Info: Pre-compiled {pattern_count} regex patterns in {compilation_time:.4f}s")
+        logging.info(f"   Info: Pre-compiled {pattern_count} regex patterns in {compilation_time:.4f}s")
 
         return patterns
 
@@ -558,7 +559,7 @@ class TypeScriptASTVisitor:
                 }
 
         except Exception as e:
-            print(f"   Warning: Error parsing function match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing function match: {e}", file=sys.stderr)
             return None
 
         return None
@@ -596,7 +597,7 @@ class TypeScriptASTVisitor:
                 'route_pattern': extract_route_pattern(match.group(0))
             }
         except Exception as e:
-            print(f"   Warning: Error parsing Express route match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing Express route match: {e}", file=sys.stderr)
             return None
 
     def _parse_express_middleware_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -626,7 +627,7 @@ class TypeScriptASTVisitor:
                 'function_type': 'express_middleware'
             }
         except Exception as e:
-            print(f"   Warning: Error parsing Express middleware match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing Express middleware match: {e}", file=sys.stderr)
             return None
 
     def _parse_vue_config_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -659,7 +660,7 @@ class TypeScriptASTVisitor:
                 'function_type': 'vue_config'
             }
         except Exception as e:
-            print(f"   Warning: Error parsing Vue config match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing Vue config match: {e}", file=sys.stderr)
             return None
 
     def _parse_vue_app_usage_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -693,7 +694,7 @@ class TypeScriptASTVisitor:
                 'usage_type': usage_type
             }
         except Exception as e:
-            print(f"   Warning: Error parsing Vue app usage match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing Vue app usage match: {e}", file=sys.stderr)
             return None
 
     def _parse_lifecycle_method_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -719,7 +720,7 @@ class TypeScriptASTVisitor:
                 'function_type': 'lifecycle_method'
             }
         except Exception as e:
-            print(f"   Warning: Error parsing lifecycle method match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing lifecycle method match: {e}", file=sys.stderr)
             return None
 
     def _parse_export_composable_match(self, groups: tuple, match: re.Match, start_line: int = 1) -> Optional[Dict[str, Any]]:
@@ -745,7 +746,7 @@ class TypeScriptASTVisitor:
                 'function_type': 'export_composable'
             }
         except Exception as e:
-            print(f"   Warning: Error parsing export composable match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing export composable match: {e}", file=sys.stderr)
             return None
 
     def _parse_complex_return_type(self, return_type: str) -> str:
@@ -1219,8 +1220,8 @@ class TypeScriptASTVisitor:
             metadata['confidence'] = min(base_confidence, 1.0)
 
         except Exception as e:
-            print(f"   Warning: Error extracting enhanced metadata: {e}", file=sys.stderr)
-            print(f"   Debug: Full traceback for enhanced metadata error:", file=sys.stderr)
+            logging.info(f"   Warning: Error extracting enhanced metadata: {e}", file=sys.stderr)
+            logging.info(f"   Debug: Full traceback for enhanced metadata error:", file=sys.stderr)
             import traceback
             traceback.print_exc()
             metadata['confidence'] = 0.3
@@ -1311,7 +1312,7 @@ class TypeScriptASTVisitor:
             metadata['confidence'] = min(base_confidence, 1.0)
 
         except Exception as e:
-            print(f"   Warning: Error extracting enhanced class metadata: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error extracting enhanced class metadata: {e}", file=sys.stderr)
             metadata['confidence'] = 0.3
             metadata['error'] = str(e)
 
@@ -1323,17 +1324,17 @@ class TypeScriptASTVisitor:
             confidence = metadata.get('confidence', 0.5)
             framework = metadata.get('framework')
 
-            print(f"   Info: Parsed {file_path} using {parsing_method} ({elements_found} elements, confidence: {confidence:.2f})")
+            logging.info(f"   Info: Parsed {file_path} using {parsing_method} ({elements_found} elements, confidence: {confidence:.2f})")
 
             if framework:
-                print(f"   Info: Detected framework: {framework}")
+                logging.info(f"   Info: Detected framework: {framework}")
 
             if metadata.get('typescript_features'):
                 features = ', '.join(metadata['typescript_features'])
-                print(f"   Info: TypeScript features: {features}")
+                logging.info(f"   Info: TypeScript features: {features}")
 
         except Exception as e:
-            print(f"   Warning: Error logging parsing info: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error logging parsing info: {e}", file=sys.stderr)
 
     def visit_file(self, file_path: str, source: str) -> List[CodeElement]:
         """Visit a TypeScript file and extract all code elements using fast regex-based parsing."""
@@ -1411,7 +1412,7 @@ class TypeScriptASTVisitor:
             else:
                 self._update_ts_metrics(parsing_time)
 
-            print(f"   Info: Parsed {file_path} using {'TSX-optimized' if is_tsx else 'standard'} regex extraction ({len(self.elements)} elements, {parsing_time:.2f}s)")
+            logging.info(f"   Info: Parsed {file_path} using {'TSX-optimized' if is_tsx else 'standard'} regex extraction ({len(self.elements)} elements, {parsing_time:.2f}s)")
 
             # Log framework detection if any
             if self.elements:
@@ -1421,7 +1422,7 @@ class TypeScriptASTVisitor:
                         frameworks.add(element.metadata['framework'])
 
                 if frameworks:
-                    print(f"   Info: Detected frameworks in {file_path}: {', '.join(frameworks)}")
+                    logging.info(f"   Info: Detected frameworks in {file_path}: {', '.join(frameworks)}")
 
             return self.elements.copy()
 
@@ -1431,7 +1432,7 @@ class TypeScriptASTVisitor:
                 self._update_tsx_metrics(parsing_time)
             else:
                 self._update_ts_metrics(parsing_time)
-            print(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
+            logging.info(f"   Error: Failed to parse {file_path} after {parsing_time:.2f}s: {e}", file=sys.stderr)
             return []
 
     def _parse_complex_types(self, source: str) -> Dict[str, Any]:
@@ -1858,7 +1859,7 @@ class TypeScriptASTVisitor:
                 return func_element
 
         except Exception as e:
-            print(f"   Warning: Error parsing React component match: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error parsing React component match: {e}", file=sys.stderr)
 
         return None
 
@@ -1945,7 +1946,7 @@ class TypeScriptASTExtractor:
 
             # Handle empty files
             if not content:
-                print(f"   Warning: Empty tsconfig.json at {tsconfig_path}", file=sys.stderr)
+                logging.info(f"   Warning: Empty tsconfig.json at {tsconfig_path}", file=sys.stderr)
                 return {}
 
             config = json.loads(content)
@@ -1956,20 +1957,20 @@ class TypeScriptASTExtractor:
 
             return config
         except json.JSONDecodeError as e:
-            print(f"   Warning: Invalid JSON in tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
-            print(f"   Info: Line {e.lineno}, column {e.colno}: {e.msg}", file=sys.stderr)
+            logging.info(f"   Warning: Invalid JSON in tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
+            logging.info(f"   Info: Line {e.lineno}, column {e.colno}: {e.msg}", file=sys.stderr)
             return {}
         except FileNotFoundError:
-            print(f"   Warning: tsconfig.json not found at {tsconfig_path}", file=sys.stderr)
+            logging.info(f"   Warning: tsconfig.json not found at {tsconfig_path}", file=sys.stderr)
             return {}
         except PermissionError:
-            print(f"   Warning: Permission denied reading tsconfig.json {tsconfig_path}", file=sys.stderr)
+            logging.info(f"   Warning: Permission denied reading tsconfig.json {tsconfig_path}", file=sys.stderr)
             return {}
         except UnicodeDecodeError as e:
-            print(f"   Warning: Encoding error reading tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Encoding error reading tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
             return {}
         except Exception as e:
-            print(f"   Warning: Unexpected error parsing tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Unexpected error parsing tsconfig.json {tsconfig_path}: {e}", file=sys.stderr)
             return {}
 
     def _setup_project_integration(self, directory: Path) -> None:
@@ -1996,7 +1997,7 @@ class TypeScriptASTExtractor:
             if 'paths' in compiler_options:
                 self.path_mappings['paths'] = compiler_options['paths']
 
-        print(f"   Info: Loaded TypeScript configuration from {tsconfig_path}")
+        logging.info(f"   Info: Loaded TypeScript configuration from {tsconfig_path}")
 
     def _get_compiler_options(self) -> Dict[str, Any]:
         """Get TypeScript project options from tsconfig.json with defaults."""
@@ -2087,7 +2088,7 @@ class TypeScriptASTExtractor:
         # Create optimal batches for parallel processing
         batches = self._create_optimal_batches(file_paths)
 
-        print(f"   Info: Processing {len(file_paths)} files in {len(batches)} batches using {self.max_workers} workers")
+        logging.info(f"   Info: Processing {len(file_paths)} files in {len(batches)} batches using {self.max_workers} workers")
 
         all_elements = []
 
@@ -2106,16 +2107,16 @@ class TypeScriptASTExtractor:
                         all_elements.extend(batch_elements)
                     except Exception as e:
                         batch = future_to_batch[future]
-                        print(f"   Warning: Failed to process batch {batch}: {e}", file=sys.stderr)
+                        logging.info(f"   Warning: Failed to process batch {batch}: {e}", file=sys.stderr)
 
         except Exception as e:
-            print(f"   Warning: Parallel processing failed, falling back to sequential: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Parallel processing failed, falling back to sequential: {e}", file=sys.stderr)
             return self._process_files_sequential(file_paths)
 
         parallel_time = time.time() - start_time
         self.performance_metrics['parallel_overhead'] += parallel_time
 
-        print(f"   Info: Parallel processing completed in {parallel_time:.3f}s")
+        logging.info(f"   Info: Parallel processing completed in {parallel_time:.3f}s")
         return all_elements
 
     def _process_files_sequential(self, file_paths: List[Path]) -> List[CodeElement]:
@@ -2128,7 +2129,7 @@ class TypeScriptASTExtractor:
             all_elements.extend(elements)
 
         sequential_time = time.time() - start_time
-        print(f"   Info: Sequential processing completed in {sequential_time:.3f}s")
+        logging.info(f"   Info: Sequential processing completed in {sequential_time:.3f}s")
         return all_elements
 
     def _create_optimal_batches(self, file_paths: List[Path]) -> List[List[Path]]:
@@ -2168,7 +2169,7 @@ class TypeScriptASTExtractor:
         if current_batch:
             batches.append(current_batch)
 
-        print(f"   Debug: Created {len(batches)} batches for parallel processing")
+        logging.info(f"   Debug: Created {len(batches)} batches for parallel processing")
         return batches
 
     def _process_file_batch(self, file_paths: List[Path]) -> List[CodeElement]:
@@ -2183,7 +2184,7 @@ class TypeScriptASTExtractor:
                 file_elements = self._extract_file_with_visitor(file_path, visitor)
                 elements.extend(file_elements)
             except Exception as e:
-                print(f"   Warning: Failed to process {file_path} in batch: {e}", file=sys.stderr)
+                logging.info(f"   Warning: Failed to process {file_path} in batch: {e}", file=sys.stderr)
 
         return elements
 
@@ -2198,7 +2199,7 @@ class TypeScriptASTExtractor:
 
             return visitor.visit_file(str(file_path.resolve()), source)
         except Exception as e:
-            print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
             return []
 
     def extract_from_file(self, file_path: Path) -> List[CodeElement]:
@@ -2212,7 +2213,7 @@ class TypeScriptASTExtractor:
 
             return self.visitor.visit_file(str(file_path.resolve()), source)
         except Exception as e:
-            print(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
+            logging.info(f"   Warning: Error processing {file_path}: {e}", file=sys.stderr)
             return []
 
     def extract_from_directory(self, directory: Path) -> List[CodeElement]:
@@ -2224,7 +2225,7 @@ class TypeScriptASTExtractor:
 
         # Get filtered files
         filtered_files = self._get_filtered_files(directory)
-        print(f"Found {len(filtered_files)} TypeScript files to analyze (after filtering .gitignore).")
+        logging.info(f"Found {len(filtered_files)} TypeScript files to analyze (after filtering .gitignore).")
 
         start_time = time.time()
 
@@ -2244,7 +2245,7 @@ class TypeScriptASTExtractor:
         self.performance_metrics['total_elements'] = len(all_elements)
         self.performance_metrics['processing_time'] = total_time
 
-        print(f"   Info: Analysis completed in {total_time:.3f}s - {len(all_elements)} elements found")
+        logging.info(f"   Info: Analysis completed in {total_time:.3f}s - {len(all_elements)} elements found")
 
         # Print performance summary if enabled
         if self.enable_performance_monitoring:
@@ -2255,39 +2256,39 @@ class TypeScriptASTExtractor:
     def _print_performance_summary(self):
         """Print detailed performance metrics with TSX-specific analysis."""
         metrics = self.performance_metrics
-        print(f"   📊 Performance Summary:")
-        print(f"      • Files processed: {metrics['total_files']}")
-        print(f"      • Elements found: {metrics['total_elements']}")
-        print(f"      • Total time: {metrics['processing_time']:.3f}s")
-        print(f"      • Parallel overhead: {metrics['parallel_overhead']:.3f}s")
+        logging.info(f"   📊 Performance Summary:")
+        logging.info(f"      • Files processed: {metrics['total_files']}")
+        logging.info(f"      • Elements found: {metrics['total_elements']}")
+        logging.info(f"      • Total time: {metrics['processing_time']:.3f}s")
+        logging.info(f"      • Parallel overhead: {metrics['parallel_overhead']:.3f}s")
 
         if metrics['total_files'] > 0:
             avg_time_per_file = metrics['processing_time'] / metrics['total_files']
-            print(f"      • Avg time per file: {avg_time_per_file:.3f}s")
+            logging.info(f"      • Avg time per file: {avg_time_per_file:.3f}s")
 
         # TSX vs TS performance comparison
         if metrics['tsx_files'] > 0:
-            print(f"      • TSX files: {metrics['tsx_files']} ({metrics['tsx_parsing_time']:.3f}s total, {metrics['avg_tsx_time_per_file']:.3f}s avg)")
+            logging.info(f"      • TSX files: {metrics['tsx_files']} ({metrics['tsx_parsing_time']:.3f}s total, {metrics['avg_tsx_time_per_file']:.3f}s avg)")
 
         if metrics['ts_files'] > 0:
-            print(f"      • TS files: {metrics['ts_files']} ({metrics['ts_parsing_time']:.3f}s total, {metrics['avg_ts_time_per_file']:.3f}s avg)")
+            logging.info(f"      • TS files: {metrics['ts_files']} ({metrics['ts_parsing_time']:.3f}s total, {metrics['avg_ts_time_per_file']:.3f}s avg)")
 
         # Performance ratio
         if metrics['tsx_files'] > 0 and metrics['ts_files'] > 0:
             tsx_ratio = metrics['avg_tsx_time_per_file'] / metrics['avg_ts_time_per_file']
-            print(f"      • TSX/TS performance ratio: {tsx_ratio:.2f}x")
+            logging.info(f"      • TSX/TS performance ratio: {tsx_ratio:.2f}x")
 
             if tsx_ratio > 2.0:
-                print(f"      • ⚠️  TSX files are significantly slower - optimization recommended")
+                logging.info(f"      • ⚠️  TSX files are significantly slower - optimization recommended")
             elif tsx_ratio > 1.5:
-                print(f"      • ⚡ TSX files are slower - minor optimization may help")
+                logging.info(f"      • ⚡ TSX files are slower - minor optimization may help")
             else:
-                print(f"      • ✅ TSX performance is acceptable")
+                logging.info(f"      • ✅ TSX performance is acceptable")
 
         # Calculate speedup if we have baseline
         if hasattr(self, '_sequential_baseline'):
             speedup = self._sequential_baseline / metrics['processing_time']
-            print(f"      • Parallel speedup: {speedup:.2f}x")
+            logging.info(f"      • Parallel speedup: {speedup:.2f}x")
 
     def get_performance_metrics(self) -> Dict[str, float]:
         """Get current performance metrics."""
@@ -2364,7 +2365,7 @@ class TypeScriptASTExtractor:
                         elements.append(type_alias_element)
 
             except Exception as e:
-                print(f"   Warning: Error processing TypeScript elements in {file_path}: {e}", file=sys.stderr)
+                logging.info(f"   Warning: Error processing TypeScript elements in {file_path}: {e}", file=sys.stderr)
 
         return elements
 

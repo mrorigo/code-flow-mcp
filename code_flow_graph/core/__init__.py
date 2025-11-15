@@ -3,6 +3,7 @@ Unified interface for code analysis across multiple programming languages.
 
 This module provides a simple, consistent API for extracting code elements
 from Python and TypeScript source files, hiding the complexity of the
+import logging
 modular extractor architecture underneath.
 
 Key Features:
@@ -145,7 +146,7 @@ def extract_from_directory(directory_path: FilePath, **kwargs) -> List[CodeEleme
     if not filtered_files:
         return []
 
-    print(f"Found {len(filtered_files)} files to analyze (after filtering .gitignore).")
+    logging.info(f"Found {len(filtered_files)} files to analyze (after filtering .gitignore).")
 
     all_elements = []
 

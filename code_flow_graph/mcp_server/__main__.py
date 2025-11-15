@@ -1,6 +1,7 @@
 import argparse
 import yaml
 import logging
+import sys
 import asyncio
 from code_flow_graph.mcp_server.server import server
 
@@ -17,7 +18,7 @@ def main():
     args = parser.parse_args()
     with open(args.config) as f:
         config = yaml.safe_load(f)
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
     # Pass config to server for analyzer initialization
     server.config = config
