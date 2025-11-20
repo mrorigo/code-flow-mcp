@@ -193,19 +193,23 @@ Or with a custom configuration file:
 python -m code_flow_graph.mcp_server --config path/to/config.yaml
 ```
 
+**Background Analysis**: The server starts immediately and accepts connections while analyzing the codebase in the background. During the initial analysis, tools may return empty or partial results as the codebase is being indexed. This is normal behavior for first-time scans. Use the `ping` tool to check analysis progress.
+
 #### Available Tools
 
 The server exposes the following tools through the MCP protocol:
 
-- **`ping`**: Test server connectivity
-- **`semantic_search`**: Search functions semantically using natural language queries
-- **`get_call_graph`**: Retrieve call graph in JSON or Mermaid format
-- **`get_function_metadata`**: Get detailed metadata for a specific function
-- **`query_entry_points`**: Get all identified entry points in the codebase
-- **`generate_mermaid_graph`**: Generate Mermaid diagram for call graph visualization
+- **`ping`**: Test server connectivity and check analysis status. Returns current analysis state (`not_started`, `in_progress`, `completed`, `failed`) and count of indexed functions.
+- **`semantic_search`**: Search functions semantically using natural language queries. Includes analysis status in response.
+- **`get_call_graph`**: Retrieve call graph in JSON or Mermaid format. Includes analysis status in response.
+- **`get_function_metadata`**: Get detailed metadata for a specific function. Includes analysis status in response.
+- **`query_entry_points`**: Get all identified entry points in the codebase. Includes analysis status in response.
+- **`generate_mermaid_graph`**: Generate Mermaid diagram for call graph visualization. Includes analysis status in response.
 - **`cleanup_stale_references`**: Manually trigger cleanup of stale file references in the vector store
 - **`update_context`**: Update session context with key-value pairs
 - **`get_context`**: Retrieve current session context
+
+**Note**: All analysis-dependent tools include an `analysis_status` field in their responses to inform clients about the current state of code analysis.
 
 #### Testing with Client
 

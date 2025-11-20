@@ -5,6 +5,7 @@ import logging
 import uuid
 from pydantic import ValidationError
 from code_flow_graph.mcp_server.server import MCPError
+from code_flow_graph.mcp_server.analyzer import AnalysisState
 
 
 @pytest.fixture
@@ -109,7 +110,11 @@ async def test_ping_tool_call_via_server():
     assert result[0][0].type == "text"
     assert '"status": "ok"' in result[0][0].text
     assert '"echoed": "test"' in result[0][0].text
-    assert result[1] == {"status": "ok", "echoed": "test"}
+    # New fields should be present (may be None if no analyzer)
+    assert result[1]["status"] == "ok"
+    assert result[1]["echoed"] == "test"
+    assert "analysis_status" in result[1]
+    assert "indexed_functions" in result[1]
 
 
 def test_ping_request_schema():
@@ -151,6 +156,7 @@ async def test_semantic_search_tool_success():
     mock_store = MagicMock()
     mock_store.query_functions.return_value = [{"metadata": {"name": "test_func"}}]
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.vector_store = mock_store
 
     # Set analyzer on server
@@ -175,6 +181,7 @@ async def test_semantic_search_tool_no_store():
     from code_flow_graph.mcp_server.server import semantic_search, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.vector_store = None
     server.analyzer = mock_analyzer
 
@@ -198,6 +205,7 @@ async def test_semantic_search_tool_invalid_params():
     mock_store = MagicMock()
     mock_store.query_functions.return_value = [{"metadata": {"name": "test_func"}}]
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.vector_store = mock_store
     server.analyzer = mock_analyzer
 
@@ -218,6 +226,7 @@ async def test_get_call_graph_tool_success_json():
 
     mock_graph_data = {"functions": {"test.func": {"name": "func"}}}
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.export_graph.return_value = mock_graph_data
     server.analyzer = mock_analyzer
 
@@ -239,6 +248,7 @@ async def test_get_call_graph_tool_success_mermaid():
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.export_graph.return_value = mock_mermaid_str
     server.analyzer = mock_analyzer
 
@@ -260,6 +270,7 @@ async def test_get_call_graph_tool_empty_fqns():
 
     mock_graph_data = {"functions": {}}
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.export_graph.return_value = mock_graph_data
     server.analyzer = mock_analyzer
 
@@ -280,6 +291,7 @@ async def test_get_call_graph_tool_no_builder():
     from code_flow_graph.mcp_server.server import get_call_graph, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder = None
     server.analyzer = mock_analyzer
 
@@ -327,6 +339,7 @@ async def test_get_function_metadata_tool_success():
     mock_node.hash_body = "abc123"
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.functions.get.return_value = mock_node
     server.analyzer = mock_analyzer
 
@@ -348,6 +361,7 @@ async def test_get_function_metadata_tool_invalid_fqn():
     from code_flow_graph.mcp_server.server import get_function_metadata, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.functions.get.return_value = None
     server.analyzer = mock_analyzer
 
@@ -368,6 +382,7 @@ async def test_get_function_metadata_tool_no_builder():
     from code_flow_graph.mcp_server.server import get_function_metadata, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder = None
     server.analyzer = mock_analyzer
 
@@ -403,6 +418,7 @@ async def test_query_entry_points_tool_success():
     mock_ep2.is_entry_point = True
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.get_entry_points.return_value = [mock_ep1, mock_ep2]
     server.analyzer = mock_analyzer
 
@@ -425,6 +441,7 @@ async def test_query_entry_points_tool_no_builder():
     from code_flow_graph.mcp_server.server import query_entry_points, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder = None
     server.analyzer = mock_analyzer
 
@@ -448,6 +465,7 @@ async def test_generate_mermaid_graph_tool_success():
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.export_mermaid_graph.return_value = mock_mermaid_str
     server.analyzer = mock_analyzer
 
@@ -469,6 +487,7 @@ async def test_generate_mermaid_graph_tool_empty_fqns():
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder.export_mermaid_graph.return_value = mock_mermaid_str
     server.analyzer = mock_analyzer
 
@@ -489,6 +508,7 @@ async def test_generate_mermaid_graph_tool_no_builder():
     from code_flow_graph.mcp_server.server import generate_mermaid_graph, server
 
     mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
     mock_analyzer.builder = None
     server.analyzer = mock_analyzer
 

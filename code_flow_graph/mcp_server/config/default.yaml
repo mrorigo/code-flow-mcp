@@ -3,5 +3,6 @@ ignored_patterns: ["venv", "**/__pycache__"]
 chromadb_path: "./code_vectors_chroma"
 max_graph_depth: 3
 embedding_model: "all-MiniLM-L6-v2"
+language: "python"
 # Background cleanup configuration
 cleanup_interval_minutes: 30

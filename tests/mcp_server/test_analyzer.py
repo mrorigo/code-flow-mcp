@@ -36,12 +36,13 @@ def test_mcp_analyzer_init_with_existing_store():
     """Test MCPAnalyzer initialization when ChromaDB path exists."""
     config = {
         'watch_directories': ['.'],
-        'chromadb_path': './code_vectors_chroma'  # This exists
+        'chromadb_path': './code_vectors_chroma',  # This exists
+        'embedding_model': 'all-MiniLM-L6-v2'
     }
 
     with patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
         analyzer = MCPAnalyzer(config)
-        mock_store.assert_called_once_with(persist_directory='./code_vectors_chroma')
+        mock_store.assert_called_once_with(persist_directory='./code_vectors_chroma', embedding_model_name='all-MiniLM-L6-v2', max_tokens=256)
         assert analyzer.vector_store is not None
 
 
@@ -130,7 +131,8 @@ async def test_populate_vector_store(mock_core_components):
 
     config = {
         'watch_directories': ['.'],
-        'chromadb_path': './code_vectors_chroma'
+        'chromadb_path': './code_vectors_chroma',
+        'embedding_model': 'all-MiniLM-L6-v2'
     }
 
     # Mock the store initialization
@@ -153,8 +155,8 @@ async def test_populate_vector_store(mock_core_components):
 
         analyzer._populate_vector_store()
 
-        mock_store_instance.add_function_node.assert_called_once_with(mock_func_node, 'def func(): pass')
-        mock_store_instance.add_edge.assert_called_once()
+        mock_store_instance.add_function_nodes_batch.assert_called_once()
+        mock_store_instance.add_edges_batch.assert_called_once()
 
 
 @pytest.mark.asyncio

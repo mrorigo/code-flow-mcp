@@ -4,21 +4,37 @@ import asyncio
 import logging
 import threading
 import time
+from enum import Enum
 
 import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
 
 from code_flow_graph.core.python_extractor import PythonASTExtractor
+from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
+
+class AnalysisState(Enum):
+    """Enum representing the current state of code analysis."""
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
 
 class WatcherHandler(FileSystemEventHandler):
     def __init__(self, analyzer):
         self.analyzer = analyzer
+        # Get supported file extensions based on language
+        language = self.analyzer.config.get('language', 'python').lower()
+        if language == 'typescript':
+            self.supported_extensions = ['.py', '.ts', '.tsx', '.js', '.jsx']  # Support both for mixed projects
+        else:
+            self.supported_extensions = ['.py']
 
     def on_modified(self, event):
-        if event.src_path.endswith('.py'):
+        if any(event.src_path.endswith(ext) for ext in self.supported_extensions):
             logging.info(f"File modified: {event.src_path}")
             asyncio.run_coroutine_threadsafe(self.analyzer._incremental_update(event.src_path), self.analyzer.loop)
 
@@ -30,17 +46,29 @@ class MCPAnalyzer:
         """Initialize the analyzer with configuration.
 
         Args:
-            config: Configuration dictionary containing watch_directories and chromadb_path
+            config: Configuration dictionary containing watch_directories, chromadb_path, and optional language
         """
         self.config = config
         root = Path(config['watch_directories'][0]).resolve()
-        logging.info(f"Initializing MCPAnalyzer with root: {root}")
-        self.extractor = PythonASTExtractor()
+        language = config.get('language', 'python').lower()
+        logging.info(f"Initializing MCPAnalyzer with root: {root}, language: {language}")
+        
+        # Initialize appropriate extractor based on language
+        if language == 'typescript':
+            self.extractor = TypeScriptASTExtractor()
+        else:
+            self.extractor = PythonASTExtractor()
+        
         self.extractor.project_root = root
         self.builder = CallGraphBuilder()
         self.builder.project_root = root
         self.vector_store: Optional[CodeVectorStore] = None
         self.observer = None
+
+        # Analysis state tracking
+        self.analysis_state = AnalysisState.NOT_STARTED
+        self.analysis_task: Optional[asyncio.Task] = None
+        self.analysis_error: Optional[Exception] = None
 
         # Initialize vector store if path exists
         if Path(config['chromadb_path']).exists():
@@ -96,13 +124,77 @@ class MCPAnalyzer:
             self.cleanup_task.join(timeout=10)  # Wait up to 10 seconds
             logging.info("Background cleanup stopped")
 
+    def is_ready(self) -> bool:
+        """Check if analysis is complete and ready for queries.
+        
+        Returns:
+            True if analysis is completed, False otherwise
+        """
+        return self.analysis_state == AnalysisState.COMPLETED
+
+    async def wait_for_analysis(self, timeout: Optional[float] = None) -> bool:
+        """Wait for analysis to complete.
+        
+        Args:
+            timeout: Maximum time to wait in seconds (None = wait indefinitely)
+            
+        Returns:
+            True if analysis completed successfully, False if timeout or failed
+        """
+        if self.analysis_state == AnalysisState.COMPLETED:
+            return True
+        
+        if self.analysis_task is None:
+            return False
+            
+        try:
+            await asyncio.wait_for(self.analysis_task, timeout=timeout)
+            return self.analysis_state == AnalysisState.COMPLETED
+        except asyncio.TimeoutError:
+            return False
+
+    async def start_analysis(self) -> None:
+        """Start code analysis in the background.
+        
+        This method starts the analysis process as a background task,
+        allowing the server to become available immediately.
+        """
+        if self.analysis_state != AnalysisState.NOT_STARTED:
+            logging.warning(f"Analysis already started (state: {self.analysis_state.value})")
+            return
+        
+        async def run_analysis():
+            """Background task that runs the analysis."""
+            try:
+                self.analysis_state = AnalysisState.IN_PROGRESS
+                logging.info("Background analysis started")
+                await self.analyze()
+                self.analysis_state = AnalysisState.COMPLETED
+                logging.info(f"Background analysis completed: indexed {len(self.builder.functions)} functions")
+            except Exception as e:
+                self.analysis_state = AnalysisState.FAILED
+                self.analysis_error = e
+                logging.error(f"Background analysis failed: {e}", exc_info=True)
+        
+        # Create the background task
+        self.analysis_task = asyncio.create_task(run_analysis())
+        logging.info("Analysis task started in background")
+
     async def analyze(self) -> None:
         """Analyze the codebase by extracting elements, building graph, and populating vector store."""
-        # Extract code elements
-        elements = await asyncio.to_thread(self.extractor.extract_from_directory, Path(self.config['watch_directories'][0]))
+        # Extract code elements from all watch directories
+        all_elements = []
+        
+        for watch_dir in self.config['watch_directories']:
+            logging.info(f"Extracting elements from directory: {watch_dir}")
+            elements = await asyncio.to_thread(self.extractor.extract_from_directory, Path(watch_dir))
+            logging.info(f"Found {len(elements)} elements in {watch_dir}")
+            all_elements.extend(elements)
 
-        # Build call graph
-        self.builder.build_from_elements(elements)
+        logging.info(f"Total elements extracted from {len(self.config['watch_directories'])} directories: {len(all_elements)}")
+
+        # Build call graph with all elements
+        self.builder.build_from_elements(all_elements)
 
         # Populate vector store if available
         if self.vector_store:
@@ -110,10 +202,14 @@ class MCPAnalyzer:
         else:
             logging.info("Vector store not available, skipping population")
 
-        # Start file watcher
+        # Start file watchers for all directories
         self.loop = asyncio.get_running_loop()
         observer = watchdog.observers.Observer()
-        observer.schedule(WatcherHandler(analyzer=self), self.config['watch_directories'][0], recursive=True)
+        
+        for watch_dir in self.config['watch_directories']:
+            observer.schedule(WatcherHandler(analyzer=self), watch_dir, recursive=True)
+            logging.info(f"Started watching directory: {watch_dir}")
+        
         observer.start()
         self.observer = observer
 

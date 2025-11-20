@@ -23,14 +23,18 @@ class MCPError(Exception):
 class PingResponse(BaseModel):
     status: str
     echoed: str
+    analysis_status: Optional[str] = None
+    indexed_functions: Optional[int] = None
 
 
 class SearchResponse(BaseModel):
     results: list[dict] | str
+    analysis_status: Optional[str] = None
 
 
 class GraphResponse(BaseModel):
     graph: dict | str
+    analysis_status: Optional[str] = None
 
 
 class MetadataResponse(BaseModel):
@@ -58,14 +62,17 @@ class MetadataResponse(BaseModel):
     catches_exceptions: List[str]
     local_variables_declared: List[str]
     hash_body: Optional[str]
+    analysis_status: Optional[str] = None
 
 
 class EntryPointsResponse(BaseModel):
     entry_points: list[dict]
+    analysis_status: Optional[str] = None
 
 
 class MermaidResponse(BaseModel):
     graph: str
+    analysis_status: Optional[str] = None
 
 # Global logger for MCP
 logger = logging.getLogger("mcp")
@@ -88,9 +95,9 @@ async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     config = getattr(server, 'config', None)
     if config:
         server.analyzer = MCPAnalyzer(config)
-        await server.analyzer.analyze()
-        logger.info(f"Indexed {len(server.analyzer.builder.functions)} functions")
-        # Analyzer is now accessible via server.analyzer
+        # Start analysis in background instead of blocking
+        await server.analyzer.start_analysis()
+        logger.info("Server started, analysis running in background")
     else:
         logger.warning("No config provided to server, skipping analysis")
 
@@ -108,9 +115,22 @@ server = FastMCP("CodeFlowGraphMCP", lifespan=lifespan)
 @server.tool(name="ping")
 async def ping_tool(message: str = Field(description="Message to echo")) -> PingResponse:
     """
-    Simple ping tool to echo a message.
+    Simple ping tool to echo a message and report analysis status.
     """
-    return PingResponse(status="ok", echoed=message)
+    analysis_status = None
+    indexed_functions = None
+    
+    if hasattr(server, 'analyzer') and server.analyzer:
+        state = server.analyzer.analysis_state
+        analysis_status = state.value
+        indexed_functions = len(server.analyzer.builder.functions) if server.analyzer.builder else 0
+    
+    return PingResponse(
+        status="ok", 
+        echoed=message,
+        analysis_status=analysis_status,
+        indexed_functions=indexed_functions
+    )
 
 
 def format_search_results_as_markdown(results: list[dict]) -> str:
@@ -163,6 +183,9 @@ async def semantic_search(query: str = Field(description="Search query string"),
     """
     Perform semantic search in codebase using vector similarity.
     """
+    # Get analysis status
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+    
     # Validate parameters
     if n_results < 1:
         raise ValueError("n_results must be positive")
@@ -176,9 +199,9 @@ async def semantic_search(query: str = Field(description="Search query string"),
             logger.warning(f"Truncated semantic search results from {len(results)} to 10")
         if format == "markdown":
             formatted_results = format_search_results_as_markdown(results)
-            return SearchResponse(results=formatted_results)
+            return SearchResponse(results=formatted_results, analysis_status=analysis_status)
         else:
-            return SearchResponse(results=results)
+            return SearchResponse(results=results, analysis_status=analysis_status)
     except Exception as e:
         if "Invalid parameters" in str(e) or isinstance(e, ValueError):
             raise MCPError(4001, "Invalid parameters", "Check parameter values and ensure they are valid") from e
@@ -192,10 +215,12 @@ async def get_call_graph(fqns: list[str] = Field(default=[], description="List o
     """
     Export the call graph in specified format.
     """
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+    
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     graph = server.analyzer.builder.export_graph(format=format if format == "mermaid" else "json")
-    return GraphResponse(graph=graph)
+    return GraphResponse(graph=graph, analysis_status=analysis_status)
 
 
 @server.tool(name="get_function_metadata")
@@ -208,6 +233,8 @@ async def get_function_metadata(fqn: str = Field(description="Fully qualified na
     Returns:
         MetadataResponse containing detailed function metadata.
     """
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+    
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     node = server.analyzer.builder.functions.get(fqn)
@@ -218,6 +245,7 @@ async def get_function_metadata(fqn: str = Field(description="Fully qualified na
     # Convert edges to simple dicts
     node_dict['incoming_edges'] = [vars(edge) for edge in node.incoming_edges]
     node_dict['outgoing_edges'] = [vars(edge) for edge in node.outgoing_edges]
+    node_dict['analysis_status'] = analysis_status
     return MetadataResponse(**node_dict)
 
 
@@ -226,10 +254,12 @@ async def query_entry_points() -> EntryPointsResponse:
     """
     Retrieve all identified entry points in the codebase.
     """
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+    
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     eps = server.analyzer.builder.get_entry_points()
-    return EntryPointsResponse(entry_points=[vars(ep) for ep in eps])
+    return EntryPointsResponse(entry_points=[vars(ep) for ep in eps], analysis_status=analysis_status)
 
 @server.tool(name="generate_mermaid_graph")
 async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description="List of fully qualified names to highlight in the graph"),
@@ -237,10 +267,12 @@ async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description
     """
     Generate a Mermaid diagram for the call graph.
     """
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+    
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
     graph = server.analyzer.builder.export_mermaid_graph(highlight_fqns=fqns, llm_optimized=llm_optimized)
-    return MermaidResponse(graph=graph)
+    return MermaidResponse(graph=graph, analysis_status=analysis_status)
 
 
 class CleanupResponse(BaseModel):

@@ -4,3 +4,4 @@ chromadb_path: "./code_vectors_chroma"
 max_graph_depth: 3
 embedding_model: "multi-qa-MiniLM-L6-cos-v1"
 max_tokens: 256
+language: "typescript"
