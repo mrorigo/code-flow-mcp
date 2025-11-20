@@ -72,9 +72,11 @@ class MCPAnalyzer:
 
         # Initialize vector store if path exists
         if Path(config['chromadb_path']).exists():
-            self.vector_store = CodeVectorStore(persist_directory=config['chromadb_path'], 
-                                                embedding_model_name=config['embedding_model'] if config['embedding_model'] else 'all-MiniLM-L6-v2',
-                                                max_tokens=config['max_tokens'] if config.get('max_tokens') else 256)
+            self.vector_store = CodeVectorStore(
+                persist_directory=config['chromadb_path'],
+                embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
+                max_tokens=config.get('max_tokens', 256)
+            )
         else:
             logging.warning(f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization")
 

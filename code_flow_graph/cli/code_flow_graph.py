@@ -18,6 +18,24 @@ from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
 
+def resolve_embedding_model(model_name: str) -> str:
+    """
+    Resolve embedding model shorthand to actual model name.
+    
+    Args:
+        model_name: Either a shorthand ('fast', 'medium', 'accurate') or a specific model name
+        
+    Returns:
+        The actual SentenceTransformer model name
+    """
+    shortcuts = {
+        'fast': 'all-MiniLM-L6-v2',      # 384 dimensions, fastest
+        'medium': 'all-MiniLM-L12-v2',   # 384 dimensions, balanced
+        'accurate': 'all-mpnet-base-v2'  # 768 dimensions, most accurate
+    }
+    return shortcuts.get(model_name.lower(), model_name)
+
+
 class CodeGraphAnalyzer:
     """Main analyzer that orchestrates the entire pipeline."""
 
@@ -329,9 +347,11 @@ def main():
                         help="Generate a Mermaid graph for query results (requires --query).")
     parser.add_argument("--llm-optimized", action="store_true",
                         help="Generate Mermaid graph optimized for LLM token count (removes styling). Implies --mermaid.")
-    parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2",
-                        help="SentenceTransformer embedding model to use (default: all-MiniLM-L6-v2). "
-                             "See https://www.sbert.net/docs/pretrained_models.html for options.")
+    parser.add_argument("--embedding-model", default="fast",
+                        help="Embedding model to use. Shortcuts: 'fast' (all-MiniLM-L6-v2, 384-dim), "
+                             "'medium' (all-MiniLM-L12-v2, 384-dim), or 'accurate' (all-mpnet-base-v2, 768-dim). "
+                             "You can also specify any SentenceTransformer model name directly. Default: 'fast'. "
+                             "See https://www.sbert.net/docs/pretrained_models.html for more options.")
     parser.add_argument("--max-tokens", type=int, default=256,
                       help="Maximum tokens per chunk for embedding model (default: 256). Adjust based on model.")
 
@@ -355,9 +375,10 @@ def main():
         print("❌ Error: The --mermaid flag must be used with --query.", file=sys.stderr)
         sys.exit(1)
 
-
     try:
-        analyzer = CodeGraphAnalyzer(root_dir, args.language, args.embedding_model if 'embedding_model' in args else 'all-MiniLM-L6-v2', args.max_tokens if 'max_tokens' in args else 256)
+        # Resolve embedding model shorthand to actual model name
+        embedding_model = resolve_embedding_model(args.embedding_model)
+        analyzer = CodeGraphAnalyzer(root_dir, args.language, embedding_model, args.max_tokens)
 
         if args.no_analyze:
             print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")

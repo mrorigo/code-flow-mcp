@@ -170,6 +170,9 @@ This output is stripped of visual styling and uses short aliases for node IDs, w
 - `--no-analyze`: (Flag) Skips AST extraction and graph building. Requires `--query`. Assumes an existing vector store.
 - `--mermaid`: (Flag) Generates a Mermaid graph for query results. Requires `--query`.
 - `--llm-optimized`: (Flag) Generates Mermaid graph optimized for LLM token count (removes styling). Implies `--mermaid`.
+- `--embedding-model`: Embedding model to use. Shortcuts: `fast` (384-dim), `medium` (384-dim), or `accurate` (768-dim). Default: `fast`. See [Embedding Model Configuration](#embedding-model-configuration) for details.
+- `--max-tokens`: Maximum tokens per chunk for embedding model. Default: `256`. Increase for larger context windows (must match model max sequence length).
+
 
 #### Example Report Output
 
@@ -232,11 +235,65 @@ watch_directories: ["code_flow_graph"]  # Directories to monitor for changes
 ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analysis
 chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
-embedding_model: "all-MiniLM-L6-v2" # Embedding model to use
+embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use (see below)
+max_tokens: 256  # Maximum tokens per chunk for embedding model
 cleanup_interval_minutes: 30  # Background cleanup interval for stale references
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
+
+### Embedding Model Configuration
+
+CodeFlow uses [SentenceTransformers](https://www.sbert.net/) for semantic code search. You can choose between different embedding models to balance speed and accuracy:
+
+#### Available Models
+
+| Shorthand | Model Name | Dimensions | Speed | Use Case |
+|-----------|------------|------------|-------|----------|
+| `fast` | `all-MiniLM-L6-v2` | 384 | Fastest | Quick analysis, smaller codebases |
+| `medium` | `all-MiniLM-L12-v2` | 384 | Balanced | Good balance of speed and quality |
+| `accurate` | `all-mpnet-base-v2` | 768 | Slower | Detailed analysis, larger codebases |
+
+
+#### CLI Configuration
+
+Use the `--embedding-model` flag with either a shorthand or specific model name:
+
+```bash
+# Using shorthand (recommended)
+python -m code_flow_graph.cli.code_flow_graph . --embedding-model fast
+python -m code_flow_graph.cli.code_flow_graph . --embedding-model accurate
+
+# Using specific model name
+python -m code_flow_graph.cli.code_flow_graph . --embedding-model all-MiniLM-L6-v2
+```
+
+Adjust chunk size with `--max-tokens` (default: 256):
+
+```bash
+# Note: all models have max sequence length of 384 tokens
+python -m code_flow_graph.cli.code_flow_graph . --embedding-model accurate --max-tokens 384
+```
+
+#### MCP Server Configuration
+
+Configure in your YAML config file:
+
+```yaml
+# Fast configuration (default)
+embedding_model: "all-MiniLM-L6-v2"
+max_tokens: 256
+
+# Accurate configuration (max sequence length is 384)
+embedding_model: "all-mpnet-base-v2"
+max_tokens: 384
+```
+
+#### Important Notes
+
+- **Consistency**: Once a vector store is created with a specific embedding dimension (384 or 768), you must continue using models with the same dimension. CodeFlow will automatically detect and use the existing dimension.
+- **Performance**: 384-dim models are ~2x faster than 768-dim models with minimal accuracy loss for code search.
+- **Custom Models**: You can specify any SentenceTransformer model name. See the [full list](https://www.sbert.net/docs/pretrained_models.html).
 
 ## TypeScript Support
 
