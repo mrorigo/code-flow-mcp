@@ -727,20 +727,92 @@ class CallGraphBuilder:
             return self.export_mermaid_graph()
         return None
 
+    def _sanitize_mermaid_id(self, identifier: str) -> str:
+        """
+        Sanitizes an identifier to be valid for Mermaid node IDs.
+        Mermaid node IDs must be alphanumeric, start with a letter, and cannot contain reserved keywords.
+        """
+        # List of Mermaid reserved keywords that cannot be used as node IDs
+        mermaid_keywords = {
+            'graph', 'flowchart', 'subgraph', 'end', 'direction', 'class', 'classDef', 'style',
+            'linkStyle', 'click', 'call', 'callback', 'function', 'subgraph', 'accdesc', 'accdescr',
+            'accdesc:multiline', 'accdescr:multiline', 'title', 'acc', 'accdescr', 'acc:title',
+            'acc:descr', 'acc:descr:multiline', 'accdescr:multiline', 'LR', 'RL', 'TB', 'BT',
+            'TD', 'BR', 'BL', 'TR', 'TL', 'end', '=>', '->', '-->', '==>', '-.->', '==', 'linkStyle',
+            'style', 'click', 'href', 'target', 'default', 'stroke', 'stroke-width', 'fill',
+            'classDef', 'class', 'node', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+            'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+        }
+        
+        # Start with a clean identifier
+        sanitized = identifier
+        
+        # Replace problematic characters with underscores
+        sanitized = sanitized.replace('.', '_')
+        sanitized = sanitized.replace('-', '_')
+        sanitized = sanitized.replace('/', '_')
+        sanitized = sanitized.replace(':', '_')
+        sanitized = sanitized.replace(' ', '_')
+        sanitized = sanitized.replace('(', '_')
+        sanitized = sanitized.replace(')', '_')
+        sanitized = sanitized.replace('[', '_')
+        sanitized = sanitized.replace(']', '_')
+        sanitized = sanitized.replace('{', '_')
+        sanitized = sanitized.replace('}', '_')
+        sanitized = sanitized.replace('<', '_')
+        sanitized = sanitized.replace('>', '_')
+        sanitized = sanitized.replace('"', '_')
+        sanitized = sanitized.replace("'", '_')
+        sanitized = sanitized.replace('|', '_')
+        sanitized = sanitized.replace('!', '_')
+        sanitized = sanitized.replace('@', '_')
+        sanitized = sanitized.replace('#', '_')
+        sanitized = sanitized.replace('$', '_')
+        sanitized = sanitized.replace('%', '_')
+        sanitized = sanitized.replace('^', '_')
+        sanitized = sanitized.replace('&', '_')
+        sanitized = sanitized.replace('*', '_')
+        sanitized = sanitized.replace('+', '_')
+        sanitized = sanitized.replace('=', '_')
+        sanitized = sanitized.replace('?', '_')
+        sanitized = sanitized.replace('~', '_')
+        sanitized = sanitized.replace('`', '_')
+        
+        # Remove any remaining non-alphanumeric characters
+        import re
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', sanitized)
+        
+        # Ensure it starts with a letter or underscore
+        if not sanitized or not (sanitized[0].isalpha() or sanitized[0] == '_'):
+            sanitized = 'node_' + sanitized
+            
+        # Convert to lowercase to avoid case-sensitivity issues
+        sanitized = sanitized.lower()
+        
+        # If it's a reserved keyword, add a prefix
+        if sanitized in mermaid_keywords:
+            sanitized = 'func_' + sanitized
+            
+        # Ensure it's not empty after sanitization
+        if not sanitized.strip():
+            sanitized = 'node_' + str(abs(hash(identifier)) % 1000)
+            
+        return sanitized
+
     def _generate_short_alias(self, fqn: str, existing_aliases: Set[str]) -> str:
         """
         Generates a short, unique alias for an FQN.
         Prioritizes the function's simple name, then adds suffixes if needed.
         """
-        # Try simple name first
-        simple_name = fqn.split('.')[-1]
+        # Try simple name first, but sanitize it
+        simple_name = self._sanitize_mermaid_id(fqn.split('.')[-1])
         if simple_name not in existing_aliases:
             return simple_name
 
         # If simple name conflicts, try with a short prefix from the module
         parts = fqn.split('.')
         if len(parts) > 1:
-            module_prefix = parts[-2] # e.g., 'core' from 'code_flow_graph.core.func'
+            module_prefix = self._sanitize_mermaid_id(parts[-2]) # e.g., 'core' from 'code_flow_graph.core.func'
             alias_candidate = f"{module_prefix}_{simple_name}"
             if alias_candidate not in existing_aliases:
                 return alias_candidate
@@ -770,7 +842,7 @@ class CallGraphBuilder:
         if not self.functions and not self.edges:
             return "graph TD\n    No graph data available."
 
-        mermaid_lines = ["graph TD"]
+        mermaid_lines = []
         seen_nodes_in_graph = set()
 
         relevant_fqns = set()
@@ -802,7 +874,8 @@ class CallGraphBuilder:
             if not func:
                 continue
 
-            node_id = fqn.replace('.', '__').replace('-', '_').replace('/', '__').replace(':', '_')
+            # Use proper sanitization for node IDs
+            node_id = self._sanitize_mermaid_id(fqn)
 
             if llm_optimized:
                 # Use a shorter, human-readable alias if optimized for LLM
@@ -822,7 +895,7 @@ class CallGraphBuilder:
             if not node_id_for_mermaid.strip(): # Fallback for empty ID
                  node_id_for_mermaid = f"node_{abs(hash(fqn))}"
 
-            node_definitions.append(f'{node_id_for_mermaid}("{node_label}")')
+            node_definitions.append(f'    {node_id_for_mermaid}("{node_label}")')
             seen_nodes_in_graph.add(fqn)
 
             if not llm_optimized:
@@ -835,30 +908,32 @@ class CallGraphBuilder:
                     styles.append("stroke-width:2px")
 
                 if styles:
-                    style_commands.append(f'style {node_id_for_mermaid} {",".join(styles)}')
+                    style_commands.append(f'    style {node_id_for_mermaid} {",".join(styles)}')
 
 
         # 2. Define Edges
         for edge in self.edges:
             if edge.caller in seen_nodes_in_graph and edge.callee in seen_nodes_in_graph:
-                caller_id_for_mermaid = fqn_to_alias.get(edge.caller, edge.caller.replace('.', '__')) # Fallback if alias not found
-                callee_id_for_mermaid = fqn_to_alias.get(edge.callee, edge.callee.replace('.', '__')) # Fallback if alias not found
+                caller_id_for_mermaid = fqn_to_alias.get(edge.caller, self._sanitize_mermaid_id(edge.caller)) # Fallback if alias not found
+                callee_id_for_mermaid = fqn_to_alias.get(edge.callee, self._sanitize_mermaid_id(edge.callee)) # Fallback if alias not found
 
                 edge_label = f'Line {edge.line_number}'
 
-                edge_definitions.append(f'{caller_id_for_mermaid} --> |{edge_label}| {callee_id_for_mermaid}')
+                edge_definitions.append(f'    {caller_id_for_mermaid} --> |{edge_label}| {callee_id_for_mermaid}')
 
         # Assemble the final Mermaid graph string
+        result_lines = ["graph TD"]
+        
         if llm_optimized and alias_mapping_comments:
-            mermaid_lines.extend(alias_mapping_comments) # Add alias definitions as comments
-            mermaid_lines.append("") # Add a blank line for readability before the graph
+            result_lines.extend(alias_mapping_comments) # Add alias definitions as comments
+            result_lines.append("") # Add a blank line for readability before the graph
 
-        mermaid_lines.extend(node_definitions)
-        mermaid_lines.extend(edge_definitions)
+        result_lines.extend(node_definitions)
+        result_lines.extend(edge_definitions)
         if style_commands:
-            mermaid_lines.extend(style_commands)
+            result_lines.extend(style_commands)
 
-        return "graph TD\n    " + "\n    ".join(mermaid_lines)
+        return "\n".join(result_lines)
 
     def print_summary(self) -> None:
         """Print a human-readable summary of the call graph."""
