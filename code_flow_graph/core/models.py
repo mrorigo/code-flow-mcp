@@ -54,3 +54,11 @@ class ClassElement(CodeElement):
     # --- NEW ATTRIBUTES ---
     decorators: List[Dict[str, Any]] = field(default_factory=list) # Class decorators
     hash_body: Optional[str] = None # Hash of the class's source body
+
+@dataclass
+class StructuredDataElement(CodeElement):
+    """Represents a chunk of structured data (JSON/YAML)."""
+    json_path: str = ""
+    value_type: str = ""
+    key_name: str = ""
+    content: str = "" # The string representation of the chunk

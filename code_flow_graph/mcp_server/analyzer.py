@@ -11,7 +11,9 @@ from watchdog.events import FileSystemEventHandler
 
 
 from code_flow_graph.core.python_extractor import PythonASTExtractor
+from code_flow_graph.core.python_extractor import PythonASTExtractor
 from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
+from code_flow_graph.core.structured_extractor import StructuredDataExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
 
@@ -29,9 +31,9 @@ class WatcherHandler(FileSystemEventHandler):
         # Get supported file extensions based on language
         language = self.analyzer.config.get('language', 'python').lower()
         if language == 'typescript':
-            self.supported_extensions = ['.py', '.ts', '.tsx', '.js', '.jsx']  # Support both for mixed projects
+            self.supported_extensions = ['.py', '.ts', '.tsx', '.js', '.jsx', '.json', '.yaml', '.yml']  # Support both for mixed projects
         else:
-            self.supported_extensions = ['.py']
+            self.supported_extensions = ['.py', '.json', '.yaml', '.yml']
 
     def on_modified(self, event):
         if any(event.src_path.endswith(ext) for ext in self.supported_extensions):
@@ -59,7 +61,14 @@ class MCPAnalyzer:
         else:
             self.extractor = PythonASTExtractor()
         
+        self.extractor = PythonASTExtractor()
+        
         self.extractor.project_root = root
+        
+        # Initialize structured data extractor
+        ignored_filenames = set(config.get('ignored_filenames', []))
+        self.structured_extractor = StructuredDataExtractor(ignored_filenames=ignored_filenames)
+        
         self.builder = CallGraphBuilder()
         self.builder.project_root = root
         self.vector_store: Optional[CodeVectorStore] = None
@@ -193,7 +202,16 @@ class MCPAnalyzer:
             logging.info(f"Found {len(elements)} elements in {watch_dir}")
             all_elements.extend(elements)
 
-        logging.info(f"Total elements extracted from {len(self.config['watch_directories'])} directories: {len(all_elements)}")
+            # Extract structured data
+            logging.info(f"Extracting structured data from directory: {watch_dir}")
+            structured_elements = await asyncio.to_thread(self.structured_extractor.extract_from_directory, Path(watch_dir))
+            logging.info(f"Found {len(structured_elements)} structured elements in {watch_dir}")
+            
+            # Add structured elements to vector store immediately (they don't need graph building)
+            if self.vector_store and structured_elements:
+                await asyncio.to_thread(self.vector_store.add_structured_elements_batch, structured_elements)
+
+        logging.info(f"Total code elements extracted from {len(self.config['watch_directories'])} directories: {len(all_elements)}")
 
         # Build call graph with all elements
         self.builder.build_from_elements(all_elements)
@@ -259,6 +277,15 @@ class MCPAnalyzer:
     async def _incremental_update(self, file_path: str):
         logging.info(f"Starting incremental update for {file_path}")
         await asyncio.sleep(1)  # Debounce stub
+        
+        # Handle structured data files
+        if any(file_path.endswith(ext) for ext in ['.json', '.yaml', '.yml']):
+            elements = await asyncio.to_thread(self.structured_extractor.extract_from_file, Path(file_path))
+            logging.info(f"Extracted {len(elements)} structured elements from {file_path}")
+            if self.vector_store:
+                await asyncio.to_thread(self.vector_store.add_structured_elements_batch, elements)
+            return
+
         elements = await asyncio.to_thread(self.extractor.extract_from_file, Path(file_path))
         logging.info(f"Extracted {len(elements)} elements from {file_path}")
         # Update builder/store incrementally (add new, skip same hash); if delete, remove by fqn.

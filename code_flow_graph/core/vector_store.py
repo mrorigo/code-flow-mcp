@@ -15,6 +15,7 @@ import logging
 
 # Import the specific, enriched data types from the call graph builder
 from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
+from code_flow_graph.core.models import StructuredDataElement
 
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""
@@ -458,26 +459,95 @@ class CodeVectorStore:
 
         return doc_ids
 
-    def query_functions(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
-        """
-        Query for functions using semantic search with automatic chunk grouping.
+    def add_structured_element(self, element: StructuredDataElement) -> str:
+        """Add a structured data element to the vector store."""
+        document = element.content
+        embedding = self.embedding_model.encode([document]).tolist()[0]
         
-        This method now automatically groups chunks by fully_qualified_name and returns
-        complete documents reconstructed from all chunks belonging to each function.
-        This solves the document fragmentation problem where searches would only return
-        partial chunks instead of complete original documents.
+        metadata = {
+            "type": "structured_data",
+            "fully_qualified_name": element.json_path,
+            "name": element.key_name,
+            "file_path": element.file_path,
+            "line_start": element.line_start,
+            "line_end": element.line_end,
+            "json_path": element.json_path,
+            "value_type": element.value_type,
+            "key_name": element.key_name,
+            "file_type": element.metadata.get('file_type', 'unknown'),
+            "chunk_index": 0,
+            "total_chunks": 1
+        }
+        
+        doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{element.file_path}:{element.json_path}"))
+        
+        self.collection.upsert(
+            documents=[document],
+            embeddings=[embedding],
+            metadatas=[metadata],
+            ids=[doc_id]
+        )
+        return doc_id
 
+    def add_structured_elements_batch(self, elements: List[StructuredDataElement], batch_size: int = 100) -> List[str]:
+        """Add multiple structured data elements in batches."""
+        doc_ids = []
+        for i in range(0, len(elements), batch_size):
+            batch_elements = elements[i:i + batch_size]
+            batch_documents = []
+            batch_embeddings = []
+            batch_metadatas = []
+            batch_ids = []
+            
+            for element in batch_elements:
+                doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{element.file_path}:{element.json_path}"))
+                doc_ids.append(doc_id)
+                
+                batch_documents.append(element.content)
+                
+                metadata = {
+                    "type": "structured_data",
+                    "fully_qualified_name": element.json_path,
+                    "name": element.key_name,
+                    "file_path": element.file_path,
+                    "line_start": element.line_start,
+                    "line_end": element.line_end,
+                    "json_path": element.json_path,
+                    "value_type": element.value_type,
+                    "key_name": element.key_name,
+                    "file_type": element.metadata.get('file_type', 'unknown'),
+                    "chunk_index": 0,
+                    "total_chunks": 1
+                }
+                batch_metadatas.append(metadata)
+                batch_ids.append(doc_id)
+            
+            if batch_documents:
+                embeddings = self.embedding_model.encode(batch_documents).tolist()
+                batch_embeddings.extend(embeddings)
+                
+                self.collection.upsert(
+                    documents=batch_documents,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metadatas,
+                    ids=batch_ids
+                )
+                
+        return doc_ids
+
+    def query_codebase(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
+        """
+        Query the codebase (functions and structured data) using semantic search.
+        
         Args:
-            query: Search query (e.g., "functions that handle user authentication").
+            query: Search query.
             n_results: Number of complete documents to return.
-            where_filter: Optional ChromaDB filter (e.g., {"is_entry_point": True}).
+            where_filter: Optional ChromaDB filter.
 
         Returns:
-            List of complete function documents with metadata and distance.
-            Each document is reconstructed from all its chunks using the reference ID
-            (fully_qualified_name) to link related chunks together.
+            List of documents with metadata and distance.
         """
-        effective_filter = {"type": "function"}
+        effective_filter = {}
         if where_filter:
             effective_filter.update(where_filter)
 

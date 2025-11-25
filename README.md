@@ -24,6 +24,11 @@ The tool provides three main interfaces:
   - Locally declared variables
   - Inferred external library/module dependencies
   - Source body hash for efficient change detection
+  - Source body hash for efficient change detection
+- **Structured Data Indexing (JSON/YAML):**
+  - Parses and indexes configuration files (`.json`, `.yaml`, `.yml`).
+  - Enables semantic search for configuration keys and values (e.g., "database port", "api url").
+  - Flattens hierarchical data into semantic chunks for precise retrieval.
 - **Unified Interface:** Single API that automatically detects and analyzes both Python and TypeScript codebases without manual language specification.
 - **Intelligent Call Graph Generation:**
   - Builds a graph of function-to-function calls.
@@ -233,6 +238,7 @@ The MCP server uses a YAML configuration file (default: `code_flow_graph/mcp_ser
 ```yaml
 watch_directories: ["code_flow_graph"]  # Directories to monitor for changes
 ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analysis
+ignored_filenames: ["package-lock.json", "yarn.lock"] # Specific files to ignore (e.g. lockfiles)
 chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
 embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use (see below)
@@ -591,7 +597,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - ✅ **Unified Interface Module**: Single API for automatic Python and TypeScript detection and analysis
 - ✅ **Factory Functions**: `create_extractor()` and `get_language_from_extension()` for simplified usage
+- ✅ **Unified Interface Module**: Single API for automatic Python and TypeScript detection and analysis
+- ✅ **Factory Functions**: `create_extractor()` and `get_language_from_extension()` for simplified usage
 - ✅ **Backward Compatibility**: Existing code continues to work with new modular structure
+- ✅ **Structured Data Indexing**: Support for JSON and YAML configuration files with semantic search
+
 
 ## Acknowledgments
 

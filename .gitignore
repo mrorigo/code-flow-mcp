@@ -1,2 +1,4 @@
 .venv
 **/__pycache__
+code_vectors_chroma
+uv.lock
