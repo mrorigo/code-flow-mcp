@@ -169,7 +169,8 @@ This output is stripped of visual styling and uses short aliases for node IDs, w
 
 #### Command Line Arguments
 
-- `<directory>`: (Positional, optional) Path to the codebase directory (default: current directory `.`). This is also the base for the persistent ChromaDB store (`<directory>/code_vectors_chroma/`).
+- `<directory>`: (Positional, optional) Path to the codebase directory. If provided, overrides `watch_directories` in config. If not provided, uses `watch_directories` from config or defaults to current directory.
+- `--config`: Path to configuration YAML file (default: `codeflow.config.yaml`).
 - `--output`: Output file for the analysis report (default: `code_analysis_report.json`). *Only used during full analysis.*
 - `--query <QUESTION>`: Perform a semantic query.
 - `--no-analyze`: (Flag) Skips AST extraction and graph building. Requires `--query`. Assumes an existing vector store.
@@ -201,6 +202,8 @@ Or with a custom configuration file:
 python -m code_flow_graph.mcp_server --config path/to/config.yaml
 ```
 
+**Note**: The server looks for `codeflow.config.yaml` in the current directory by default.
+
 **Background Analysis**: The server starts immediately and accepts connections while analyzing the codebase in the background. During the initial analysis, tools may return empty or partial results as the codebase is being indexed. This is normal behavior for first-time scans. Use the `ping` tool to check analysis progress.
 
 #### Available Tools
@@ -231,19 +234,18 @@ This performs a handshake and tests basic tool functionality.
 
 ## Configuration
 
-### MCP Server Configuration
+### Configuration
 
-The MCP server uses a YAML configuration file (default: `code_flow_graph/mcp_server/config/default.yaml`):
+Both the CLI tool and MCP server share a central configuration system. The default configuration file is `codeflow.config.yaml` in the current working directory.
 
 ```yaml
-watch_directories: ["code_flow_graph"]  # Directories to monitor for changes
-ignored_patterns: ["venv", "**/__pycache__"]  # Patterns to ignore during analysis
-ignored_filenames: ["package-lock.json", "yarn.lock"] # Specific files to ignore (e.g. lockfiles)
+watch_directories: ["."]  # Directories to analyze (default: current directory)
+ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]  # Patterns to ignore
 chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
-embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use (see below)
-max_tokens: 256  # Maximum tokens per chunk for embedding model
-cleanup_interval_minutes: 30  # Background cleanup interval for stale references
+embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use
+max_tokens: 256  # Maximum tokens per chunk
+language: "python" # Default language ("python" or "typescript")
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.

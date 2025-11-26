@@ -1,9 +1,9 @@
 import argparse
-import yaml
 import logging
 import sys
 import asyncio
 from code_flow_graph.mcp_server.server import server
+from code_flow_graph.core.config import load_config
 
 def main():
     parser = argparse.ArgumentParser(
@@ -12,17 +12,24 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default="code_flow_graph/mcp_server/config/default.yaml",
-        help="Path to configuration YAML file (default: code_flow_graph/mcp_server/config/default.yaml)"
+        help="Path to configuration YAML file (default: codeflow.config.yaml)"
     )
+    # Add other overrides if useful, e.g. --port, --debug
+    
     args = parser.parse_args()
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    
+    # Load configuration
+    # We pass args as dict, filtering out None
+    cli_args = {k: v for k, v in vars(args).items() if v is not None}
+    config = load_config(config_path=args.config, cli_args=cli_args)
+    
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
-    # Pass config to server for analyzer initialization
-    server.config = config
+    # Pass config dict to server for analyzer initialization
+    # The analyzer expects a dict, so we dump the pydantic model
+    server.config = config.model_dump()
 
+    logging.info(f"Server starting with config: {server.config}")
     logging.info("Server running on stdio")
     try:
         asyncio.run(server.run_stdio_async())

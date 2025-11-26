@@ -329,12 +329,11 @@ def main():
         description="Analyze a codebase to build a call graph and identify entry points. "
                     "Optionally query an existing analysis."
     )
-    parser.add_argument("directory", nargs='?', default='.',
-                        help="Path to codebase directory (default: current directory). "
-                             "This directory is also used to locate the vector store "
-                             "(e.g., <directory>/code_vectors_chroma/).")
-    parser.add_argument("--language", choices=["python", "typescript"], default="python",
-                        help="Programming language of the codebase")
+    parser.add_argument("directory", nargs='?', default=None,
+                        help="Path to codebase directory. If not provided, uses 'watch_directories' from config or defaults to current directory.")
+    parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
+    parser.add_argument("--language", choices=["python", "typescript"],
+                        help="Programming language of the codebase (overrides config)")
     parser.add_argument("--output", default="code_analysis_report.json",
                         help="Output file for the analysis report (only used when performing analysis).")
     parser.add_argument("--query",
@@ -347,17 +346,39 @@ def main():
                         help="Generate a Mermaid graph for query results (requires --query).")
     parser.add_argument("--llm-optimized", action="store_true",
                         help="Generate Mermaid graph optimized for LLM token count (removes styling). Implies --mermaid.")
-    parser.add_argument("--embedding-model", default="fast",
+    parser.add_argument("--embedding-model",
                         help="Embedding model to use. Shortcuts: 'fast' (all-MiniLM-L6-v2, 384-dim), "
                              "'medium' (all-MiniLM-L12-v2, 384-dim), or 'accurate' (all-mpnet-base-v2, 768-dim). "
-                             "You can also specify any SentenceTransformer model name directly. Default: 'fast'. "
-                             "See https://www.sbert.net/docs/pretrained_models.html for more options.")
-    parser.add_argument("--max-tokens", type=int, default=256,
-                      help="Maximum tokens per chunk for embedding model (default: 256). Adjust based on model.")
+                             "Default: 'fast'.")
+    parser.add_argument("--max-tokens", type=int,
+                      help="Maximum tokens per chunk for embedding model (default: 256).")
 
     args = parser.parse_args()
 
-    root_dir = Path(args.directory).resolve()
+    # Prepare overrides
+    cli_overrides = {}
+    if args.directory:
+        cli_overrides['watch_directories'] = [str(Path(args.directory).resolve())]
+    if args.language:
+        cli_overrides['language'] = args.language
+    if args.embedding_model:
+        cli_overrides['embedding_model'] = args.embedding_model
+    if args.max_tokens:
+        cli_overrides['max_tokens'] = args.max_tokens
+
+    # Load config
+    from code_flow_graph.core.config import load_config
+    config = load_config(config_path=args.config, cli_args=cli_overrides)
+    
+    # Determine root directory
+    # If watch_directories has multiple, CLI currently only supports one root for analysis context usually.
+    # But the analyzer supports multiple.
+    # However, for the CLI tool's "directory" arg, it usually implies the root.
+    # Let's take the first watch directory as the root if not explicitly provided.
+    if config.watch_directories:
+        root_dir = Path(config.watch_directories[0]).resolve()
+    else:
+        root_dir = Path('.').resolve()
 
     if not args.no_analyze and not root_dir.is_dir():
         print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
@@ -377,10 +398,24 @@ def main():
 
     try:
         # Resolve embedding model shorthand to actual model name
-        embedding_model = resolve_embedding_model(args.embedding_model)
-        analyzer = CodeGraphAnalyzer(root_dir, args.language, embedding_model, args.max_tokens)
+        # Config already has the model name (default or overridden), but we need to resolve shorthand if it came from CLI or Config
+        # The resolve_embedding_model function handles names too, so it's safe to pass the full name.
+        embedding_model = resolve_embedding_model(config.embedding_model)
+        
+        # Initialize Analyzer with config values
+        # Note: CodeGraphAnalyzer signature might need update or we pass individual args
+        # The current signature is: __init__(self, root_directory, language, embedding_model, max_tokens)
+        # We can use the config values.
+        analyzer = CodeGraphAnalyzer(
+            root_directory=root_dir, 
+            language=config.language, 
+            embedding_model=embedding_model, 
+            max_tokens=config.max_tokens
+        )
 
         if args.no_analyze:
+            # We need to make sure we look in the right place for vector store
+            # The analyzer init sets it up based on root_dir.
             print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")
             analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
         elif args.query:
