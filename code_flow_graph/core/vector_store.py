@@ -174,6 +174,7 @@ class CodeVectorStore:
                 "catches_exceptions": json.dumps(node.catches_exceptions),
                 "local_variables_declared": json.dumps(node.local_variables_declared),
                 "hash_body": node.hash_body,
+                "summary": node.summary,
                 "chunk_index": i,
                 "total_chunks": len(chunks),
             }
@@ -299,6 +300,7 @@ class CodeVectorStore:
                         "catches_exceptions": json.dumps(node.catches_exceptions),
                         "local_variables_declared": json.dumps(node.local_variables_declared),
                         "hash_body": node.hash_body,
+                        "summary": node.summary,
                         "chunk_index": j,
                         "total_chunks": len(chunks),
                     }
@@ -359,7 +361,9 @@ class CodeVectorStore:
             f"Decorators: {decorators_str}",
             f"Catches: {catches_str}",
             f"Locals: {local_vars_str}",
+            f"Locals: {local_vars_str}",
             f"Doc: {node.docstring[:150] + '...' if node.docstring and len(node.docstring) > 150 else (node.docstring or 'None')}",
+            f"Summary: {node.summary}" if node.summary else "",
             f"Code: {func_snippet[:400]}..."
         ]
 
@@ -748,3 +752,70 @@ class CodeVectorStore:
         return {
             "total_documents": count
         }
+
+    def update_function_node(self, node: FunctionNode, full_file_source: str) -> List[str]:
+        """
+        Update an existing function node in the vector store, typically to add a summary.
+        This effectively overwrites the existing documents for this function.
+        
+        Args:
+            node: The FunctionNode with updated data (e.g., summary).
+            full_file_source: The full source code of the file.
+            
+        Returns:
+            List of new document IDs.
+        """
+        # First, find existing documents to delete them (to avoid duplicates if chunking changes, though unlikely for just metadata)
+        # Actually, upsert handles replacement by ID. But since IDs are deterministic based on FQN and chunk index,
+        # and adding a summary might change the document content (if we include summary in content) or just metadata.
+        # If we include summary in document content, chunking might change.
+        # Safer to delete old chunks first if we can identify them, but upsert is usually fine if chunk count is same.
+        # However, if summary is added to content, document length changes, so chunk count might change.
+        
+        # Strategy: Delete all chunks for this FQN first, then add fresh.
+        try:
+            self.collection.delete(
+                where={"fully_qualified_name": node.fully_qualified_name}
+            )
+        except Exception as e:
+            logging.warning(f"Error deleting existing chunks for {node.fully_qualified_name} during update: {e}")
+            
+        # Now add as new
+        return self.add_function_node(node, full_file_source)
+
+    def get_nodes_missing_summary(self) -> List[str]:
+        """
+        Retrieve FQNs of function nodes that are indexed but lack a summary.
+        
+        Returns:
+            List of fully qualified names.
+        """
+        try:
+            # Query for documents where type is function and summary is missing (or null/empty)
+            # ChromaDB filtering limitations might apply. 
+            # We can query for all functions and check metadata in python if needed, 
+            # or use where={"$and": [{"type": "function"}, {"summary": {"$eq": None}}]} if supported.
+            # ChromaDB might not support explicit NULL checks easily in all versions.
+            # A safer approach for now: get all functions, check metadata. 
+            # For large codebases this is heavy. 
+            # Optimization: Can we filter by existence? 
+            # Let's try to get all function metadatas and filter in python.
+            
+            results = self.collection.get(
+                where={"type": "function"},
+                include=["metadatas"]
+            )
+            
+            missing_summary_fqns = set()
+            if results and results['metadatas']:
+                for meta in results['metadatas']:
+                    if not meta.get('summary'):
+                        fqn = meta.get('fully_qualified_name')
+                        if fqn:
+                            missing_summary_fqns.add(fqn)
+                            
+            return list(missing_summary_fqns)
+            
+        except Exception as e:
+            logging.error(f"Error identifying nodes missing summary: {e}")
+            return []

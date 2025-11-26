@@ -16,6 +16,7 @@ from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
 from code_flow_graph.core.structured_extractor import StructuredDataExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
+from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 class AnalysisState(Enum):
     """Enum representing the current state of code analysis."""
@@ -93,6 +94,20 @@ class MCPAnalyzer:
         self.cleanup_interval = config.get('cleanup_interval_minutes', 30)  # Default: 30 minutes
         self.cleanup_task = None
         self.cleanup_shutdown_event = threading.Event()
+
+        # Initialize Summary Processor if enabled
+        self.summary_processor = None
+        if config.get('summary_generation_enabled', False):
+            logging.info("Summary generation enabled, initializing SummaryProcessor")
+            self.summary_generator = SummaryGenerator(config)
+            self.summary_processor = SummaryProcessor(
+                generator=self.summary_generator,
+                builder=self.builder,
+                vector_store=self.vector_store,
+                concurrency=config.get('llm_config', {}).get('concurrency', 5)
+            )
+        else:
+            logging.info("Summary generation disabled")
 
     def start_background_cleanup(self) -> None:
         """
@@ -189,6 +204,11 @@ class MCPAnalyzer:
         
         # Create the background task
         self.analysis_task = asyncio.create_task(run_analysis())
+        
+        # Start summary processor if enabled
+        if self.summary_processor:
+            self.summary_processor.start()
+            
         logging.info("Analysis task started in background")
 
     async def analyze(self) -> None:
@@ -235,6 +255,21 @@ class MCPAnalyzer:
 
         # Start background cleanup task
         self.start_background_cleanup()
+
+        # Enqueue missing summaries if processor is active
+        if self.summary_processor and self.vector_store:
+            logging.info("Checking for nodes missing summaries...")
+            missing_fqns = await asyncio.to_thread(self.vector_store.get_nodes_missing_summary)
+            if missing_fqns:
+                logging.info(f"Found {len(missing_fqns)} nodes missing summaries, enqueueing...")
+                for fqn in missing_fqns:
+                    self.summary_processor.enqueue(fqn)
+            
+            # Also enqueue all newly added functions from this analysis run
+            # (Optimization: get_nodes_missing_summary might cover this if we did it after population)
+            # But since we just populated, they are likely missing summaries unless they were already there.
+            # Actually, get_nodes_missing_summary is the source of truth.
+            pass
 
     def _populate_vector_store(self) -> None:
         """Populate the vector store with functions and edges from the builder."""
@@ -299,6 +334,10 @@ class MCPAnalyzer:
                 with open(element.file_path, 'r', encoding='utf-8') as f:
                     source = f.read()
                 self.vector_store.add_function_node(element, source)
+                
+                # Enqueue for summarization if enabled
+                if self.summary_processor:
+                    self.summary_processor.enqueue(element.fqn)
 
     async def cleanup_stale_references(self) -> Dict[str, Any]:
         """
@@ -322,3 +361,13 @@ class MCPAnalyzer:
         if self.observer:
             self.observer.stop()
             self.observer.join()
+            
+        # Stop summary processor
+        if self.summary_processor:
+            # We need to run async stop in a sync context or fire and forget
+            # Since shutdown is sync, we can try to run it if loop is running
+            try:
+                if self.loop and self.loop.is_running():
+                    asyncio.run_coroutine_threadsafe(self.summary_processor.stop(), self.loop)
+            except Exception as e:
+                logging.error(f"Error stopping summary processor: {e}")

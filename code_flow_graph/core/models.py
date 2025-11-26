@@ -42,6 +42,7 @@ class FunctionElement(CodeElement):
     catches_exceptions: List[str] = field(default_factory=list) # e.g., ['ValueError', 'IOError']
     local_variables_declared: List[str] = field(default_factory=list) # Variables declared within the function
     hash_body: Optional[str] = None # Hash of the function's source body for change detection
+    summary: Optional[str] = None # Natural language summary of the function
 
 @dataclass
 class ClassElement(CodeElement):
@@ -54,6 +55,7 @@ class ClassElement(CodeElement):
     # --- NEW ATTRIBUTES ---
     decorators: List[Dict[str, Any]] = field(default_factory=list) # Class decorators
     hash_body: Optional[str] = None # Hash of the class's source body
+    summary: Optional[str] = None # Natural language summary of the class
 
 @dataclass
 class StructuredDataElement(CodeElement):

@@ -62,6 +62,7 @@ class MetadataResponse(BaseModel):
     catches_exceptions: List[str]
     local_variables_declared: List[str]
     hash_body: Optional[str]
+    summary: Optional[str]
     analysis_status: Optional[str] = None
 
 
@@ -175,6 +176,7 @@ def format_search_results_as_markdown(results: list[dict]) -> str:
             markdown += f"- **Catches**: {', '.join(metadata.get('catches_exceptions', []))}\n" if metadata.get('catches_exceptions') else ""
             markdown += f"- **Local Variables**: {', '.join(metadata.get('local_variables_declared', []))}\n"
             markdown += f"- **Has Docstring**: {metadata.get('has_docstring', 'N/A')}\n"
+            markdown += f"- **Summary**: {metadata.get('summary', 'N/A')}\n"
             # markdown += f"- **Hash Body**: {metadata.get('hash_body', 'N/A')}\n"
             markdown += f"- **Document**: {result.get('document', 'N/A')}\n"
         markdown += "\n"
