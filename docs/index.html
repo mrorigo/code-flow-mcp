@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeFlow - Cognitive Load Optimized Code Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8', // Sky 400
+                            500: '#0ea5e9', // Sky 500
+                            600: '#0284c7', // Sky 600
+                            900: '#0c4a6e', // Sky 900
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.5s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .code-glow {
+            box-shadow: 0 0 50px -12px rgba(14, 165, 233, 0.25);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-300 antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 top-0 border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-2">
+                    <div
+                        class="w-8 h-8 bg-gradient-to-br from-brand-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+                        C</div>
+                    <span class="font-bold text-white text-lg tracking-tight">CodeFlow</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-8">
+                        <a href="#features"
+                            class="hover:text-white transition-colors px-3 py-2 rounded-md text-sm font-medium">Features</a>
+                        <a href="#how-it-works"
+                            class="hover:text-white transition-colors px-3 py-2 rounded-md text-sm font-medium">How it
+                            Works</a>
+                        <a href="#installation"
+                            class="hover:text-white transition-colors px-3 py-2 rounded-md text-sm font-medium">Install</a>
+                        <a href="https://github.com/mrorigo/code-flow-mcp"
+                            class="text-white bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill-rule="evenodd"
+                                    d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                                    clip-rule="evenodd"></path>
+                            </svg>
+                            GitHub
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="relative pt-32 pb-20 sm:pt-40 sm:pb-24 overflow-hidden">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-7xl pointer-events-none">
+            <div class="absolute top-20 left-1/4 w-72 h-72 bg-brand-500/20 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-20 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+        </div>
+
+        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center z-10">
+            <div
+                class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700 text-sm text-brand-400 mb-8 animate-fade-in">
+                <span class="relative flex h-2 w-2">
+                    <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
+                </span>
+                v0.2.0 Now Available
+            </div>
+
+            <h1 class="text-5xl sm:text-7xl font-extrabold text-white tracking-tight mb-8 animate-slide-up">
+                Understand Complex <br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-purple-400">Codebases in
+                    Seconds</span>
+            </h1>
+
+            <p class="mt-4 max-w-2xl mx-auto text-xl text-slate-400 mb-10 animate-slide-up"
+                style="animation-delay: 0.1s;">
+                CodeFlow is a powerful code analysis tool for developers and AI agents. Generate call graphs, perform
+                semantic search, and reduce cognitive load with a persistent vector store.
+            </p>
+
+            <div class="flex flex-col sm:flex-row justify-center gap-4 animate-slide-up" style="animation-delay: 0.2s;">
+                <a href="#installation"
+                    class="px-8 py-4 bg-brand-600 hover:bg-brand-500 text-white rounded-lg font-semibold text-lg transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2">
+                    Get Started
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                    </svg>
+                </a>
+                <a href="https://github.com/mrorigo/code-flow-mcp"
+                    class="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg font-semibold text-lg transition-all flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path fill-rule="evenodd"
+                            d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    View on GitHub
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Section -->
+    <div class="border-y border-white/5 bg-slate-900/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div
+                class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10">
+                <div class="p-4">
+                    <div class="text-4xl font-bold text-white mb-2">8.6s</div>
+                    <div class="text-sm text-slate-400 uppercase tracking-wider">Indexing Time (40k LOC)</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-4xl font-bold text-brand-400 mb-2">80%</div>
+                    <div class="text-sm text-slate-400 uppercase tracking-wider">Context Reduction</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-4xl font-bold text-white mb-2">100%</div>
+                    <div class="text-sm text-slate-400 uppercase tracking-wider">Local & Private</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Grid -->
+    <div id="features" class="py-24 bg-slate-950">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl font-bold text-white mb-4">Built for Modern Development</h2>
+                <p class="text-slate-400 max-w-2xl mx-auto">Everything you need to navigate, understand, and document
+                    complex codebases efficiently.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Feature 1 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                    <div
+                        class="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
+                            </path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Deep AST Extraction</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Rich metadata extraction for Python & TypeScript.
+                        Understands classes, functions, and dependencies.</p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                    <div
+                        class="w-12 h-12 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Semantic Search</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Query your code with natural language. Ask "Where
+                        is auth handled?" and get instant answers.</p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                    <div
+                        class="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">MCP Server</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Ready-to-use Model Context Protocol integration.
+                        Connect seamlessly with AI assistants and IDEs.</p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                    <div
+                        class="w-12 h-12 bg-orange-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-orange-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129">
+                            </path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Multi-language</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Unified API that automatically detects and
+                        analyzes both Python and TypeScript codebases.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP Server Section -->
+    <div id="how-it-works" class="py-24 bg-slate-900 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Powering the Next Generation of AI Agents</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        CodeFlow's MCP Server provides a standardized interface for LLMs to interact with your code.
+                        Give your AI agents the ability to navigate, search, and understand complex project structures
+                        autonomously.
+                    </p>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-start gap-3">
+                            <div class="p-1 bg-brand-500/10 rounded">
+                                <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-medium">Semantic Search Tool</h4>
+                                <p class="text-slate-500 text-sm">Let agents find code by meaning, not just keywords.
+                                </p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <div class="p-1 bg-brand-500/10 rounded">
+                                <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z">
+                                    </path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-medium">Call Graph Analysis</h4>
+                                <p class="text-slate-500 text-sm">Agents can trace execution paths and dependencies.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <div class="p-1 bg-brand-500/10 rounded">
+                                <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
+                                    </path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-medium">Rich AST Metadata</h4>
+                                <p class="text-slate-500 text-sm">Expose function complexity, decorators, and types to
+                                    the AI.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="lg:w-1/2 w-full">
+                    <div
+                        class="rounded-xl overflow-hidden bg-[#1e1e1e] border border-slate-700 shadow-2xl code-glow transform hover:scale-[1.02] transition-transform duration-300">
+                        <div class="flex items-center justify-between px-4 py-3 bg-[#252526] border-b border-slate-700">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            </div>
+                            <div class="text-xs text-slate-500 font-mono">MCP Protocol Exchange</div>
+                        </div>
+                        <div class="p-6 font-mono text-sm leading-relaxed overflow-x-auto">
+                            <div class="text-slate-500 mb-2">// 1. AI Assistant requests tool execution</div>
+                            <div class="text-purple-400">{</div>
+                            <div class="pl-4">
+                                <span class="text-blue-400">"method"</span>: <span
+                                    class="text-orange-300">"tools/call"</span>,
+                            </div>
+                            <div class="pl-4">
+                                <span class="text-blue-400">"params"</span>: {
+                            </div>
+                            <div class="pl-8">
+                                <span class="text-blue-400">"name"</span>: <span
+                                    class="text-orange-300">"semantic_search"</span>,
+                            </div>
+                            <div class="pl-8">
+                                <span class="text-blue-400">"arguments"</span>: {
+                            </div>
+                            <div class="pl-12">
+                                <span class="text-blue-400">"query"</span>: <span
+                                    class="text-orange-300">"authentication middleware"</span>
+                            </div>
+                            <div class="pl-8">}</div>
+                            <div class="pl-4">}</div>
+                            <div class="text-purple-400">}</div>
+
+                            <div class="text-slate-500 my-4">// 2. CodeFlow Server responds</div>
+                            <div class="text-purple-400">{</div>
+                            <div class="pl-4">
+                                <span class="text-blue-400">"content"</span>: [
+                            </div>
+                            <div class="pl-8">{</div>
+                            <div class="pl-12">
+                                <span class="text-blue-400">"type"</span>: <span class="text-orange-300">"text"</span>,
+                            </div>
+                            <div class="pl-12">
+                                <span class="text-blue-400">"text"</span>: <span class="text-green-400">"Found 2
+                                    relevant functions:\n1. AuthMiddleware.validate (src/auth.ts)\n2. verify_session
+                                    (src/utils.py)"</span>
+                            </div>
+                            <div class="pl-8">}</div>
+                            <div class="pl-4">]</div>
+                            <div class="text-purple-400">}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meta-RAG Section -->
+    <div class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-sm text-purple-400 mb-6">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        New in v0.2.0
+                    </div>
+                    <h2 class="text-3xl font-bold text-white mb-6">Meta-RAG: Context-Aware Intelligence</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Stop flooding your context window with raw code. CodeFlow's Meta-RAG uses hierarchical
+                        summarization to retrieve exactly what's needed, reducing token usage by 80% while improving
+                        accuracy.
+                    </p>
+
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                                <svg class="w-6 h-6 text-brand-400" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                                    </path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-semibold mb-1">Hierarchical Summaries</h3>
+                                <p class="text-slate-400 text-sm">Maintains concise summaries at file, class, and
+                                    function levels to enable drill-down retrieval.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                                <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-semibold mb-1">State-of-the-Art Accuracy</h3>
+                                <p class="text-slate-400 text-sm">Achieves 84.67% file-level bug localization accuracy
+                                    on SWE-bench Lite, outperforming traditional RAG.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
+                                <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-semibold mb-1">Cost Efficient</h3>
+                                <p class="text-slate-400 text-sm">Drastically reduces API costs by sending compact
+                                    summaries instead of full source files.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:w-1/2 w-full">
+                    <div class="relative group">
+                        <div
+                            class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200">
+                        </div>
+                        <div
+                            class="relative rounded-xl overflow-hidden bg-[#1e1e1e] border border-slate-700 shadow-2xl">
+                            <div
+                                class="flex items-center justify-between px-4 py-3 bg-[#252526] border-b border-slate-700">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                                </div>
+                                <div class="text-xs text-slate-500 font-mono">Meta-RAG Process</div>
+                            </div>
+                            <div class="p-6 space-y-4">
+                                <!-- Step 1 -->
+                                <div class="flex items-start gap-3">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <div
+                                            class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs text-slate-400">
+                                            1</div>
+                                        <div class="w-0.5 h-8 bg-slate-800"></div>
+                                    </div>
+                                    <div class="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                                        <div class="text-xs text-brand-400 font-mono mb-1">Query</div>
+                                        <div class="text-sm text-slate-300">"Fix the auth validation bug"</div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 2 -->
+                                <div class="flex items-start gap-3">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <div
+                                            class="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs text-slate-400">
+                                            2</div>
+                                        <div class="w-0.5 h-8 bg-slate-800"></div>
+                                    </div>
+                                    <div class="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                                        <div class="text-xs text-purple-400 font-mono mb-1">Retrieve Summaries</div>
+                                        <div class="text-xs text-slate-400 font-mono bg-black/30 p-2 rounded">
+                                            File: auth.py (Summary: Handles user auth...)<br>
+                                            &nbsp;&nbsp;Class: Auth (Summary: Main auth logic...)<br>
+                                            &nbsp;&nbsp;&nbsp;&nbsp;Func: validate (Summary: Validates tokens...)
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 3 -->
+                                <div class="flex items-start gap-3">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <div
+                                            class="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center text-xs text-white font-bold">
+                                            3</div>
+                                    </div>
+                                    <div class="flex-1 p-3 rounded-lg bg-brand-500/10 border border-brand-500/20">
+                                        <div class="text-xs text-brand-400 font-mono mb-1">Targeted Retrieval</div>
+                                        <div class="text-sm text-slate-300">Agent selects <span
+                                                class="text-white font-mono">auth.py:validate</span> for full context.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLI Tool Section -->
+    <div class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-2xl font-bold text-white mb-4">Also Available as a CLI Tool</h2>
+                    <p class="text-slate-400 text-lg mb-6">
+                        Prefer the command line? CodeFlow includes a powerful CLI for direct analysis, querying, and
+                        diagram generation.
+                    </p>
+                    <ul class="space-y-3">
+                        <li class="flex items-center gap-3 text-slate-300">
+                            <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Instant analysis reports</span>
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-300">
+                            <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Mermaid diagram generation</span>
+                        </li>
+                        <li class="flex items-center gap-3 text-slate-300">
+                            <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>CI/CD integration ready</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="lg:w-1/2 w-full">
+                    <div class="rounded-xl overflow-hidden bg-[#1e1e1e] border border-slate-700 shadow-xl">
+                        <div class="flex items-center gap-2 px-4 py-3 bg-[#252526] border-b border-slate-700">
+                            <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                            <div class="ml-2 text-xs text-slate-500 font-mono">bash</div>
+                        </div>
+                        <div class="p-6 font-mono text-sm leading-relaxed">
+                            <div class="flex gap-2 text-slate-300">
+                                <span class="text-green-400">$</span>
+                                <span class="text-white">python -m code_flow_graph.cli . --query "auth"</span>
+                            </div>
+                            <div class="mt-2 text-slate-400">
+                                > Analyzing codebase... <span class="text-green-400">Done (0.4s)</span>
+                            </div>
+                            <div class="mt-2 text-slate-300">
+                                > Found 3 relevant functions...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Installation Section -->
+    <div id="installation" class="py-24 bg-slate-950">
+        <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 class="text-3xl font-bold text-white mb-8">Get Started in Seconds</h2>
+            <div
+                class="bg-slate-900 rounded-lg p-6 border border-slate-800 flex items-center justify-between group hover:border-brand-500/50 transition-colors">
+                <code class="font-mono text-brand-400 text-lg">pip install -e .</code>
+                <button class="text-slate-400 hover:text-white transition-colors"
+                    onclick="navigator.clipboard.writeText('pip install -e .')">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <p class="mt-6 text-slate-400">
+                Requires Python 3.8+. Check out the <a href="#"
+                    class="text-brand-400 hover:text-brand-300 hover:underline">documentation</a> for advanced
+                configuration.
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-white/10 py-12">
+        <div
+            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-6 h-6 bg-gradient-to-br from-brand-500 to-purple-600 rounded flex items-center justify-center text-white font-bold text-xs">
+                    C</div>
+                <span class="font-bold text-white text-sm">CodeFlow</span>
+            </div>
+            <div class="flex gap-8 text-sm text-slate-400">
+                <a href="#" class="hover:text-white transition-colors">Documentation</a>
+                <a href="#" class="hover:text-white transition-colors">GitHub</a>
+                <a href="#" class="hover:text-white transition-colors">License</a>
+            </div>
+            <div class="text-slate-500 text-sm">
+                &copy; 2025 CodeFlow. MIT License.
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

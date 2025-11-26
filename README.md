@@ -303,6 +303,90 @@ max_tokens: 384
 - **Performance**: 384-dim models are ~2x faster than 768-dim models with minimal accuracy loss for code search.
 - **Custom Models**: You can specify any SentenceTransformer model name. See the [full list](https://www.sbert.net/docs/pretrained_models.html).
 
+### Meta-RAG: LLM-Driven Code Summaries (Optional)
+
+CodeFlow supports optional LLM-driven semantic code summaries to enhance context retrieval for AI agents. This feature generates concise, natural-language summaries of functions and classes that are indexed alongside the code, enabling more efficient and accurate semantic search.
+
+#### Configuration
+
+Enable summary generation in your `codeflow.config.yaml`:
+
+```yaml
+# Summary Generation (Meta-RAG)
+summary_generation_enabled: false  # Set to true to enable
+llm_config:
+  api_key_env_var: "OPENAI_API_KEY"
+  base_url: "https://openrouter.ai/api/v1"  # Default: OpenRouter
+  model: "x-ai/grok-4.1-fast"  # Default model
+  max_tokens: 256  # Max tokens in LLM response per summary
+  concurrency: 5  # Number of parallel summary generation workers
+  
+  # Smart filtering to reduce costs
+  min_complexity: 3  # Only summarize functions with complexity >= 3
+  min_nloc: 5  # Only summarize functions with >= 5 lines of code
+  skip_private: true  # Skip functions starting with _ (private)
+  skip_test: true  # Skip test functions (test_*, *_test)
+  prioritize_entry_points: true  # Summarize entry points first
+  
+  # Depth control
+  summary_depth: "standard"  # "minimal", "standard", "detailed"
+  max_input_tokens: 2000  # Truncate function body if longer
+```
+
+**Smart Filtering Options:**
+
+- **`min_complexity`**: Only summarize functions with cyclomatic complexity >= threshold (default: 0)
+- **`min_nloc`**: Only summarize functions with >= N lines of code (default: 0)
+- **`skip_private`**: Skip private functions - supports both Python (`_prefix`) and TypeScript (`private`/`protected` modifiers) (default: false)
+- **`skip_test`**: Skip test functions (names containing "test") (default: false)
+- **`prioritize_entry_points`**: Process entry points first (default: false)
+
+**Depth Control:**
+
+- **`minimal`**: Just name, signature, and code (lowest cost)
+- **`standard`**: Adds docstring (balanced)
+- **`detailed`**: Includes complexity, NLOC, decorators (highest quality)
+
+**Token Limits:**
+
+- **`max_tokens`**: Maximum tokens in LLM response (controls summary length)
+- **`max_input_tokens`**: Truncate function body if longer (controls input cost)
+
+#### Environment Variables
+
+You can override configuration via environment variables:
+
+- `OPENAI_API_KEY`: Your LLM API key (required when summary generation is enabled)
+- `OPENAI_BASE_URL`: Override the base URL (default: `https://openrouter.ai/api/v1`)
+- `OPENAI_SUMMARY_MODEL`: Override the model (default: `x-ai/grok-4.1-fast`)
+
+#### How It Works
+
+1. **Background Processing**: Summaries are generated asynchronously in the background after code analysis completes
+2. **Resumable**: On restart, CodeFlow automatically identifies and generates summaries for any functions missing them
+3. **Parallel Generation**: Multiple LLM requests run concurrently (configurable via `concurrency`)
+4. **Retrieval**: Summaries are returned via the `get_function_metadata` tool and included in semantic search results
+
+#### Example Usage
+
+```bash
+# Enable in config, then start MCP server
+export OPENAI_API_KEY="your-api-key"
+python -m code_flow_graph.mcp_server
+
+# Summaries will be generated in the background
+# Check progress with the ping tool
+```
+
+#### Cost Considerations
+
+- Summary generation incurs LLM API costs (typically $0.001-0.01 per function depending on model)
+- The feature is **disabled by default** to avoid unexpected costs
+- Use faster, cheaper models like `grok-4.1-fast` for cost-effective summarization
+- Summaries are cached in ChromaDB and only regenerated when code changes
+
+
+
 ## TypeScript Support
 
 CodeFlow provides comprehensive TypeScript analysis capabilities with feature parity to Python support. It can analyze TypeScript applications, extract detailed metadata, and build call graphs for various TypeScript frameworks.

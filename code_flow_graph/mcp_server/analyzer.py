@@ -98,13 +98,14 @@ class MCPAnalyzer:
         # Initialize Summary Processor if enabled
         self.summary_processor = None
         if config.get('summary_generation_enabled', False):
-            logging.info("Summary generation enabled, initializing SummaryProcessor")
+            llm_config = config.get('llm_config', {})
             self.summary_generator = SummaryGenerator(config)
             self.summary_processor = SummaryProcessor(
                 generator=self.summary_generator,
                 builder=self.builder,
                 vector_store=self.vector_store,
-                concurrency=config.get('llm_config', {}).get('concurrency', 5)
+                concurrency=llm_config.get('concurrency', 5),
+                prioritize_entry_points=llm_config.get('prioritize_entry_points', False)
             )
         else:
             logging.info("Summary generation disabled")

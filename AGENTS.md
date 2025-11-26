@@ -110,6 +110,9 @@ code_flow_graph_mcp_server --config custom.yaml
 - **Optional**: openai >=1.0.0 (for LLM summaries), tqdm (CLI progress bars)
 - **TypeScript**: No extra dependencies, regex-based parsing
 
+- **Package Manager**: `uv` (recommended)
+- **Virtual Environment**: `.venv` (created by `uv`)
+
 See `pyproject.toml` for complete dependency list.
 
 ## Development Notes

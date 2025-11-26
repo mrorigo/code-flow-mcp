@@ -15,7 +15,7 @@ dependencies = [
     "pydantic",
     "chromadb>=1.1.0",
     "sentence-transformers>=5.1.0",
-    "openai>=1.0.0",
+    "openai[aiohttp]>=1.0.0",
     "aiohttp>=3.9.0",
 ]
 

@@ -55,6 +55,7 @@ class FunctionNode:
     catches_exceptions: List[str] = field(default_factory=list)
     local_variables_declared: List[str] = field(default_factory=list)
     hash_body: Optional[str] = None
+    summary: Optional[str] = None  # Natural language summary for Meta-RAG
 
 
 @dataclass
@@ -114,6 +115,7 @@ class CallGraphBuilder:
             catches_exceptions=func_element.catches_exceptions,
             local_variables_declared=func_element.local_variables_declared,
             hash_body=func_element.hash_body,
+            summary=func_element.summary,  # Copy summary from FunctionElement
             incoming_edges=[], # These are populated later
             outgoing_edges=[] # These are populated later
         )

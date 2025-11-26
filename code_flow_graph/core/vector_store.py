@@ -551,17 +551,17 @@ class CodeVectorStore:
         Returns:
             List of documents with metadata and distance.
         """
-        effective_filter = {}
+        # Only include where filter if it's not None and not empty
+        query_kwargs = {
+            "query_texts": [query],
+            "n_results": n_results * 4,  # Request more to account for grouping
+            "include": ["metadatas", "documents", "distances"]
+        }
+        
         if where_filter:
-            effective_filter.update(where_filter)
-
-        # Request more raw results to account for chunk grouping
-        # We'll group by document and return the top n_results complete documents
-        raw_results = self.collection.query(
-            query_texts=[query],
-            n_results=n_results * 4,  # Request more to account for grouping
-            where=effective_filter
-        )
+            query_kwargs["where"] = where_filter
+            
+        raw_results = self.collection.query(**query_kwargs)
 
         return self._group_chunks_by_document(raw_results, n_results)
 

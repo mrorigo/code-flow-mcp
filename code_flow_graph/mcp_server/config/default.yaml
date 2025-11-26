@@ -15,5 +15,16 @@ llm_config:
   api_key_env_var: "OPENAI_API_KEY"
   base_url: "https://openrouter.ai/api/v1"
   model: "x-ai/grok-4.1-fast"
-  max_tokens: 256
+  max_tokens: 256  # Max tokens in LLM response per summary
   concurrency: 5
+  
+  # Smart filtering to reduce costs
+  min_complexity: 3  # Only summarize functions with complexity >= 3
+  min_nloc: 5  # Only summarize functions with >= 5 lines of code
+  skip_private: true  # Skip functions starting with _ (private)
+  skip_test: true  # Skip test functions (test_*, *_test)
+  prioritize_entry_points: true  # Summarize entry points first
+  
+  # Depth control
+  summary_depth: "standard"  # "minimal", "standard", "detailed"
+  max_input_tokens: 2000  # Truncate function body if longer

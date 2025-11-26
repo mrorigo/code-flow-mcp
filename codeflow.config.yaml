@@ -2,9 +2,23 @@ watch_directories: ["code_flow_graph"]
 ignored_patterns: ["venv", "**/__pycache__"]
 chromadb_path: "./code_vectors_chroma"
 max_graph_depth: 3
-embedding_model: "multi-qa-MiniLM-L6-cos-v1"
+embedding_model: "all-mpnet-base-v2"
 max_tokens: 256
-language: "typescript"
-base_url: "https://openrouter.ai/api/v1"
-model: "x-ai/grok-4.1-fast"
-api_key_env_var: "OPENAI_API_KEY"
+language: "python"
+llm_config:
+  api_key_env_var: "OPENAI_API_KEY"
+  base_url: "https://openrouter.ai/api/v1"  # Default: OpenRouter
+  model: "x-ai/grok-4.1-fast"  # Default model
+  max_tokens: 256  # Max tokens in LLM response per summary
+  concurrency: 2  # Number of parallel summary generation workers
+  
+  # Smart filtering to reduce costs
+  min_complexity: 3  # Only summarize functions with complexity >= 3
+  min_nloc: 5  # Only summarize functions with >= 5 lines of code
+  skip_private: true  # Skip functions starting with _ (private)
+  skip_test: true  # Skip test functions (test_*, *_test)
+  prioritize_entry_points: true  # Summarize entry points first
+  
+  # Depth control
+  summary_depth: "standard"  # "minimal", "standard", "detailed"
+  max_input_tokens: 2000  # Truncate function body if longer

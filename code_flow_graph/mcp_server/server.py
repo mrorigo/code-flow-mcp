@@ -134,12 +134,27 @@ async def ping_tool(message: str = Field(description="Message to echo")) -> Ping
     )
 
 
+import json
+
 def format_search_results_as_markdown(results: list[dict]) -> str:
     """
     Helper function to format search results as a markdown string optimized for LLM ingestion.
     """
     if not results:
         return "No results found."
+
+    def _parse_list_field(value: Any) -> List[str]:
+        """Helper to safely parse list fields that might be JSON strings."""
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+        if isinstance(value, list):
+            return value
+        return []
 
     markdown = "# Semantic Search Results\n\n"
     for i, result in enumerate(results, 1):
@@ -171,10 +186,27 @@ def format_search_results_as_markdown(results: list[dict]) -> str:
             # markdown += f"- **NLOC**: {metadata.get('nloc', 'N/A')}\n"
             markdown += f"- **Incoming Degree**: {metadata.get('incoming_degree', 'N/A')}\n"
             markdown += f"- **Outgoing Degree**: {metadata.get('outgoing_degree', 'N/A')}\n"
-            markdown += f"- **External Deps**: {', '.join(metadata.get('external_dependencies', []))}\n" if metadata.get('external_dependencies') else ""
-            markdown += f"- **Decorators**: {', '.join(metadata.get('decorators', []))}\n" if metadata.get('decorators') else ""
-            markdown += f"- **Catches**: {', '.join(metadata.get('catches_exceptions', []))}\n" if metadata.get('catches_exceptions') else ""
-            markdown += f"- **Local Variables**: {', '.join(metadata.get('local_variables_declared', []))}\n"
+            
+            ext_deps = _parse_list_field(metadata.get('external_dependencies'))
+            markdown += f"- **External Deps**: {', '.join(ext_deps)}\n" if ext_deps else ""
+            
+            decorators = _parse_list_field(metadata.get('decorators'))
+            # Decorators might be dicts or strings, handle accordingly if needed, but for now join string representation
+            # If decorators are stored as list of dicts in JSON, we might want to extract names.
+            # Based on vector_store.py: "decorators": json.dumps(node.decorators) where node.decorators is List[Dict[str, Any]]
+            # So parsed decorators will be a list of dicts.
+            if decorators and isinstance(decorators[0], dict):
+                 decorator_names = [d.get('name', str(d)) for d in decorators]
+                 markdown += f"- **Decorators**: {', '.join(decorator_names)}\n"
+            elif decorators:
+                 markdown += f"- **Decorators**: {', '.join([str(d) for d in decorators])}\n"
+
+            catches = _parse_list_field(metadata.get('catches_exceptions'))
+            markdown += f"- **Catches**: {', '.join(catches)}\n" if catches else ""
+            
+            local_vars = _parse_list_field(metadata.get('local_variables_declared'))
+            markdown += f"- **Local Variables**: {', '.join(local_vars)}\n"
+            
             markdown += f"- **Has Docstring**: {metadata.get('has_docstring', 'N/A')}\n"
             markdown += f"- **Summary**: {metadata.get('summary', 'N/A')}\n"
             # markdown += f"- **Hash Body**: {metadata.get('hash_body', 'N/A')}\n"

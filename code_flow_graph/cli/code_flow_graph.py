@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import json
 import argparse
+import asyncio
 
 # Ensure local modules can be found
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,6 +18,7 @@ from core.typescript_extractor import TypeScriptASTExtractor
 from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
+from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 def resolve_embedding_model(model_name: str) -> str:
     """
@@ -39,7 +41,7 @@ def resolve_embedding_model(model_name: str) -> str:
 class CodeGraphAnalyzer:
     """Main analyzer that orchestrates the entire pipeline."""
 
-    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2', max_tokens: int = 256):
+    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2', max_tokens: int = 256, enable_summaries: bool = False, llm_config: Dict = None):
         """
         Initialize the analyzer.
 
@@ -47,6 +49,8 @@ class CodeGraphAnalyzer:
             root_directory: Root of the codebase. This is also used to derive the
                             persistence directory for the vector store.
             language: 'python' or 'typescript'.
+            enable_summaries: Enable LLM-driven summary generation.
+            llm_config: Configuration for LLM summary generation.
         """
         self.root_directory = root_directory
         self.language = language.lower()
@@ -65,6 +69,19 @@ class CodeGraphAnalyzer:
 
         self.all_elements: List[CodeElement] = []
         self.classes: Dict[str, ClassElement] = {}
+        
+        # Summary generation setup
+        self.summary_processor = None
+        if enable_summaries and self.vector_store:
+            config = llm_config or {}
+            self.summary_generator = SummaryGenerator({'llm_config': config})
+            self.summary_processor = SummaryProcessor(
+                generator=self.summary_generator,
+                builder=self.graph_builder,
+                vector_store=self.vector_store,
+                concurrency=config.get('concurrency', 5),
+                prioritize_entry_points=config.get('prioritize_entry_points', False)
+            )
 
     def _get_extractor(self):
         """Get the appropriate AST extractor for the language."""
@@ -106,8 +123,14 @@ class CodeGraphAnalyzer:
         else:
             print("   Vector store is disabled, skipping population.")
 
-        # Step 4: Generate report
-        print("\n📊 Step 4: Generating analysis report...")
+        # Step 4: Generate summaries if enabled
+        if self.summary_processor:
+            print("\n🤖 Step 4: Generating LLM summaries...")
+            self._generate_summaries()
+            print("\n📊 Step 5: Generating analysis report...")
+        else:
+            print("\n📊 Step 4: Generating analysis report...")
+        
         report = self._generate_report(classes, functions)
 
         print("\n✅ Analysis complete!")
@@ -166,6 +189,63 @@ class CodeGraphAnalyzer:
 
         stats = self.vector_store.get_stats()
         print(f"   Vector store populated. Total documents: {stats.get('total_documents', 'N/A')}")
+    
+    def _generate_summaries(self) -> None:
+        """Generate summaries for functions using LLM."""
+        if not self.summary_processor:
+            return
+        
+        # Run the async summary generation
+        import asyncio
+        asyncio.run(self._generate_summaries_async())
+    
+    async def _generate_summaries_async(self) -> None:
+        """Async implementation of summary generation."""
+        # Start the processor
+        await self.summary_processor.start_async()
+        
+        # Find nodes missing summaries
+        all_missing_fqns = self.vector_store.get_nodes_missing_summary()
+        
+        # Filter to only include FQNs that exist in the builder
+        # This avoids warnings for stale/filtered functions
+        missing_fqns = [fqn for fqn in all_missing_fqns if fqn in self.summary_processor.builder.functions]
+        
+        skipped_count = len(all_missing_fqns) - len(missing_fqns)
+        if skipped_count > 0:
+            print(f"   Skipped {skipped_count} functions not in current call graph (stale/filtered)")
+        
+        if not missing_fqns:
+            print("   All functions already have summaries.")
+            await self.summary_processor.stop()
+            return
+            
+        print(f"   Found {len(missing_fqns)} functions needing summaries")
+        print("   Generating summaries in background...")
+        
+        # Enqueue all missing
+        for fqn in missing_fqns:
+            self.summary_processor.enqueue(fqn)
+        
+        # Wait for queue to complete with progress bar
+        import time
+        with tqdm(total=len(missing_fqns), desc="Generating summaries") as pbar:
+            last_count = 0
+            while not self.summary_processor.queue.empty() or any(w and not w.done() for w in self.summary_processor.workers):
+                await asyncio.sleep(0.5)
+                # Update progress based on queue size
+                current_remaining = self.summary_processor.queue.qsize()
+                completed = len(missing_fqns) - current_remaining
+                pbar.update(completed - last_count)
+                last_count = completed
+            
+            # Final update
+            pbar.update(len(missing_fqns) - last_count)
+        
+        # Stop the processor
+        await self.summary_processor.stop()
+        
+        print("   ✓ Summary generation complete")
 
     def _generate_report(self, classes: List[ClassElement], functions: List[FunctionElement]) -> Dict[str, Any]:
         """Generate a comprehensive analysis report using graph data."""
@@ -233,7 +313,7 @@ class CodeGraphAnalyzer:
             return
 
         print(f"\n🔍 Running semantic search for: '{question}'")
-        results = self.vector_store.query_functions(question, n_results)
+        results = self.vector_store.query_codebase(question, n_results)
 
         if not results:
             print("   No relevant functions found. Try a different query.")
@@ -247,55 +327,61 @@ class CodeGraphAnalyzer:
             if fqn:
                 highlight_fqns.append(fqn)
 
-            print(f"{i}. {meta.get('name')} (Similarity: {1 - result['distance']:.3f})")
+            print(f"{i}. {meta.get('name', 'unknown')} (Similarity: {1 - result['distance']:.3f})")
             print(f"   FQN: {fqn}")
-            print(f"   Location: {meta.get('file_path')}:L{meta.get('line_start')}-{meta.get('line_end')}")
+            print(f"   Location: {meta.get('file_path', 'unknown')}:L{meta.get('line_start', '?')}-{meta.get('line_end', '?')}")
             print(f"   Type: {'Method' if meta.get('is_method') else 'Function'}{' (async)' if meta.get('is_async') else ''}")
-            if meta.get('incoming_degree', 0) > 0:
-                print(f"   Connections in: {meta.get('incoming_degree')}")
-            if meta.get('outgoing_degree', 0) > 0:
-                print(f"   Connections out: {meta.get('outgoing_degree')}")
+            
+            # Show summary if available
+            summary = meta.get('summary')
+            if summary:
+                print(f"   Summary: {summary}")
+            
+            # Show connections if available
+            connections_in = meta.get('incoming_degree')
+            connections_out = meta.get('outgoing_degree')
+            if connections_in is not None and connections_in > 0:
+                print(f"   Connections in: {connections_in}")
+            if connections_out is not None and connections_out > 0:
+                print(f"   Connections out: {connections_out}")
             if meta.get('complexity') is not None: print(f"   Complexity: {meta['complexity']}")
             if meta.get('nloc') is not None: print(f"   NLOC: {meta['nloc']}")
-            if meta.get('external_dependencies'): print(f"   External Deps: {', '.join(meta['external_dependencies'])}")
-            # Deserialize JSON string metadata fields for display
-            decorators = meta.get('decorators')
-            if decorators:
-                try:
-                    if isinstance(decorators, str):
-                        decorators = json.loads(decorators)
-                    decorator_names = [d.get('name', 'unknown') if isinstance(d, dict) else str(d) for d in decorators]
-                    print(f"   Decorators: {', '.join(decorator_names)}")
-                except (json.JSONDecodeError, AttributeError):
-                    print(f"   Decorators: {decorators}")
-
-            catches = meta.get('catches_exceptions')
-            if catches:
-                try:
-                    if isinstance(catches, str):
-                        catches = json.loads(catches)
-                    print(f"   Catches: {', '.join(catches) if isinstance(catches, list) else catches}")
-                except (json.JSONDecodeError, AttributeError):
-                    print(f"   Catches: {catches}")
-
-            local_vars = meta.get('local_variables_declared')
-            if local_vars:
-                try:
-                    if isinstance(local_vars, str):
-                        local_vars = json.loads(local_vars)
-                    print(f"   Local Vars: {', '.join(local_vars) if isinstance(local_vars, list) else local_vars}")
-                except (json.JSONDecodeError, AttributeError):
-                    print(f"   Local Vars: {local_vars}")
+            
+            # Helper to safely parse list fields
+            def _parse_list_field(value: Any) -> List[str]:
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        if isinstance(parsed, list):
+                            return parsed
+                    except json.JSONDecodeError:
+                        pass
+                if isinstance(value, list):
+                    return value
+                return []
 
             # Handle external dependencies
-            ext_deps = meta.get('external_dependencies')
+            ext_deps = _parse_list_field(meta.get('external_dependencies'))
             if ext_deps:
-                try:
-                    if isinstance(ext_deps, str):
-                        ext_deps = json.loads(ext_deps)
-                    print(f"   External Deps: {', '.join(ext_deps) if isinstance(ext_deps, list) else ext_deps}")
-                except (json.JSONDecodeError, AttributeError):
-                    print(f"   External Deps: {ext_deps}")
+                print(f"   External Deps: {', '.join(ext_deps)}")
+
+            # Deserialize JSON string metadata fields for display
+            decorators = _parse_list_field(meta.get('decorators'))
+            if decorators:
+                # Decorators might be dicts or strings
+                if decorators and isinstance(decorators[0], dict):
+                     decorator_names = [d.get('name', str(d)) for d in decorators]
+                     print(f"   Decorators: {', '.join(decorator_names)}")
+                else:
+                     print(f"   Decorators: {', '.join([str(d) for d in decorators])}")
+
+            catches = _parse_list_field(meta.get('catches_exceptions'))
+            if catches:
+                print(f"   Catches: {', '.join(catches)}")
+
+            local_vars = _parse_list_field(meta.get('local_variables_declared'))
+            if local_vars:
+                print(f"   Local Vars: {', '.join(local_vars)}")
         print("-" * 20)
 
         if generate_mermaid:
@@ -352,6 +438,8 @@ def main():
                              "Default: 'fast'.")
     parser.add_argument("--max-tokens", type=int,
                       help="Maximum tokens per chunk for embedding model (default: 256).")
+    parser.add_argument("--generate-summaries", action="store_true",
+                      help="Enable LLM-driven summary generation (requires OPENAI_API_KEY).")
 
     args = parser.parse_args()
 
@@ -410,7 +498,9 @@ def main():
             root_directory=root_dir, 
             language=config.language, 
             embedding_model=embedding_model, 
-            max_tokens=config.max_tokens
+            max_tokens=config.max_tokens,
+            enable_summaries=args.generate_summaries,
+            llm_config=config.llm_config if hasattr(config, 'llm_config') else {}
         )
 
         if args.no_analyze:
