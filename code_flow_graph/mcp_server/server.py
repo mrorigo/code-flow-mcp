@@ -234,7 +234,16 @@ async def semantic_search(query: str = Field(description="Search query string"),
     if not server.analyzer or not server.analyzer.vector_store:
         raise MCPError(5001, "Vector store unavailable", "Ensure the vector store is properly initialized")
     try:
-        results = server.analyzer.vector_store.query_codebase(query, n_results, filters)
+        vector_store = server.analyzer.vector_store
+        results = vector_store.query_codebase(query, n_results, filters)
+        should_fallback = results is None
+        if not should_fallback:
+            try:
+                should_fallback = len(results) == 0
+            except TypeError:
+                should_fallback = False
+        if should_fallback and hasattr(vector_store, "query_functions"):
+            results = vector_store.query_functions(query, n_results, filters)
         if len(results) > 10:
             results = results[:10]
             logger.warning(f"Truncated semantic search results from {len(results)} to 10")
@@ -286,6 +295,8 @@ async def get_function_metadata(fqn: str = Field(description="Fully qualified na
     # Convert edges to simple dicts
     node_dict['incoming_edges'] = [vars(edge) for edge in node.incoming_edges]
     node_dict['outgoing_edges'] = [vars(edge) for edge in node.outgoing_edges]
+    if 'summary' not in node_dict:
+        node_dict['summary'] = None
     node_dict['analysis_status'] = analysis_status
     return MetadataResponse(**node_dict)
 

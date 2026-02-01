@@ -10,9 +10,8 @@ import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
 
-from code_flow_graph.core.python_extractor import PythonASTExtractor
-from code_flow_graph.core.python_extractor import PythonASTExtractor
-from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor
+from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
+from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 from code_flow_graph.core.structured_extractor import StructuredDataExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
@@ -58,11 +57,9 @@ class MCPAnalyzer:
         
         # Initialize appropriate extractor based on language
         if language == 'typescript':
-            self.extractor = TypeScriptASTExtractor()
+            self.extractor = TreeSitterTypeScriptExtractor()
         else:
-            self.extractor = PythonASTExtractor()
-        
-        self.extractor = PythonASTExtractor()
+            self.extractor = TreeSitterPythonExtractor()
         
         self.extractor.project_root = root
         
@@ -88,7 +85,9 @@ class MCPAnalyzer:
                 max_tokens=config.get('max_tokens', 256)
             )
         else:
-            logging.warning(f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization")
+            logging.warning(
+                f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization"
+            )
 
         # Background cleanup configuration
         self.cleanup_interval = config.get('cleanup_interval_minutes', 30)  # Default: 30 minutes

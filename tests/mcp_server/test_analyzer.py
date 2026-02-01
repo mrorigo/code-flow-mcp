@@ -9,7 +9,7 @@ from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
 @pytest.fixture
 def mock_core_components():
     """Mock core components to avoid actual initialization."""
-    with patch('code_flow_graph.mcp_server.analyzer.PythonASTExtractor') as mock_extractor, \
+    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
          patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
          patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
         yield mock_extractor, mock_builder, mock_store
@@ -40,10 +40,15 @@ def test_mcp_analyzer_init_with_existing_store():
         'embedding_model': 'all-MiniLM-L6-v2'
     }
 
-    with patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
-        analyzer = MCPAnalyzer(config)
-        mock_store.assert_called_once_with(persist_directory='./code_vectors_chroma', embedding_model_name='all-MiniLM-L6-v2', max_tokens=256)
-        assert analyzer.vector_store is not None
+    with patch('code_flow_graph.mcp_server.analyzer.Path.exists', return_value=True):
+        with patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+            analyzer = MCPAnalyzer(config)
+            mock_store.assert_called_once_with(
+                persist_directory='./code_vectors_chroma',
+                embedding_model_name='all-MiniLM-L6-v2',
+                max_tokens=256
+            )
+            assert analyzer.vector_store is not None
 
 
 @pytest.mark.asyncio
@@ -139,7 +144,8 @@ async def test_populate_vector_store(mock_core_components):
     mock_store_instance = MagicMock()
     mock_store.return_value = mock_store_instance
 
-    analyzer = MCPAnalyzer(config)
+    with patch('code_flow_graph.mcp_server.analyzer.Path.exists', return_value=True):
+        analyzer = MCPAnalyzer(config)
 
     # Mock builder with functions and edges
     mock_func_node = MagicMock()

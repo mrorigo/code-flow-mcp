@@ -14,6 +14,7 @@ Key Features:
 """
 
 import os
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 
@@ -27,8 +28,8 @@ from .utils import (
 )
 
 # Import extractor classes for backward compatibility and internal use
-from .python_extractor import PythonASTExtractor, PythonASTVisitor
-from .typescript_extractor import TypeScriptASTExtractor, TypeScriptASTVisitor
+from .treesitter.python_extractor import TreeSitterPythonExtractor
+from .treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
 # Type alias for file paths
 FilePath = Union[str, Path]
@@ -73,9 +74,9 @@ def create_extractor(file_path: FilePath) -> Any:
     language = get_language_from_extension(file_path)
 
     if language == 'python':
-        return PythonASTExtractor()
+        return TreeSitterPythonExtractor()
     elif language == 'typescript':
-        return TypeScriptASTExtractor()
+        return TreeSitterTypeScriptExtractor()
     else:
         raise ValueError(f"Unsupported language: {language}")
 
@@ -151,14 +152,14 @@ def extract_from_directory(directory_path: FilePath, **kwargs) -> List[CodeEleme
     all_elements = []
 
     # Process Python files
-    python_extractor = PythonASTExtractor()
+    python_extractor = TreeSitterPythonExtractor()
     for py_file in python_files:
         if py_file in filtered_files:
             elements = python_extractor.extract_from_file(py_file)
             all_elements.extend(elements)
 
     # Process TypeScript files
-    typescript_extractor = TypeScriptASTExtractor()
+    typescript_extractor = TreeSitterTypeScriptExtractor()
     for ts_file in typescript_files:
         if ts_file in filtered_files:
             elements = typescript_extractor.extract_from_file(ts_file)
@@ -177,7 +178,7 @@ def extract_python_file(file_path: FilePath) -> List[CodeElement]:
     Returns:
         List of extracted code elements
     """
-    extractor = PythonASTExtractor()
+    extractor = TreeSitterPythonExtractor()
     return extractor.extract_from_file(Path(file_path))
 
 def extract_python_directory(directory_path: FilePath) -> List[CodeElement]:
@@ -190,7 +191,7 @@ def extract_python_directory(directory_path: FilePath) -> List[CodeElement]:
     Returns:
         List of extracted code elements
     """
-    extractor = PythonASTExtractor()
+    extractor = TreeSitterPythonExtractor()
     return extractor.extract_from_directory(Path(directory_path))
 
 def extract_typescript_file(file_path: FilePath) -> List[CodeElement]:
@@ -203,7 +204,7 @@ def extract_typescript_file(file_path: FilePath) -> List[CodeElement]:
     Returns:
         List of extracted code elements
     """
-    extractor = TypeScriptASTExtractor()
+    extractor = TreeSitterTypeScriptExtractor()
     return extractor.extract_from_file(Path(file_path))
 
 def extract_typescript_directory(directory_path: FilePath) -> List[CodeElement]:
@@ -216,7 +217,7 @@ def extract_typescript_directory(directory_path: FilePath) -> List[CodeElement]:
     Returns:
         List of extracted code elements
     """
-    extractor = TypeScriptASTExtractor()
+    extractor = TreeSitterTypeScriptExtractor()
     return extractor.extract_from_directory(Path(directory_path))
 
 # Export all important classes and functions for backward compatibility
@@ -239,10 +240,8 @@ __all__ = [
     'extract_typescript_directory',
 
     # Extractor classes (for advanced usage)
-    'PythonASTExtractor',
-    'PythonASTVisitor',
-    'TypeScriptASTExtractor',
-    'TypeScriptASTVisitor',
+    'TreeSitterPythonExtractor',
+    'TreeSitterTypeScriptExtractor',
 
     # Type aliases
     'FilePath',

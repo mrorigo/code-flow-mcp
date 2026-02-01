@@ -8,19 +8,19 @@ import tempfile
 import shutil
 from typing import Generator, List
 
-from code_flow_graph.core.python_extractor import PythonASTExtractor, PythonASTVisitor
+from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
 
 
 @pytest.fixture
-def python_extractor() -> PythonASTExtractor:
-    """Create a PythonASTExtractor instance for testing."""
-    return PythonASTExtractor()
+def python_extractor() -> TreeSitterPythonExtractor:
+    """Create a Tree-sitter Python extractor for testing."""
+    return TreeSitterPythonExtractor()
 
 
 @pytest.fixture
-def python_visitor() -> PythonASTVisitor:
-    """Create a PythonASTVisitor instance for testing."""
-    return PythonASTVisitor()
+def python_visitor():
+    """Legacy visitor fixture removed; Tree-sitter extracts without visitor class."""
+    return None
 
 
 @pytest.fixture
@@ -520,15 +520,8 @@ class SampleClass:
 
 
 @pytest.fixture
-def python_visitor_with_imports(python_visitor) -> PythonASTVisitor:
-    """Create a PythonASTVisitor with file-level imports set up."""
-    python_visitor.file_level_imports = {
-        'os': 'os',
-        'List': 'typing',
-        'Dict': 'typing',
-        'Optional': 'typing'
-    }
-    python_visitor.file_level_import_from_targets = {'List', 'Dict', 'Optional'}
+def python_visitor_with_imports(python_visitor):
+    """Legacy visitor fixture removed; no-op for Tree-sitter."""
     return python_visitor
 
 

@@ -1,5 +1,5 @@
 """
-Unit tests for PythonASTExtractor functionality.
+Unit tests for Tree-sitter Python extractor functionality.
 """
 
 import pytest
@@ -7,16 +7,15 @@ import ast
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from code_flow_graph.core.python_extractor import PythonASTExtractor
+from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
 from code_flow_graph.core.models import FunctionElement, ClassElement
 
 
-class TestPythonASTExtractor:
-    """Test cases for PythonASTExtractor."""
+class TestTreeSitterPythonExtractor:
+    """Test cases for Tree-sitter Python extractor."""
 
     def test_extractor_initialization(self, python_extractor):
-        """Test PythonASTExtractor initializes correctly."""
-        assert isinstance(python_extractor.visitor, object)  # PythonASTVisitor
+        """Test Tree-sitter Python extractor initializes correctly."""
         assert python_extractor.project_root is None
 
     def test_extract_from_file_basic(self, python_extractor, temp_dir):

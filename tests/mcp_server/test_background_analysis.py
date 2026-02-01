@@ -7,7 +7,7 @@ from code_flow_graph.mcp_server.analyzer import MCPAnalyzer, AnalysisState
 @pytest.fixture
 def mock_core_components():
     """Mock core components to avoid actual initialization."""
-    with patch('code_flow_graph.mcp_server.analyzer.PythonASTExtractor') as mock_extractor, \
+    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
          patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
          patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
         yield mock_extractor, mock_builder, mock_store

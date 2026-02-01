@@ -228,6 +228,7 @@ class TestCLITypeScriptIntegration:
             'python', '-m', 'code_flow_graph.cli.code_flow_graph',
             str(temp_dir),
             '--language', 'typescript',
+            '--embedding-model', 'fast',
             '--query', 'user processing functions',
             '--mermaid'
         ], capture_output=True, text=True, cwd='.')

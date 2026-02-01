@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 
-from code_flow_graph.core.typescript_extractor import TypeScriptASTExtractor, TypeScriptASTVisitor
+from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
 
@@ -23,14 +23,14 @@ def temp_dir():
 
 @pytest.fixture
 def typescript_visitor():
-    """Create a TypeScriptASTVisitor instance for testing."""
-    return TypeScriptASTVisitor()
+    """Legacy visitor fixture removed; Tree-sitter extracts without visitor class."""
+    return None
 
 
 @pytest.fixture
 def typescript_extractor():
-    """Create a TypeScriptASTExtractor instance for testing."""
-    return TypeScriptASTExtractor()
+    """Create a Tree-sitter TypeScript extractor instance for testing."""
+    return TreeSitterTypeScriptExtractor()
 
 
 @pytest.fixture

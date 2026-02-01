@@ -13,8 +13,8 @@ import asyncio
 # Ensure local modules can be found
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.python_extractor import PythonASTExtractor
-from core.typescript_extractor import TypeScriptASTExtractor
+from core.treesitter.python_extractor import TreeSitterPythonExtractor
+from core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
@@ -36,6 +36,22 @@ def resolve_embedding_model(model_name: str) -> str:
         'accurate': 'all-mpnet-base-v2'  # 768 dimensions, most accurate
     }
     return shortcuts.get(model_name.lower(), model_name)
+
+
+def _safe_query(analyzer: "CodeGraphAnalyzer", query: str, generate_mermaid: bool = False, llm_optimized_mermaid: bool = False) -> int:
+    try:
+        analyzer.query(query, generate_mermaid=generate_mermaid, llm_optimized_mermaid=llm_optimized_mermaid)
+        return 0
+    except Exception as exc:
+        message = str(exc)
+        if "embedding with dimension" in message or "InvalidArgumentError" in message:
+            print(
+                "⚠️  Vector store query failed due to embedding dimension mismatch. "
+                "Re-run analysis with a consistent embedding model.",
+                file=sys.stderr,
+            )
+            return 0
+        raise
 
 
 class CodeGraphAnalyzer:
@@ -62,9 +78,17 @@ class CodeGraphAnalyzer:
         # Vector store path derived from root_directory for project-specific persistence
         vector_store_path = self.root_directory / "code_vectors_chroma"
         try:
-            self.vector_store = CodeVectorStore(persist_directory=str(vector_store_path), embedding_model_name=embedding_model, max_tokens=max_tokens)
+            self.vector_store = CodeVectorStore(
+                persist_directory=str(vector_store_path),
+                embedding_model_name=embedding_model,
+                max_tokens=max_tokens
+            )
         except Exception as e:
-            print(f"Could not start CodeVectorStore at {vector_store_path}. Vector-based features will be disabled. Error: {e}", file=sys.stderr)
+            print(
+                "Could not start CodeVectorStore at "
+                f"{vector_store_path}. Vector-based features will be disabled. Error: {e}",
+                file=sys.stderr,
+            )
             self.vector_store = None
 
         self.all_elements: List[CodeElement] = []
@@ -86,9 +110,9 @@ class CodeGraphAnalyzer:
     def _get_extractor(self):
         """Get the appropriate AST extractor for the language."""
         if self.language == "python":
-            return PythonASTExtractor()
+            return TreeSitterPythonExtractor()
         elif self.language == "typescript":
-            return TypeScriptASTExtractor()
+            return TreeSitterTypeScriptExtractor()
         else:
             raise ValueError(f"Unsupported language: {self.language}")
 
@@ -142,7 +166,8 @@ class CodeGraphAnalyzer:
         This method uses the CORRECT data type (FunctionNode) after the graph is built.
         """
         if not self.vector_store:
-            raise ValueError("Vector store is not initialized.")
+            print("   Vector store is not initialized. Skipping query.", file=sys.stderr)
+            return
         if not self.graph_builder.functions:
             print("   No functions found in graph builder, skipping vector store population.")
             return
@@ -507,11 +532,25 @@ def main():
             # We need to make sure we look in the right place for vector store
             # The analyzer init sets it up based on root_dir.
             print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")
-            analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
+            exit_code = _safe_query(
+                analyzer,
+                args.query,
+                generate_mermaid=args.mermaid,
+                llm_optimized_mermaid=args.llm_optimized,
+            )
+            if exit_code != 0:
+                sys.exit(exit_code)
         elif args.query:
             # Analyze first to populate/update the store, then query
             analyzer.analyze()
-            analyzer.query(args.query, generate_mermaid=args.mermaid, llm_optimized_mermaid=args.llm_optimized)
+            exit_code = _safe_query(
+                analyzer,
+                args.query,
+                generate_mermaid=args.mermaid,
+                llm_optimized_mermaid=args.llm_optimized,
+            )
+            if exit_code != 0:
+                sys.exit(exit_code)
         else:
             # Just generate the report (implies analysis)
             # Ensure output file is created in the analyzed directory if no explicit output path given

@@ -7,8 +7,8 @@ from code_flow_graph.core.models import StructuredDataElement
 
 @pytest.fixture
 def mock_dependencies():
-    with patch('code_flow_graph.mcp_server.analyzer.PythonASTExtractor') as mock_py_ext, \
-         patch('code_flow_graph.mcp_server.analyzer.TypeScriptASTExtractor') as mock_ts_ext, \
+    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_py_ext, \
+         patch('code_flow_graph.mcp_server.analyzer.TreeSitterTypeScriptExtractor') as mock_ts_ext, \
          patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
          patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store, \
          patch('code_flow_graph.mcp_server.analyzer.StructuredDataExtractor') as mock_struct_ext:
