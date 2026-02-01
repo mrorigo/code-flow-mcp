@@ -7,7 +7,9 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+from pathlib import Path
 from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
+from code_flow_graph.core.drift_analyzer import DriftAnalyzer
 
 # Pydantic models for tools
 class MCPError(Exception):
@@ -86,6 +88,11 @@ class MemoryMutationResponse(BaseModel):
     record: Optional[dict] = None
     analysis_status: Optional[str] = None
 
+
+class DriftResponse(BaseModel):
+    report: dict
+    analysis_status: Optional[str] = None
+
 # Global logger for MCP
 logger = logging.getLogger("mcp")
 logger.addHandler(logging.StreamHandler(sys.stderr))
@@ -93,7 +100,7 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class AppContext:
-    analyzer: MCPAnalyzer = None
+    analyzer: Optional[MCPAnalyzer] = None
 
 async def on_shutdown():
     logger.info("Server shutdown")
@@ -207,10 +214,10 @@ def format_search_results_as_markdown(results: list[dict]) -> str:
             # Based on vector_store.py: "decorators": json.dumps(node.decorators) where node.decorators is List[Dict[str, Any]]
             # So parsed decorators will be a list of dicts.
             if decorators and isinstance(decorators[0], dict):
-                 decorator_names = [d.get('name', str(d)) for d in decorators]
-                 markdown += f"- **Decorators**: {', '.join(decorator_names)}\n"
+                decorator_names = [d.get('name', str(d)) for d in decorators if isinstance(d, dict)]
+                markdown += f"- **Decorators**: {', '.join(decorator_names)}\n"
             elif decorators:
-                 markdown += f"- **Decorators**: {', '.join([str(d) for d in decorators])}\n"
+                markdown += f"- **Decorators**: {', '.join([str(d) for d in decorators])}\n"
 
             catches = _parse_list_field(metadata.get('catches_exceptions'))
             markdown += f"- **Catches**: {', '.join(catches)}\n" if catches else ""
@@ -467,3 +474,25 @@ async def forget_memory(
 
     success = server.analyzer.memory_store.forget_memory(knowledge_id)
     return MemoryMutationResponse(success=success, record=None, analysis_status=analysis_status)
+
+
+@server.tool(name="check_drift")
+async def check_drift() -> DriftResponse:
+    """
+    Run drift detection on the current analyzed codebase.
+    """
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.builder:
+        raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
+
+    config = server.analyzer.config
+    if not config.get("drift_enabled", False):
+        raise MCPError(4001, "Drift detection disabled", "Set drift_enabled: true in config")
+
+    analyzer = DriftAnalyzer(project_root=str(Path(config['watch_directories'][0]).resolve()), config=config)
+    report = analyzer.analyze(
+        functions=list(server.analyzer.builder.functions.values()),
+        edges=server.analyzer.builder.edges,
+    )
+    return DriftResponse(report=report, analysis_status=analysis_status)

@@ -21,6 +21,10 @@ This guide explains how to install, configure, and use CodeFlow’s CLI and MCP 
   - [Call Graphs and Mermaid](#call-graphs-and-mermaid)
   - [Entry Points and Function Metadata](#entry-points-and-function-metadata)
   - [Structured Data Indexing](#structured-data-indexing)
+  - [Drift Detection](#drift-detection)
+    - [Enabling Drift](#enabling-drift)
+    - [CLI Output](#cli-output)
+    - [MCP Tool](#mcp-tool)
   - [Background Analysis and File Watching](#background-analysis-and-file-watching)
   - [LLM Summaries (Optional)](#llm-summaries-optional)
   - [Testing](#testing)
@@ -205,6 +209,42 @@ Entry points are derived from call graph analysis.
 YAML/JSON files are indexed and searchable as structured data, enabling configuration-aware search.
 
 Implementation: [`code_flow_graph/core/structured_extractor.py`](code_flow_graph/core/structured_extractor.py:1).
+
+## Drift Detection
+
+Drift detection analyzes module-level structure and call-graph topology to surface outliers and layering anomalies.
+
+Core implementation:
+
+- Feature extraction: [`code_flow_graph/core/drift_features.py`](code_flow_graph/core/drift_features.py:1)
+- Structural clustering: [`code_flow_graph/core/drift_clusterer.py`](code_flow_graph/core/drift_clusterer.py:1)
+- Topology analysis: [`code_flow_graph/core/drift_topology.py`](code_flow_graph/core/drift_topology.py:1)
+- Report assembly: [`code_flow_graph/core/drift_report.py`](code_flow_graph/core/drift_report.py:1)
+
+### Enabling Drift
+
+Set drift configuration in `codeflow.config.yaml`:
+
+```yaml
+drift_enabled: true
+drift_granularity: "module"  # module | file
+drift_min_entity_size: 3
+drift_cluster_algorithm: "hdbscan"
+drift_confidence_threshold: 0.6
+```
+
+### CLI Output
+
+When enabled, drift analysis writes a sibling report next to the main analysis output:
+
+```bash
+python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
+# writes: analysis.json.drift.json
+```
+
+### MCP Tool
+
+Use `check_drift` in [`code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:470) to generate a drift report from the current analysis state.
 
 ## Background Analysis and File Watching
 

@@ -5,6 +5,17 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 from pydantic import BaseModel, Field
 
+from code_flow_graph.core.drift_config import (
+    DEFAULT_DRIFT_ENABLED,
+    DEFAULT_DRIFT_GRANULARITY,
+    DEFAULT_DRIFT_MIN_ENTITY_SIZE,
+    DEFAULT_DRIFT_CLUSTER_ALGORITHM,
+    DEFAULT_DRIFT_NUMERIC_FEATURES,
+    DEFAULT_DRIFT_TEXTUAL_FEATURES,
+    DEFAULT_DRIFT_IGNORE_PATH_PATTERNS,
+    DEFAULT_DRIFT_CONFIDENCE_THRESHOLD,
+)
+
 # Default configuration values
 DEFAULT_CONFIG_PATH = "codeflow.config.yaml"
 DEFAULT_WATCH_DIRECTORIES = ["."]
@@ -61,6 +72,16 @@ class CodeFlowConfig(BaseModel):
     memory_grace_seconds: int = DEFAULT_MEMORY_GRACE_SECONDS
     memory_half_life_days: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_HALF_LIFE_DAYS.copy())
     memory_decay_floor: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_DECAY_FLOOR.copy())
+
+    # Drift detection
+    drift_enabled: bool = DEFAULT_DRIFT_ENABLED
+    drift_granularity: str = DEFAULT_DRIFT_GRANULARITY
+    drift_min_entity_size: int = DEFAULT_DRIFT_MIN_ENTITY_SIZE
+    drift_cluster_algorithm: str = DEFAULT_DRIFT_CLUSTER_ALGORITHM
+    drift_numeric_features: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_NUMERIC_FEATURES))
+    drift_textual_features: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_TEXTUAL_FEATURES))
+    drift_ignore_path_patterns: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_IGNORE_PATH_PATTERNS))
+    drift_confidence_threshold: float = DEFAULT_DRIFT_CONFIDENCE_THRESHOLD
     
     # Allow extra fields for flexibility
     class Config:

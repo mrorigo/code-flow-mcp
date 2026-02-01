@@ -45,3 +45,28 @@ llm_config:
   # Depth control
   summary_depth: "standard"  # "minimal", "standard", "detailed"
   max_input_tokens: 2000  # Truncate function body if longer
+
+# Drift detection configuration
+drift_enabled: false
+drift_granularity: "module"  # module | file
+drift_min_entity_size: 3
+drift_cluster_algorithm: "hdbscan"
+drift_numeric_features:
+  - complexity_mean
+  - complexity_variance
+  - nloc_mean
+  - nloc_variance
+  - decorator_count_mean
+  - dependency_count_mean
+  - exception_count_mean
+  - incoming_degree_mean
+  - outgoing_degree_mean
+drift_textual_features:
+  - decorators
+  - external_dependencies
+  - catches_exceptions
+drift_ignore_path_patterns:
+  - "**/tests/**"
+  - "**/__pycache__/**"
+  - "**/node_modules/**"
+drift_confidence_threshold: 0.6

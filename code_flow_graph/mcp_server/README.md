@@ -12,7 +12,7 @@ pip install -e .
 2. Ensure you have the required dependencies:
    - chromadb
    - sentence-transformers
-   - fastmcp
+   - mcp[cli]
 
 ## Run
 
@@ -39,6 +39,7 @@ Edit `code_flow_graph/mcp_server/config/default.yaml` to customize:
 - Watch directories for file changes
 - Vector store settings
 - Analysis parameters
+- Drift detection settings
 
 ## Tools
 
@@ -145,6 +146,25 @@ Generate Mermaid diagram for call graph visualization.
   }
 }
 ```
+
+### check_drift
+Run drift detection against the current analyzed codebase.
+```json
+{
+  "input": {},
+  "output": {
+    "report": {
+      "summary": {
+        "structural_findings": 1,
+        "topological_findings": 0
+      }
+    }
+  }
+}
+```
+Notes:
+- Requires `drift_enabled: true` in config.
+- Uses the current analysis state; run after initial indexing completes.
 
 ### reinforce_memory
 Create or reinforce a memory entry in Cortex.

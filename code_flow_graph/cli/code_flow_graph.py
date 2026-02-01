@@ -18,6 +18,7 @@ from core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
+from core.drift_analyzer import DriftAnalyzer
 from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 def resolve_embedding_model(model_name: str) -> str:
@@ -287,8 +288,11 @@ class CodeGraphAnalyzer:
 
         graph_entry_points = self.graph_builder.get_entry_points()
 
+        graph_export = self.graph_builder.export_graph()
+        if not isinstance(graph_export, dict):
+            graph_export = {"summary": {}, "functions": {}, "edges": []}
         report = {
-            "summary": self.graph_builder.export_graph()['summary'],
+            "summary": graph_export.get("summary", {}),
             "entry_points": [
                 {
                     "name": ep.name,
@@ -323,8 +327,13 @@ class CodeGraphAnalyzer:
                 "with_parameters": sum(1 for f in functions if f.parameters),
                 "with_return_type": sum(1 for f in functions if f.return_type),
             },
-            "call_graph": self.graph_builder.export_graph(),
+            "call_graph": graph_export,
         }
+        if self.vector_store is not None:
+            report["vector_store_enabled"] = True
+        else:
+            report["vector_store_enabled"] = False
+
         return report
 
     def query(self, question: str, n_results: int = 5, generate_mermaid: bool = False, llm_optimized_mermaid: bool = False) -> None: # NEW: llm_optimized_mermaid flag
@@ -398,7 +407,7 @@ class CodeGraphAnalyzer:
             if decorators:
                 # Decorators might be dicts or strings
                 if decorators and isinstance(decorators[0], dict):
-                     decorator_names = [d.get('name', str(d)) for d in decorators]
+                     decorator_names = [d.get('name', str(d)) for d in decorators if isinstance(d, dict)]
                      print(f"   Decorators: {', '.join(decorator_names)}")
                 else:
                      print(f"   Decorators: {', '.join([str(d) for d in decorators])}")
@@ -665,6 +674,18 @@ def main():
                 output_path = str(root_dir / args.output)
 
             analyzer.export_report(output_path)
+            if getattr(config, "drift_enabled", False):
+                drift_report = DriftAnalyzer(
+                    project_root=str(root_dir),
+                    config=config.model_dump(),
+                ).analyze(
+                    functions=list(analyzer.graph_builder.functions.values()),
+                    edges=analyzer.graph_builder.edges,
+                )
+                drift_output_path = str(Path(output_path).with_suffix(".drift.json"))
+                with open(drift_output_path, 'w', encoding='utf-8') as f:
+                    json.dump(drift_report, f, indent=2, ensure_ascii=False)
+                print(f"📄 Drift report exported to {drift_output_path}")
 
     except Exception as e:
         print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
