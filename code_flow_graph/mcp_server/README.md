@@ -146,6 +146,53 @@ Generate Mermaid diagram for call graph visualization.
 }
 ```
 
+### reinforce_memory
+Create or reinforce a memory entry in Cortex.
+```json
+{
+  "input": {
+    "content": "Use snake_case for database columns",
+    "memory_type": "TRIBAL",
+    "tags": ["conventions"],
+    "scope": "repo"
+  }
+}
+```
+
+### query_memory
+Query Cortex memory with decay-aware ranking.
+```json
+{
+  "input": {
+    "query": "database naming conventions",
+    "n_results": 5,
+    "filters": {"memory_type": "TRIBAL"}
+  }
+}
+```
+
+### list_memory
+List Cortex memory entries with filters and pagination.
+```json
+{
+  "input": {
+    "filters": {"memory_type": "EPISODIC"},
+    "limit": 10,
+    "offset": 0
+  }
+}
+```
+
+### forget_memory
+Delete a memory by id.
+```json
+{
+  "input": {
+    "knowledge_id": "<uuid>"
+  }
+}
+```
+
 ### update_context
 Update session context with key-value pairs.
 ```json

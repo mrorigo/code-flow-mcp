@@ -4,9 +4,9 @@
 
 ## Overview
 
-CodeFlow is a powerful Python-based code analysis tool designed to help developers and autonomous agents understand complex codebases with minimal cognitive overhead. It generates detailed call graphs, identifies critical code elements, and provides semantic search capabilities, all while adhering to principles that prioritize human comprehension.
+CodeFlow is a powerful code analysis tool designed to help developers and autonomous agents understand complex codebases with minimal cognitive overhead. It generates detailed call graphs, identifies critical code elements, and provides semantic search capabilities, all while adhering to principles that prioritize human comprehension.
 
-By extracting rich metadata from Abstract Syntax Trees (ASTs) and leveraging a persistent vector store (ChromaDB), CodeFlow enables efficient querying and visualization of code structure and behavior.
+By extracting rich metadata from Tree-sitter ASTs and leveraging a persistent vector store (ChromaDB), CodeFlow enables efficient querying and visualization of code structure and behavior across Python, TypeScript/TSX, and Rust codebases.
 
 The tool provides three main interfaces:
 - **CLI Tool**: A command-line interface for direct analysis and querying of codebases.
@@ -16,7 +16,7 @@ The tool provides three main interfaces:
 ## Features
 
 ### Core Analysis Capabilities
-- **Deep AST Metadata Extraction (Python & TypeScript):** Gathers comprehensive details about functions and classes including:
+- **Deep AST Metadata Extraction (Python, TypeScript/TSX, Rust via Tree-sitter):** Gathers comprehensive details about functions and classes including:
   - Parameters, return types, docstrings
   - Cyclomatic complexity and Non-Comment Lines of Code (NLOC)
   - Applied decorators (e.g., `@app.route`, `@transactional`)
@@ -24,12 +24,11 @@ The tool provides three main interfaces:
   - Locally declared variables
   - Inferred external library/module dependencies
   - Source body hash for efficient change detection
-  - Source body hash for efficient change detection
 - **Structured Data Indexing (JSON/YAML):**
   - Parses and indexes configuration files (`.json`, `.yaml`, `.yml`).
   - Enables semantic search for configuration keys and values (e.g., "database port", "api url").
   - Flattens hierarchical data into semantic chunks for precise retrieval.
-- **Unified Interface:** Single API that automatically detects and analyzes both Python and TypeScript codebases without manual language specification.
+- **Unified Interface:** Single API that automatically detects and analyzes Python, TypeScript/TSX, and Rust codebases without manual language specification.
 - **Intelligent Call Graph Generation:**
   - Builds a graph of function-to-function calls.
   - Employs multiple heuristics to identify potential entry points in the codebase.
@@ -88,6 +87,10 @@ watchdog>=2.0
 pytest
 pytest-asyncio
 pydantic
+tree-sitter
+tree-sitter-python
+tree-sitter-typescript
+tree-sitter-rust
 ```
 
 ## Installation
@@ -178,6 +181,7 @@ This output is stripped of visual styling and uses short aliases for node IDs, w
 - `--llm-optimized`: (Flag) Generates Mermaid graph optimized for LLM token count (removes styling). Implies `--mermaid`.
 - `--embedding-model`: Embedding model to use. Shortcuts: `fast` (384-dim), `medium` (384-dim), or `accurate` (768-dim). Default: `fast`. See [Embedding Model Configuration](#embedding-model-configuration) for details.
 - `--max-tokens`: Maximum tokens per chunk for embedding model. Default: `256`. Increase for larger context windows (must match model max sequence length).
+- `--language`: Force language selection (`python`, `typescript`, `rust`). Defaults to auto-detection.
 
 
 #### Example Report Output
@@ -219,6 +223,10 @@ The server exposes the following tools through the MCP protocol:
 - **`cleanup_stale_references`**: Manually trigger cleanup of stale file references in the vector store
 - **`update_context`**: Update session context with key-value pairs
 - **`get_context`**: Retrieve current session context
+- **`reinforce_memory`**: Create or reinforce a Cortex memory entry (TRIBAL/EPISODIC/FACT).
+- **`query_memory`**: Search Cortex memory with decay-aware ranking.
+- **`list_memory`**: List Cortex memory entries with filters/pagination.
+- **`forget_memory`**: Delete a Cortex memory entry by id.
 
 **Note**: All analysis-dependent tools include an `analysis_status` field in their responses to inform clients about the current state of code analysis.
 
@@ -245,10 +253,47 @@ chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
 embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use
 max_tokens: 256  # Maximum tokens per chunk
-language: "python" # Default language ("python" or "typescript")
+language: "python" # Default language ("python", "typescript", or "rust")
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
+
+#### Cortex Memory Configuration
+
+```yaml
+memory_enabled: true
+memory_collection_name: "cortex_memory_v1"
+memory_similarity_weight: 0.7
+memory_score_weight: 0.3
+memory_min_score: 0.1
+memory_cleanup_interval_seconds: 3600
+memory_grace_seconds: 86400
+memory_half_life_days:
+  TRIBAL: 180.0
+  EPISODIC: 7.0
+  FACT: 30.0
+memory_decay_floor:
+  TRIBAL: 0.1
+  EPISODIC: 0.01
+  FACT: 0.05
+```
+
+#### Cortex Memory CLI
+
+```bash
+# Add tribal memory
+python -m code_flow_graph.cli.code_flow_graph memory add --type TRIBAL --content "Use snake_case for DB columns" --tags conventions
+
+# Query memory
+python -m code_flow_graph.cli.code_flow_graph memory query --query "DB column naming" --type TRIBAL --limit 5
+
+# List episodic memory
+python -m code_flow_graph.cli.code_flow_graph memory list --type EPISODIC --limit 10
+
+# Reinforce and forget
+python -m code_flow_graph.cli.code_flow_graph memory reinforce --knowledge-id <uuid>
+python -m code_flow_graph.cli.code_flow_graph memory forget --knowledge-id <uuid>
+```
 
 ### Embedding Model Configuration
 
@@ -393,8 +438,7 @@ CodeFlow provides comprehensive TypeScript analysis capabilities with feature pa
 
 ### Requirements
 
-TypeScript analysis is performed using regex-based parsing with no external dependencies required. 
-All TypeScript language features are supported through sophisticated pattern matching.
+TypeScript analysis is performed using Tree-sitter parsing with the bundled language grammars.
 
 ### Usage Examples
 
@@ -476,12 +520,33 @@ The tool automatically detects and parses `tsconfig.json` for project structure 
 
 ### Parsing Strategy
 
-CodeFlow uses sophisticated regex-based parsing for TypeScript analysis, providing comprehensive support for:
+CodeFlow uses Tree-sitter parsing for TypeScript analysis, providing comprehensive support for:
 - Type annotations and generics
 - Classes, interfaces, and enums  
 - Decorators and access modifiers
 - Framework patterns (Angular, React, NestJS, Express)
 - Import/export analysis
+
+## Rust Support
+
+CodeFlow includes Rust analysis powered by Tree-sitter, enabling call graph generation and semantic search for `.rs` codebases.
+
+### Requirements
+
+Rust analysis uses the bundled `tree-sitter-rust` grammar.
+
+### Usage Examples
+
+```bash
+# Analyze a Rust project (language detection is automatic)
+python -m code_flow_graph.cli.code_flow_graph /path/to/rust/project --output analysis.json
+
+# Query Rust codebase
+python -m code_flow_graph.cli.code_flow_graph /path/to/rust/project --query "trait implementations"
+```
+
+**Supported File Types:**
+- `.rs` - Rust source files
 
 ## Examples
 
@@ -603,19 +668,22 @@ For programmatic access, CodeFlow provides a unified interface that automaticall
 from code_flow_graph.core import create_extractor, extract_from_file, extract_from_directory, get_language_from_extension
 
 # Create appropriate extractor based on file type (automatic language detection)
-extractor = create_extractor('myfile.ts')  # Returns TypeScriptASTExtractor
-extractor = create_extractor('myfile.py')  # Returns PythonASTExtractor
+extractor = create_extractor('myfile.ts')  # Returns TreeSitterTypeScriptExtractor
+extractor = create_extractor('myfile.py')  # Returns TreeSitterPythonExtractor
+extractor = create_extractor('myfile.rs')  # Returns TreeSitterRustExtractor
 
 # Single API for both languages
 elements = extract_from_file('myfile.ts')  # Works for TypeScript
 elements = extract_from_file('myfile.py')  # Works for Python
+elements = extract_from_file('myfile.rs')  # Works for Rust
 
 # Directory processing with automatic language detection
-elements = extract_from_directory('./src')  # Processes all Python and TypeScript files
+elements = extract_from_directory('./src')  # Processes all Python, TypeScript, and Rust files
 
 # Manual language detection
 language = get_language_from_extension('file.ts')  # Returns 'typescript'
 language = get_language_from_extension('file.py')  # Returns 'python'
+language = get_language_from_extension('file.rs')  # Returns 'rust'
 ```
 
 The unified interface provides:

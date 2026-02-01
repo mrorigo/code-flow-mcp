@@ -75,6 +75,17 @@ class MermaidResponse(BaseModel):
     graph: str
     analysis_status: Optional[str] = None
 
+
+class MemoryResponse(BaseModel):
+    results: list[dict]
+    analysis_status: Optional[str] = None
+
+
+class MemoryMutationResponse(BaseModel):
+    success: bool
+    record: Optional[dict] = None
+    analysis_status: Optional[str] = None
+
 # Global logger for MCP
 logger = logging.getLogger("mcp")
 logger.addHandler(logging.StreamHandler(sys.stderr))
@@ -359,3 +370,100 @@ async def cleanup_stale_references() -> CleanupResponse:
         )
     except Exception as e:
         raise MCPError(5001, f"Cleanup failed: {str(e)}", "Check server logs for details")
+
+
+@server.tool(name="reinforce_memory")
+async def reinforce_memory(
+    content: str = Field(description="Memory content to store or reinforce"),
+    memory_type: str = Field(default="FACT", description="TRIBAL | EPISODIC | FACT"),
+    tags: list[str] = Field(default_factory=list, description="Tags for filtering"),
+    scope: str = Field(default="repo", description="repo | project | file"),
+    file_paths: list[str] = Field(default_factory=list, description="Related files"),
+    source: str = Field(default="user", description="user | system | tool"),
+    base_confidence: float = Field(default=1.0, description="Initial confidence"),
+    metadata: dict = Field(default_factory=dict, description="Additional metadata"),
+    knowledge_id: Optional[str] = Field(default=None, description="Existing memory id to reinforce"),
+) -> MemoryMutationResponse:
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.memory_store:
+        raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
+
+    config = server.analyzer.config
+    memory_type_key = memory_type.upper()
+    half_life_days = float(config.get('memory_half_life_days', {}).get(memory_type_key, 30.0))
+    decay_floor = float(config.get('memory_decay_floor', {}).get(memory_type_key, 0.05))
+
+    if knowledge_id:
+        record = server.analyzer.memory_store.reinforce_memory(knowledge_id)
+        if not record:
+            raise MCPError(4001, "Memory not found", "Check knowledge_id")
+    else:
+        record = server.analyzer.memory_store.add_memory(
+            content=content,
+            memory_type=memory_type_key,
+            tags=tags,
+            scope=scope,
+            file_paths=file_paths,
+            source=source,
+            base_confidence=base_confidence,
+            decay_half_life_days=half_life_days,
+            decay_floor=decay_floor,
+            metadata=metadata,
+        )
+
+    return MemoryMutationResponse(
+        success=True,
+        record=server.analyzer.memory_store.record_to_metadata(record),
+        analysis_status=analysis_status,
+    )
+
+
+@server.tool(name="query_memory")
+async def query_memory(
+    query: str = Field(description="Search query string"),
+    n_results: int = Field(default=5, description="Number of results to return"),
+    filters: dict = Field(default_factory=dict, description="Optional filters"),
+) -> MemoryResponse:
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.memory_store:
+        raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
+
+    config = server.analyzer.config
+    results = server.analyzer.memory_store.query_memory(
+        query=query,
+        n_results=n_results,
+        filters=filters,
+        similarity_weight=float(config.get('memory_similarity_weight', 0.7)),
+        memory_score_weight=float(config.get('memory_score_weight', 0.3)),
+    )
+    return MemoryResponse(results=results, analysis_status=analysis_status)
+
+
+@server.tool(name="list_memory")
+async def list_memory(
+    filters: dict = Field(default_factory=dict, description="Optional filters"),
+    limit: int = Field(default=50, description="Maximum number of items"),
+    offset: int = Field(default=0, description="Offset for pagination"),
+) -> MemoryResponse:
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.memory_store:
+        raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
+
+    results = server.analyzer.memory_store.list_memory(filters=filters, limit=limit, offset=offset)
+    return MemoryResponse(results=results, analysis_status=analysis_status)
+
+
+@server.tool(name="forget_memory")
+async def forget_memory(
+    knowledge_id: str = Field(description="Memory ID to delete"),
+) -> MemoryMutationResponse:
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.memory_store:
+        raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
+
+    success = server.analyzer.memory_store.forget_memory(knowledge_id)
+    return MemoryMutationResponse(success=success, record=None, analysis_status=analysis_status)

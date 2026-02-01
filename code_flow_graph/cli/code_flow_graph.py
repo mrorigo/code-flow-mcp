@@ -113,6 +113,9 @@ class CodeGraphAnalyzer:
             return TreeSitterPythonExtractor()
         elif self.language == "typescript":
             return TreeSitterTypeScriptExtractor()
+        elif self.language == "rust":
+            from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
+            return TreeSitterRustExtractor()
         else:
             raise ValueError(f"Unsupported language: {self.language}")
 
@@ -434,16 +437,114 @@ class CodeGraphAnalyzer:
         except Exception as e:
             print(f"❌ Error writing report to {output_path}: {e}", file=sys.stderr)
 
+def _memory_command(config, args) -> int:
+    from code_flow_graph.core.cortex_memory import CortexMemoryStore
+
+    if not config.memory_enabled:
+        print("❌ Cortex memory is disabled in config.", file=sys.stderr)
+        return 1
+
+    store = CortexMemoryStore(
+        persist_directory=config.chromadb_path,
+        embedding_model_name=resolve_embedding_model(config.embedding_model),
+        collection_name=config.memory_collection_name,
+    )
+
+    if args.memory_action == "add":
+        record = store.add_memory(
+            content=args.content,
+            memory_type=args.type.upper(),
+            tags=args.tags or [],
+            scope=args.scope,
+            file_paths=args.file_paths or [],
+            source=args.source,
+            base_confidence=args.base_confidence,
+            decay_half_life_days=config.memory_half_life_days.get(args.type.upper(), 30.0),
+            decay_floor=config.memory_decay_floor.get(args.type.upper(), 0.05),
+            metadata={},
+        )
+        print(f"✅ Added memory {record.knowledge_id}")
+        return 0
+
+    if args.memory_action == "reinforce":
+        record = store.reinforce_memory(args.knowledge_id)
+        if not record:
+            print("❌ Memory not found.", file=sys.stderr)
+            return 1
+        print(f"✅ Reinforced memory {record.knowledge_id}")
+        return 0
+
+    if args.memory_action == "forget":
+        success = store.forget_memory(args.knowledge_id)
+        if not success:
+            print("❌ Failed to delete memory.", file=sys.stderr)
+            return 1
+        print(f"✅ Deleted memory {args.knowledge_id}")
+        return 0
+
+    if args.memory_action == "query":
+        results = store.query_memory(
+            query=args.query,
+            n_results=args.limit,
+            filters={"memory_type": args.type.upper()} if args.type else {},
+            similarity_weight=config.memory_similarity_weight,
+            memory_score_weight=config.memory_score_weight,
+        )
+        print(json.dumps(results, indent=2))
+        return 0
+
+    if args.memory_action == "list":
+        results = store.list_memory(
+            filters={"memory_type": args.type.upper()} if args.type else {},
+            limit=args.limit,
+            offset=args.offset,
+        )
+        print(json.dumps(results, indent=2))
+        return 0
+
+    print("❌ Unknown memory action.", file=sys.stderr)
+    return 1
+
+
 def main():
     """Main entry point for the analyzer."""
     parser = argparse.ArgumentParser(
         description="Analyze a codebase to build a call graph and identify entry points. "
                     "Optionally query an existing analysis."
     )
+    subparsers = parser.add_subparsers(dest="command")
+    memory_parser = subparsers.add_parser("memory", help="Manage Cortex memory")
+    memory_sub = memory_parser.add_subparsers(dest="memory_action", required=True)
+
+    memory_add = memory_sub.add_parser("add", help="Add a memory")
+    memory_add.add_argument("--type", default="FACT", help="Memory type TRIBAL|EPISODIC|FACT")
+    memory_add.add_argument("--content", required=True, help="Memory content")
+    memory_add.add_argument("--tags", nargs='*', default=[], help="Tags")
+    memory_add.add_argument("--scope", default="repo", help="Scope: repo|project|file")
+    memory_add.add_argument("--file-paths", nargs='*', default=[], help="Related file paths")
+    memory_add.add_argument("--source", default="user", help="Source: user|system|tool")
+    memory_add.add_argument("--base-confidence", type=float, default=1.0, help="Base confidence")
+
+    memory_query = memory_sub.add_parser("query", help="Query memory")
+    memory_query.add_argument("--query", required=True, help="Query string")
+    memory_query.add_argument("--type", default=None, help="Filter by memory type")
+    memory_query.add_argument("--limit", type=int, default=5, help="Number of results")
+
+    memory_list = memory_sub.add_parser("list", help="List memory")
+    memory_list.add_argument("--type", default=None, help="Filter by memory type")
+    memory_list.add_argument("--limit", type=int, default=50, help="Number of results")
+    memory_list.add_argument("--offset", type=int, default=0, help="Offset")
+
+    memory_reinforce = memory_sub.add_parser("reinforce", help="Reinforce memory")
+    memory_reinforce.add_argument("--knowledge-id", required=True, help="Memory ID")
+
+    memory_forget = memory_sub.add_parser("forget", help="Delete memory")
+    memory_forget.add_argument("--knowledge-id", required=True, help="Memory ID")
+
     parser.add_argument("directory", nargs='?', default=None,
                         help="Path to codebase directory. If not provided, uses 'watch_directories' from config or defaults to current directory.")
     parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
-    parser.add_argument("--language", choices=["python", "typescript"],
+    parser.add_argument("--language", choices=["python", "typescript", "rust"],
                         help="Programming language of the codebase (overrides config)")
     parser.add_argument("--output", default="code_analysis_report.json",
                         help="Output file for the analysis report (only used when performing analysis).")
@@ -483,6 +584,11 @@ def main():
     from code_flow_graph.core.config import load_config
     config = load_config(config_path=args.config, cli_args=cli_overrides)
     
+    # Memory command bypasses analysis pipeline
+    if args.command == "memory":
+        return_code = _memory_command(config, args)
+        sys.exit(return_code)
+
     # Determine root directory
     # If watch_directories has multiple, CLI currently only supports one root for analysis context usually.
     # But the analyzer supports multiple.

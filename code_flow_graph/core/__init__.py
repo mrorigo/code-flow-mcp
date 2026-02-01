@@ -30,6 +30,7 @@ from .utils import (
 # Import extractor classes for backward compatibility and internal use
 from .treesitter.python_extractor import TreeSitterPythonExtractor
 from .treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from .treesitter.rust_extractor import TreeSitterRustExtractor
 
 # Type alias for file paths
 FilePath = Union[str, Path]
@@ -43,7 +44,7 @@ def get_language_from_extension(file_path: FilePath) -> str:
         file_path: Path to the file (string or Path object)
 
     Returns:
-        Language name ('python' or 'typescript')
+        Language name ('python', 'typescript', or 'rust')
 
     Raises:
         ValueError: If file extension is not supported
@@ -55,6 +56,8 @@ def get_language_from_extension(file_path: FilePath) -> str:
         return 'python'
     elif extension in ['.ts', '.tsx']:
         return 'typescript'
+    elif extension == '.rs':
+        return 'rust'
     else:
         raise ValueError(f"Unsupported file extension: {extension}")
 
@@ -66,7 +69,7 @@ def create_extractor(file_path: FilePath) -> Any:
         file_path: Path to the file to analyze
 
     Returns:
-        Extractor instance (PythonASTExtractor or TypeScriptASTExtractor)
+        Extractor instance (Tree-sitter based)
 
     Raises:
         ValueError: If file extension is not supported
@@ -77,6 +80,8 @@ def create_extractor(file_path: FilePath) -> Any:
         return TreeSitterPythonExtractor()
     elif language == 'typescript':
         return TreeSitterTypeScriptExtractor()
+    elif language == 'rust':
+        return TreeSitterRustExtractor()
     else:
         raise ValueError(f"Unsupported language: {language}")
 
@@ -127,7 +132,8 @@ def extract_from_directory(directory_path: FilePath, **kwargs) -> List[CodeEleme
     # Find all supported files
     python_files = list(directory.rglob('*.py'))
     typescript_files = list(directory.rglob('*.ts')) + list(directory.rglob('*.tsx'))
-    all_files = python_files + typescript_files
+    rust_files = list(directory.rglob('*.rs'))
+    all_files = python_files + typescript_files + rust_files
 
     if not all_files:
         return []
@@ -163,6 +169,13 @@ def extract_from_directory(directory_path: FilePath, **kwargs) -> List[CodeEleme
     for ts_file in typescript_files:
         if ts_file in filtered_files:
             elements = typescript_extractor.extract_from_file(ts_file)
+            all_elements.extend(elements)
+
+    # Process Rust files
+    rust_extractor = TreeSitterRustExtractor()
+    for rs_file in rust_files:
+        if rs_file in filtered_files:
+            elements = rust_extractor.extract_from_file(rs_file)
             all_elements.extend(elements)
 
     return all_elements
@@ -220,6 +233,16 @@ def extract_typescript_directory(directory_path: FilePath) -> List[CodeElement]:
     extractor = TreeSitterTypeScriptExtractor()
     return extractor.extract_from_directory(Path(directory_path))
 
+
+def extract_rust_file(file_path: FilePath) -> List[CodeElement]:
+    extractor = TreeSitterRustExtractor()
+    return extractor.extract_from_file(Path(file_path))
+
+
+def extract_rust_directory(directory_path: FilePath) -> List[CodeElement]:
+    extractor = TreeSitterRustExtractor()
+    return extractor.extract_from_directory(Path(directory_path))
+
 # Export all important classes and functions for backward compatibility
 __all__ = [
     # Core models
@@ -238,10 +261,13 @@ __all__ = [
     'extract_python_directory',
     'extract_typescript_file',
     'extract_typescript_directory',
+    'extract_rust_file',
+    'extract_rust_directory',
 
     # Extractor classes (for advanced usage)
     'TreeSitterPythonExtractor',
     'TreeSitterTypeScriptExtractor',
+    'TreeSitterRustExtractor',
 
     # Type aliases
     'FilePath',

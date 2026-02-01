@@ -24,6 +24,18 @@ class TestCLITypeScriptIntegration:
         assert '--language' in result.stdout
         assert 'typescript' in result.stdout
 
+
+    def test_cli_rust_flag_exists(self):
+        """Test that CLI accepts --language rust flag."""
+        result = subprocess.run([
+            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            '--help'
+        ], capture_output=True, text=True, cwd='.')
+
+        assert result.returncode == 0
+        assert '--language' in result.stdout
+        assert 'rust' in result.stdout
+
     def test_cli_typescript_basic_analysis(self, temp_dir):
         """Test basic TypeScript analysis via CLI."""
         # Create a simple TypeScript file

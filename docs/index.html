@@ -110,7 +110,7 @@
                         class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
                 </span>
-                v0.2.0 Now Available
+                v0.3.0 Now Available
             </div>
 
             <h1 class="text-5xl sm:text-7xl font-extrabold text-white tracking-tight mb-8 animate-slide-up">
@@ -122,7 +122,7 @@
             <p class="mt-4 max-w-2xl mx-auto text-xl text-slate-400 mb-10 animate-slide-up"
                 style="animation-delay: 0.1s;">
                 CodeFlow is a powerful code analysis tool for developers and AI agents. Generate call graphs, perform
-                semantic search, and reduce cognitive load with a persistent vector store.
+                semantic search, and reduce cognitive load with Tree-sitter-powered parsing and a persistent vector store.
             </p>
 
             <div class="flex flex-col sm:flex-row justify-center gap-4 animate-slide-up" style="animation-delay: 0.2s;">
@@ -189,8 +189,8 @@
                         </svg>
                     </div>
                     <h3 class="text-lg font-semibold text-white mb-2">Deep AST Extraction</h3>
-                    <p class="text-slate-400 text-sm leading-relaxed">Rich metadata extraction for Python & TypeScript.
-                        Understands classes, functions, and dependencies.</p>
+                    <p class="text-slate-400 text-sm leading-relaxed">Tree-sitter metadata extraction for Python,
+                        TypeScript/TSX, and Rust. Understands classes, functions, and dependencies.</p>
                 </div>
 
                 <!-- Feature 2 -->
@@ -233,7 +233,7 @@
                     </div>
                     <h3 class="text-lg font-semibold text-white mb-2">Multi-language</h3>
                     <p class="text-slate-400 text-sm leading-relaxed">Unified API that automatically detects and
-                        analyzes both Python and TypeScript codebases.</p>
+                        analyzes Python, TypeScript/TSX, and Rust codebases.</p>
                 </div>
             </div>
         </div>
@@ -505,7 +505,7 @@
                     <h2 class="text-2xl font-bold text-white mb-4">Also Available as a CLI Tool</h2>
                     <p class="text-slate-400 text-lg mb-6">
                         Prefer the command line? CodeFlow includes a powerful CLI for direct analysis, querying, and
-                        diagram generation.
+                        diagram generation across Python, TypeScript/TSX, and Rust.
                     </p>
                     <ul class="space-y-3">
                         <li class="flex items-center gap-3 text-slate-300">
@@ -543,7 +543,7 @@
                         <div class="p-6 font-mono text-sm leading-relaxed">
                             <div class="flex gap-2 text-slate-300">
                                 <span class="text-green-400">$</span>
-                                <span class="text-white">python -m code_flow_graph.cli . --query "auth"</span>
+                                <span class="text-white">python -m code_flow_graph.cli . --language rust --query "auth"</span>
                             </div>
                             <div class="mt-2 text-slate-400">
                                 > Analyzing codebase... <span class="text-green-400">Done (0.4s)</span>

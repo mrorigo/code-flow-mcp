@@ -12,9 +12,12 @@ from watchdog.events import FileSystemEventHandler
 
 from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
 from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
+from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
 from code_flow_graph.core.structured_extractor import StructuredDataExtractor
 from code_flow_graph.core.call_graph_builder import CallGraphBuilder
 from code_flow_graph.core.vector_store import CodeVectorStore
+from code_flow_graph.core.cortex_memory import CortexMemoryStore
 from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 class AnalysisState(Enum):
@@ -32,6 +35,8 @@ class WatcherHandler(FileSystemEventHandler):
         language = self.analyzer.config.get('language', 'python').lower()
         if language == 'typescript':
             self.supported_extensions = ['.py', '.ts', '.tsx', '.js', '.jsx', '.json', '.yaml', '.yml']  # Support both for mixed projects
+        elif language == 'rust':
+            self.supported_extensions = ['.rs', '.json', '.yaml', '.yml']
         else:
             self.supported_extensions = ['.py', '.json', '.yaml', '.yml']
 
@@ -58,6 +63,8 @@ class MCPAnalyzer:
         # Initialize appropriate extractor based on language
         if language == 'typescript':
             self.extractor = TreeSitterTypeScriptExtractor()
+        elif language == 'rust':
+            self.extractor = TreeSitterRustExtractor()
         else:
             self.extractor = TreeSitterPythonExtractor()
         
@@ -70,6 +77,7 @@ class MCPAnalyzer:
         self.builder = CallGraphBuilder()
         self.builder.project_root = root
         self.vector_store: Optional[CodeVectorStore] = None
+        self.memory_store: Optional[CortexMemoryStore] = None
         self.observer = None
 
         # Analysis state tracking
@@ -89,10 +97,25 @@ class MCPAnalyzer:
                 f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization"
             )
 
+        # Initialize memory store if enabled
+        if config.get('memory_enabled', True) and Path(config['chromadb_path']).exists():
+            self.memory_store = CortexMemoryStore(
+                persist_directory=config['chromadb_path'],
+                embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
+                collection_name=config.get('memory_collection_name', 'cortex_memory_v1'),
+            )
+        elif not config.get('memory_enabled', True):
+            logging.info("Cortex memory disabled")
+
         # Background cleanup configuration
         self.cleanup_interval = config.get('cleanup_interval_minutes', 30)  # Default: 30 minutes
+        self.memory_cleanup_interval_seconds = config.get('memory_cleanup_interval_seconds', 3600)
+        self.memory_grace_seconds = config.get('memory_grace_seconds', 86400)
+        self.memory_min_score = config.get('memory_min_score', 0.1)
         self.cleanup_task = None
+        self.memory_cleanup_task = None
         self.cleanup_shutdown_event = threading.Event()
+        self.memory_cleanup_shutdown_event = threading.Event()
 
         # Initialize Summary Processor if enabled
         self.summary_processor = None
@@ -143,12 +166,41 @@ class MCPAnalyzer:
         self.cleanup_task = cleanup_thread
         logging.info(f"Background cleanup started (interval: {self.cleanup_interval} minutes)")
 
+        if self.memory_store:
+            def memory_cleanup_worker():
+                """Background worker function that prunes stale cortex memory."""
+                while not self.memory_cleanup_shutdown_event.is_set():
+                    try:
+                        logging.info("Running background cleanup of cortex memory")
+                        stats = self.memory_store.cleanup_stale_memory(
+                            min_score=self.memory_min_score,
+                            grace_seconds=self.memory_grace_seconds,
+                        )
+                        if stats.get("removed", 0) > 0:
+                            logging.info(f"Memory cleanup removed {stats['removed']} entries")
+                        self.memory_cleanup_shutdown_event.wait(timeout=self.memory_cleanup_interval_seconds)
+                    except Exception as e:
+                        logging.error(f"Error in memory cleanup: {e}")
+                        time.sleep(60)
+
+            memory_cleanup_thread = threading.Thread(target=memory_cleanup_worker, daemon=True)
+            memory_cleanup_thread.start()
+            self.memory_cleanup_task = memory_cleanup_thread
+            logging.info(
+                f"Memory cleanup started (interval: {self.memory_cleanup_interval_seconds} seconds)"
+            )
+
     def stop_background_cleanup(self) -> None:
         """Stop the background cleanup task."""
         if self.cleanup_task and self.cleanup_task.is_alive():
             self.cleanup_shutdown_event.set()
             self.cleanup_task.join(timeout=10)  # Wait up to 10 seconds
             logging.info("Background cleanup stopped")
+
+        if self.memory_cleanup_task and self.memory_cleanup_task.is_alive():
+            self.memory_cleanup_shutdown_event.set()
+            self.memory_cleanup_task.join(timeout=10)
+            logging.info("Memory cleanup stopped")
 
     def is_ready(self) -> bool:
         """Check if analysis is complete and ready for queries.

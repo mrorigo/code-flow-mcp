@@ -15,6 +15,15 @@ def mock_core_components():
         yield mock_extractor, mock_builder, mock_store
 
 
+@pytest.fixture
+def mock_core_components_rust():
+    """Mock core components for Rust analyzer initialization."""
+    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterRustExtractor') as mock_extractor, \
+         patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
+         patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+        yield mock_extractor, mock_builder, mock_store
+
+
 def test_mcp_analyzer_init(mock_core_components):
     """Test MCPAnalyzer initialization with config dict."""
     mock_extractor, mock_builder, mock_store = mock_core_components
@@ -30,6 +39,23 @@ def test_mcp_analyzer_init(mock_core_components):
     assert analyzer.extractor == mock_extractor.return_value
     assert analyzer.builder == mock_builder.return_value
     assert analyzer.vector_store is None  # Since path doesn't exist
+
+
+def test_mcp_analyzer_init_rust(mock_core_components_rust):
+    """Test MCPAnalyzer initialization for Rust."""
+    mock_extractor, mock_builder, _ = mock_core_components_rust
+    config = {
+        'watch_directories': ['.'],
+        'chromadb_path': './test_chroma',
+        'language': 'rust'
+    }
+
+    analyzer = MCPAnalyzer(config)
+
+    assert analyzer.config == config
+    assert analyzer.extractor == mock_extractor.return_value
+    assert analyzer.builder == mock_builder.return_value
+    assert analyzer.vector_store is None
 
 
 def test_mcp_analyzer_init_with_existing_store():

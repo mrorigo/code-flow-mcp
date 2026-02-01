@@ -15,6 +15,25 @@ DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_MAX_TOKENS = 256
 DEFAULT_LANGUAGE = "python"
 
+# Cortex memory defaults
+DEFAULT_MEMORY_ENABLED = True
+DEFAULT_MEMORY_COLLECTION = "cortex_memory_v1"
+DEFAULT_MEMORY_SIMILARITY_WEIGHT = 0.7
+DEFAULT_MEMORY_SCORE_WEIGHT = 0.3
+DEFAULT_MEMORY_MIN_SCORE = 0.1
+DEFAULT_MEMORY_CLEANUP_INTERVAL_SECONDS = 3600
+DEFAULT_MEMORY_GRACE_SECONDS = 86400
+DEFAULT_MEMORY_HALF_LIFE_DAYS = {
+    "TRIBAL": 180.0,
+    "EPISODIC": 7.0,
+    "FACT": 30.0,
+}
+DEFAULT_MEMORY_DECAY_FLOOR = {
+    "TRIBAL": 0.1,
+    "EPISODIC": 0.01,
+    "FACT": 0.05,
+}
+
 
 class CodeFlowConfig(BaseModel):
     """
@@ -31,6 +50,17 @@ class CodeFlowConfig(BaseModel):
     # Optional LLM config for summaries (can be expanded)
     summary_generation_enabled: bool = False
     llm_config: Dict[str, Any] = Field(default_factory=dict)
+
+    # Cortex memory
+    memory_enabled: bool = DEFAULT_MEMORY_ENABLED
+    memory_collection_name: str = DEFAULT_MEMORY_COLLECTION
+    memory_similarity_weight: float = DEFAULT_MEMORY_SIMILARITY_WEIGHT
+    memory_score_weight: float = DEFAULT_MEMORY_SCORE_WEIGHT
+    memory_min_score: float = DEFAULT_MEMORY_MIN_SCORE
+    memory_cleanup_interval_seconds: int = DEFAULT_MEMORY_CLEANUP_INTERVAL_SECONDS
+    memory_grace_seconds: int = DEFAULT_MEMORY_GRACE_SECONDS
+    memory_half_life_days: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_HALF_LIFE_DAYS.copy())
+    memory_decay_floor: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_DECAY_FLOOR.copy())
     
     # Allow extra fields for flexibility
     class Config:

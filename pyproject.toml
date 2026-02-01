@@ -20,6 +20,7 @@ dependencies = [
     "tree-sitter",
     "tree-sitter-python",
     "tree-sitter-typescript",
+    "tree-sitter-rust",
 ]
 
 [project.scripts]

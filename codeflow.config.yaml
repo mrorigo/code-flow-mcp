@@ -5,6 +5,21 @@ max_graph_depth: 3
 embedding_model: "all-mpnet-base-v2"
 max_tokens: 256
 language: "python"
+memory_enabled: true
+memory_collection_name: "cortex_memory_v1"
+memory_similarity_weight: 0.7
+memory_score_weight: 0.3
+memory_min_score: 0.1
+memory_cleanup_interval_seconds: 3600
+memory_grace_seconds: 86400
+memory_half_life_days:
+  TRIBAL: 180.0
+  EPISODIC: 7.0
+  FACT: 30.0
+memory_decay_floor:
+  TRIBAL: 0.1
+  EPISODIC: 0.01
+  FACT: 0.05
 llm_config:
   api_key_env_var: "OPENAI_API_KEY"
   base_url: "https://openrouter.ai/api/v1"  # Default: OpenRouter
