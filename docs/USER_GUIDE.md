@@ -11,6 +11,8 @@ This guide explains how to install, configure, and use CodeFlow’s CLI and MCP 
   - [Quick Start (CLI)](#quick-start-cli)
   - [Quick Start (MCP Server)](#quick-start-mcp-server)
   - [Configuration](#configuration)
+    - [Configuration Keys (Core Defaults)](#configuration-keys-core-defaults)
+    - [MCP Server Default Config Example](#mcp-server-default-config-example)
     - [Configuration Precedence](#configuration-precedence)
   - [Cortex Memory](#cortex-memory)
     - [Memory Types](#memory-types)
@@ -42,13 +44,13 @@ CodeFlow is a code analysis tool that builds call graphs, extracts metadata usin
 - A **CLI** for analysis, reporting, and querying.
 - An **MCP server** for programmatic access (tools for search, call graphs, metadata, and memory).
 
-Key components live in:
+Key components include:
 
-- Tree-sitter extractors in [`../code_flow/core/treesitter`](code_flow/core/treesitter/__init__.py:1)
-- Vector store integration in [`../code_flow/core/vector_store.py`](code_flow/core/vector_store.py:1)
-- MCP server tooling in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:1)
-- MCP analyzer and file watching in [`../code_flow/mcp_server/analyzer.py`](code_flow/mcp_server/analyzer.py:1)
-- Cortex memory store in [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1)
+- Tree-sitter extractors for Python, TypeScript/TSX, and Rust
+- Call-graph construction with entry-point identification
+- Vector store integration for semantic search
+- MCP server tooling and background analysis with file watching
+- Cortex memory store for long/short-lived memory entries
 
 ## Install
 
@@ -58,7 +60,7 @@ Recommended setup uses `uv`:
 uv sync
 ```
 
-The project dependencies are defined in [`pyproject.toml`](pyproject.toml:1). You’ll need Python 3.11+ and a working virtual environment.
+The project dependencies are defined in [`pyproject.toml`](pyproject.toml). You’ll need Python 3.11+ and a working virtual environment.
 
 Install CodeFlow as a user-level tool (recommended for CLI usage):
 
@@ -100,7 +102,7 @@ Useful flags include:
 - `--embedding-model` to pick an embedding model.
 - `--max-tokens` to tune chunk size for embeddings.
 
-CLI entry point: [`../code_flow/cli/code_flow.py`](code_flow/cli/code_flow.py:1).
+CLI entry point: `code_flow`.
 
 ## Quick Start (MCP Server)
 
@@ -110,38 +112,161 @@ Start the MCP server with defaults:
 code_flow_mcp_server
 ```
 
-The server uses the unified config model in [`../code_flow/core/config.py`](code_flow/core/config.py:1) and loads `codeflow.config.yaml` by default.
-
-Tool definitions are in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:1).
+The server loads [`codeflow.config.yaml`](codeflow.config.yaml) by default.
 
 ## Configuration
 
-All configuration flows through the Pydantic model in [`../code_flow/core/config.py`](code_flow/core/config.py:1). The default config file is `codeflow.config.yaml`.
+All configuration flows through a single unified model. The default config file is [`codeflow.config.yaml`](codeflow.config.yaml).
 
-Minimal example:
+### Configuration Keys (Core Defaults)
+
+These defaults apply when a value is not provided in the config file or CLI args:
 
 ```yaml
+# NOTE: project_root is required for analysis and must be set in your config.
 project_root: "/path/to/project"
 watch_directories: ["."]
-  ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]
-  max_graph_depth: 3
-  embedding_model: "all-MiniLM-L6-v2"
+ignored_patterns: ["venv", "**/__pycache__", ".git", ".idea", ".vscode", "node_modules"]
+chromadb_path: "./code_vectors_chroma"
+max_graph_depth: 3
+embedding_model: "all-MiniLM-L6-v2"
+max_tokens: 256
+language: "python"
+min_similarity: 0.1
+call_graph_confidence_threshold: 0.8
+
+# Summary generation (Meta-RAG)
+summary_generation_enabled: false
+llm_config: {}
+
+# Cortex memory
+memory_enabled: true
+memory_collection_name: "cortex_memory_v1"
+memory_similarity_weight: 0.7
+memory_score_weight: 0.3
+memory_min_score: 0.1
+memory_cleanup_interval_seconds: 3600
+memory_grace_seconds: 86400
+memory_half_life_days:
+  TRIBAL: 180.0
+  EPISODIC: 7.0
+  FACT: 30.0
+memory_decay_floor:
+  TRIBAL: 0.1
+  EPISODIC: 0.01
+  FACT: 0.05
+
+# Cortex memory resources (MCP)
+memory_resources_enabled: true
+memory_resources_limit: 10
+memory_resources_filters: {}
+
+# Drift detection
+drift_enabled: false
+drift_granularity: "module"
+drift_min_entity_size: 3
+drift_cluster_algorithm: "hdbscan"
+drift_cluster_eps: 0.5
+drift_cluster_min_samples: 5
+drift_numeric_features: []
+drift_textual_features: []
+drift_ignore_path_patterns: []
+drift_confidence_threshold: 0.6
+```
+
+### MCP Server Default Config Example
+
+The MCP server ships with a default config template at [`code_flow/mcp_server/config/default.yaml`](code_flow/mcp_server/config/default.yaml). This is the full example:
+
+```yaml
+watch_directories: ["code_flow"]
+ignored_patterns: ["venv", "**/__pycache__"]
+ignored_filenames: ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock"]
+chromadb_path: "./code_vectors_chroma"
+max_graph_depth: 3
+embedding_model: "all-MiniLM-L6-v2"
+max_tokens: 256
+language: "python"
+call_graph_confidence_threshold: 0.8
+
+# Background cleanup configuration
+cleanup_interval_minutes: 30
+
+# Cortex memory configuration
+memory_enabled: true
+memory_collection_name: "cortex_memory_v1"
+memory_similarity_weight: 0.7
+memory_score_weight: 0.3
+memory_min_score: 0.1
+memory_cleanup_interval_seconds: 3600
+memory_grace_seconds: 86400
+memory_half_life_days:
+  TRIBAL: 180.0
+  EPISODIC: 7.0
+  FACT: 30.0
+memory_decay_floor:
+  TRIBAL: 0.1
+  EPISODIC: 0.01
+  FACT: 0.05
+
+# Cortex memory resources (MCP)
+memory_resources_enabled: true
+memory_resources_limit: 10
+memory_resources_filters: {}
+
+# Summary Generation (Meta-RAG)
+summary_generation_enabled: false
+llm_config:
+  api_key_env_var: "OPENAI_API_KEY"
+  base_url: "https://openrouter.ai/api/v1"
+  model: "x-ai/grok-4.1-fast"
   max_tokens: 256
-  language: "python"
-  call_graph_confidence_threshold: 0.8
+  concurrency: 5
+  min_complexity: 3
+  min_nloc: 5
+  skip_private: true
+  skip_test: true
+  prioritize_entry_points: true
+  summary_depth: "standard"
+  max_input_tokens: 2000
+
+# Drift detection configuration
+drift_enabled: false
+drift_granularity: "module"
+drift_min_entity_size: 3
+drift_cluster_algorithm: "hdbscan"
+drift_numeric_features:
+  - complexity_mean
+  - complexity_variance
+  - nloc_mean
+  - nloc_variance
+  - decorator_count_mean
+  - dependency_count_mean
+  - exception_count_mean
+  - incoming_degree_mean
+  - outgoing_degree_mean
+drift_textual_features:
+  - decorators
+  - external_dependencies
+  - catches_exceptions
+drift_ignore_path_patterns:
+  - "**/tests/**"
+  - "**/__pycache__/**"
+  - "**/node_modules/**"
+drift_confidence_threshold: 0.6
 ```
 
 ### Configuration Precedence
 
 1. CLI args
 2. Config file
-3. Defaults in [`../code_flow/core/config.py`](code_flow/core/config.py:1)
+3. Built-in defaults
 
 ## Cortex Memory
 
 Cortex memory stores “tribal” and “episodic” knowledge in a dedicated Chroma collection. It applies decay over time and ranks results with a memory score.
 
-Core implementation: [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1).
+Core implementation is part of the CodeFlow core library.
 
 ### Memory Types
 
@@ -151,7 +276,7 @@ Core implementation: [`../code_flow/core/cortex_memory.py`](code_flow/core/corte
 
 ### MCP Tools
 
-Available tools (defined in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:78)):
+Available tools:
 
 - `reinforce_memory`
 - `query_memory`
@@ -231,13 +356,13 @@ CLI usage:
 code_flow query -- . --query "JWT auth" --mermaid --min-similarity 0.5
 ```
 
-MCP tool: `semantic_search` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:218).
+MCP tool: `semantic_search`.
 
 ## Call Graphs and Mermaid
 
 The call graph is derived from Tree-sitter extraction and call graph building. You can retrieve it as JSON or Mermaid.
 
-- MCP tool: `get_call_graph` and `generate_mermaid_graph` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:261).
+- MCP tools: `get_call_graph` and `generate_mermaid_graph`.
 - CLI option: `query --mermaid` to generate Mermaid for query results.
 
 Call resolution uses module-local symbol tables and import-aware matching with confidence scores. Drift analysis consumes only edges at or above `call_graph_confidence_threshold`.
@@ -249,16 +374,19 @@ Metrics are emitted to `.codeflow/reports/` as:
 
 ## Entry Points and Function Metadata
 
-Entry points are derived from call graph analysis.
+Entry points are derived from call graph analysis and scored for priority.
 
-- MCP tool: `query_entry_points` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:304)
-- MCP tool: `get_function_metadata` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:276)
+- MCP tool: `query_entry_points`
+  - Supports pagination with `limit` and `offset`.
+  - Returns minimal fields by default; set `include_details=true` for full function metadata.
+  - Includes `entry_point_score`, `entry_point_category`, `entry_point_priority`, and `entry_point_signals` in each result.
+- MCP tool: `get_function_metadata`
 
 ## Structured Data Indexing
 
 YAML/JSON files are indexed and searchable as structured data, enabling configuration-aware search.
 
-Implementation: [`../code_flow/core/structured_extractor.py`](code_flow/core/structured_extractor.py:1).
+Implementation: part of the CodeFlow core library.
 
 ## Drift Detection
 
@@ -266,10 +394,10 @@ Drift detection analyzes module-level structure and call-graph topology to surfa
 
 Core implementation:
 
-- Feature extraction: [`../code_flow/core/drift_features.py`](code_flow/core/drift_features.py:1)
-- Structural clustering: [`../code_flow/core/drift_clusterer.py`](code_flow/core/drift_clusterer.py:1)
-- Topology analysis: [`../code_flow/core/drift_topology.py`](code_flow/core/drift_topology.py:1)
-- Report assembly: [`../code_flow/core/drift_report.py`](code_flow/core/drift_report.py:1)
+- Feature extraction
+- Structural clustering
+- Topology analysis
+- Report assembly
 
 ### Enabling Drift
 
@@ -295,19 +423,19 @@ code_flow analyze -- . --output analysis.json
 
 ### MCP Tool
 
-Use `check_drift` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:470) to generate a drift report from the current analysis state.
+Use `check_drift` to generate a drift report from the current analysis state.
 
 ## Background Analysis and File Watching
 
 The MCP server runs analysis in the background and watches for file changes using `watchdog`. This enables incremental updates and keeps the index fresh.
 
-Implementation: [`../code_flow/mcp_server/analyzer.py`](code_flow/mcp_server/analyzer.py:1).
+Implementation: part of the MCP server background analyzer.
 
 ## LLM Summaries (Optional)
 
 If enabled, CodeFlow can generate summaries of functions via an LLM pipeline. Configure in `llm_config` and enable `summary_generation_enabled` in your config.
 
-LLM processing is implemented in [`../code_flow/mcp_server/llm.py`](code_flow/mcp_server/llm.py:1).
+LLM processing is implemented in the MCP server LLM pipeline.
 
 ## Testing
 
@@ -317,7 +445,7 @@ Run unit and integration tests with `pytest`:
 uv run pytest tests/
 ```
 
-Memory tests live in [`tests/core/test_cortex_memory.py`](tests/core/test_cortex_memory.py:1).
+Memory tests live in the test suite under [`tests/`](tests).
 
 ## Troubleshooting
 
@@ -341,12 +469,12 @@ If you switch embedding models across runs, re-run analysis to rebuild embedding
 
 **Q: Do I need Tree-sitter manually installed?**
 
-No. Tree-sitter bindings are bundled and initialized in the extractor modules under [`../code_flow/core/treesitter`](code_flow/core/treesitter/__init__.py:1).
+No. Tree-sitter bindings are bundled and initialized in the extractor modules.
 
 **Q: Where is Cortex memory stored?**
 
-In the same ChromaDB persistence path as code embeddings, but isolated to its own collection. See [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1).
+In the same ChromaDB persistence path as code embeddings, but isolated to its own collection.
 
 **Q: How do I disable Cortex memory?**
 
-Set `memory_enabled: false` in your config file. See defaults in [`../code_flow/core/config.py`](code_flow/core/config.py:1).
+Set `memory_enabled: false` in your config file.

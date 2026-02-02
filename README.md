@@ -32,6 +32,7 @@ The tool provides three main interfaces:
 - **Intelligent Call Graph Generation:**
   - Builds a graph of function-to-function calls.
   - Employs multiple heuristics to identify potential entry points in the codebase.
+  - Scores and categorizes entry points (runtime/framework/library/test) for prioritization.
 - **Persistent Vector Store (ChromaDB):**
   - Stores all extracted code elements and call edges as semantic embeddings.
   - Enables rapid semantic search and filtered queries over the codebase's functions and their metadata.
@@ -248,7 +249,7 @@ The server exposes the following tools through the MCP protocol:
 - **`semantic_search`**: Search functions semantically using natural language queries. Includes analysis status in response.
 - **`get_call_graph`**: Retrieve call graph in JSON or Mermaid format. Includes analysis status in response.
 - **`get_function_metadata`**: Get detailed metadata for a specific function. Includes analysis status in response.
-- **`query_entry_points`**: Get all identified entry points in the codebase. Includes analysis status in response.
+- **`query_entry_points`**: Get identified entry points with pagination (`limit`, `offset`). Returns minimal fields by default; set `include_details=true` for full metadata. Includes scoring fields `entry_point_score`, `entry_point_category`, `entry_point_priority`, `entry_point_signals`.
 - **`generate_mermaid_graph`**: Generate Mermaid diagram for call graph visualization. Includes analysis status in response.
 - **`cleanup_stale_references`**: Manually trigger cleanup of stale file references in the vector store
 - **`update_context`**: Update session context with key-value pairs
