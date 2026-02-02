@@ -43,8 +43,12 @@ code_flow.mcp_server = "code_flow.mcp_server.__main__:main"
 def test_config_load():
     # Mock yaml load
     mock_config = {
+        "project_root": ".",
         "watch_directories": ["."],
         "ignored_patterns": [],
+        "chroma_dir": "./.codeflow/chroma",
+        "memory_dir": "./.codeflow/memory",
+        "reports_dir": "./.codeflow/reports",
         "chromadb_path": "./code_vectors_chroma",
         "max_graph_depth": 3
     }

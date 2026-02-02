@@ -3,8 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import math
+
+try:
+    import hdbscan  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    hdbscan = None
+
+try:
+    from sklearn.cluster import DBSCAN  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    DBSCAN = None
 
 from code_flow.core.drift_models import DriftCluster, DriftFinding, DriftFeatureVector
 
@@ -12,13 +22,20 @@ from code_flow.core.drift_models import DriftCluster, DriftFinding, DriftFeature
 @dataclass
 class DriftClusterer:
     confidence_threshold: float = 0.6
+    algorithm: str = "hdbscan"
+    eps: float = 0.75
+    min_samples: int = 5
 
     def cluster(self, vectors: List[DriftFeatureVector]) -> Tuple[List[DriftCluster], List[DriftFinding]]:
         if not vectors:
             return [], []
 
-        clusters = [self._single_cluster(vectors)]
-        findings = self._find_outliers(vectors, clusters[0])
+        labels = self._cluster_labels(vectors)
+        clusters = self._build_clusters(vectors, labels)
+        findings: List[DriftFinding] = []
+        for cluster in clusters:
+            members = [v for v in vectors if v.entity_id in cluster.member_ids]
+            findings.extend(self._find_outliers(members, cluster))
         return clusters, findings
 
     def _single_cluster(self, vectors: List[DriftFeatureVector]) -> DriftCluster:
@@ -39,6 +56,41 @@ class DriftClusterer:
             dominant_patterns=dominant_patterns,
             cohesion_score=1.0,
         )
+
+    def _cluster_labels(self, vectors: List[DriftFeatureVector]) -> List[int]:
+        features = [self._vector_to_dense(v) for v in vectors]
+        algo = self.algorithm.lower()
+
+        if algo == "hdbscan" and hdbscan is not None:
+            clusterer = hdbscan.HDBSCAN(min_cluster_size=max(2, self.min_samples))
+            return clusterer.fit_predict(features).tolist()
+
+        if DBSCAN is not None:
+            clusterer = DBSCAN(eps=self.eps, min_samples=max(2, self.min_samples))
+            return clusterer.fit_predict(features).tolist()
+
+        # Fallback to single cluster if no clustering backend is available.
+        return [0 for _ in vectors]
+
+    def _build_clusters(self, vectors: List[DriftFeatureVector], labels: List[int]) -> List[DriftCluster]:
+        clustered: Dict[int, List[DriftFeatureVector]] = {}
+        for vector, label in zip(vectors, labels):
+            clustered.setdefault(label, []).append(vector)
+
+        clusters: List[DriftCluster] = []
+        for label, members in clustered.items():
+            cluster = self._single_cluster(members)
+            if label < 0:
+                cluster.cluster_id = "cluster-noise"
+            else:
+                cluster.cluster_id = f"cluster-{label}"
+            clusters.append(cluster)
+        return clusters
+
+    def _vector_to_dense(self, vector: DriftFeatureVector) -> List[float]:
+        numeric = vector.features_numeric
+        keys = sorted(numeric.keys())
+        return [float(numeric.get(k, 0.0)) for k in keys]
 
     def _dominant_patterns(self, vectors: List[DriftFeatureVector]) -> Dict[str, List[str]]:
         pattern_counts: Dict[str, Dict[str, int]] = {}

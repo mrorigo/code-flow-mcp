@@ -6,6 +6,8 @@ pytest-asyncio
 pydantic
 chromadb>=1.1.0
 sentence-transformers>=5.1.0
+scikit-learn
+hdbscan
 openai[aiohttp]>=1.0.0
 aiohttp>=3.9.0
 tree-sitter

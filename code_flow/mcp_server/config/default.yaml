@@ -6,6 +6,7 @@ max_graph_depth: 3
 embedding_model: "all-MiniLM-L6-v2"
 max_tokens: 256
 language: "python"
+call_graph_confidence_threshold: 0.8
 # Background cleanup configuration
 cleanup_interval_minutes: 30
 

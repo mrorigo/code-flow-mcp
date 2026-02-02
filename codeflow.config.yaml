@@ -1,11 +1,16 @@
+project_root: "/Users/origo/src/flowcode/code-flow-mcp"
 drift_enabled: true
 watch_directories: ["code_flow"]
 ignored_patterns: ["venv", "**/__pycache__"]
-chromadb_path: "./code_vectors_chroma"
 max_graph_depth: 3
 embedding_model: "all-mpnet-base-v2"
 max_tokens: 256
 language: "python"
+min_similarity: 0.1
+call_graph_confidence_threshold: 0.5
+drift_cluster_algorithm: "hdbscan"
+drift_cluster_eps: 0.75
+drift_cluster_min_samples: 5
 memory_enabled: true
 memory_collection_name: "cortex_memory_v1"
 memory_similarity_weight: 0.7

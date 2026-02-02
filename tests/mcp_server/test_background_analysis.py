@@ -16,7 +16,11 @@ def mock_core_components():
 def test_analyzer_initial_state(mock_core_components):
     """Test that analyzer starts in NOT_STARTED state."""
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -30,7 +34,11 @@ def test_analyzer_initial_state(mock_core_components):
 def test_is_ready_before_analysis(mock_core_components):
     """Test is_ready returns False before analysis."""
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -45,7 +53,11 @@ async def test_start_analysis_creates_task(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
     
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -73,7 +85,11 @@ async def test_analysis_state_transitions(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
     
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -105,7 +121,11 @@ async def test_analysis_failure_handling(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
     
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -136,7 +156,11 @@ async def test_wait_for_analysis(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
     
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     
@@ -212,7 +236,11 @@ async def test_start_analysis_only_once(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
     
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
     

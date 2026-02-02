@@ -12,6 +12,7 @@ from code_flow.core.drift_models import DriftFinding, TopologyViolation
 
 @dataclass
 class TopologyAnalyzer:
+    project_root: str | None = None
     def analyze(self, functions: List[FunctionNode], edges: List[CallEdge]) -> Tuple[List[TopologyViolation], List[DriftFinding]]:
         module_graph = self._build_module_graph(functions, edges)
         logging.info(
@@ -33,7 +34,7 @@ class TopologyAnalyzer:
                 )
             )
 
-        layer_map = self._infer_layers(module_graph)
+        layer_map = _infer_layers(module_graph)
         logging.info("Drift topology: inferred layers for %d modules", len(layer_map))
         for source, targets in module_graph.items():
             for target in targets:
@@ -76,9 +77,18 @@ class TopologyAnalyzer:
                 graph[source_module].append(target_module)
         return graph
 
-    @staticmethod
-    def _module_from_path(file_path: str) -> str:
-        return file_path.replace("/", ".").replace("\\", ".")
+    def _module_from_path(self, file_path: str) -> str:
+        path = file_path
+        if self.project_root:
+            import os
+            path = os.path.relpath(path, self.project_root)
+        if path.endswith(".py"):
+            path = path[:-3]
+        elif path.endswith(".ts"):
+            path = path[:-3]
+        elif path.endswith(".tsx"):
+            path = path[:-4]
+        return path.replace("/", ".").replace("\\", ".")
 
     @staticmethod
     def _detect_cycles(graph: Dict[str, List[str]]) -> List[List[str]]:
@@ -110,25 +120,47 @@ class TopologyAnalyzer:
         for node in graph.keys():
             if node not in visited:
                 dfs(node)
-        return cycles
+        return _dedupe_cycles(cycles)
 
-    @staticmethod
-    def _infer_layers(graph: Dict[str, List[str]]) -> Dict[str, int]:
-        layer_map: Dict[str, int] = {node: 0 for node in graph.keys()}
-        changed = True
-        max_iterations = max(1, len(graph) * 2)
-        iteration = 0
-        while changed and iteration < max_iterations:
-            changed = False
-            iteration += 1
-            for source, targets in graph.items():
-                for target in targets:
-                    if layer_map.get(target, 0) <= layer_map.get(source, 0):
-                        layer_map[target] = layer_map[source] + 1
-                        changed = True
-        if iteration >= max_iterations:
-            logging.warning(
-                "Drift topology: layer inference hit iteration cap (%d). Graph may contain cycles.",
-                max_iterations,
-            )
-        return layer_map
+
+def _dedupe_cycles(cycles: List[List[str]]) -> List[List[str]]:
+    def _canonical_cycle(cycle: List[str]) -> Tuple[str, ...]:
+        if not cycle:
+            return tuple()
+        normalized = cycle
+        if len(cycle) > 1 and cycle[0] == cycle[-1]:
+            normalized = cycle[:-1]
+        min_node = min(normalized)
+        min_index = normalized.index(min_node)
+        rotated = normalized[min_index:] + normalized[:min_index] + [min_node]
+        return tuple(rotated)
+
+    seen: set[Tuple[str, ...]] = set()
+    deduped: List[List[str]] = []
+    for cycle in cycles:
+        canonical = _canonical_cycle(cycle)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            deduped.append(list(canonical))
+    return deduped
+
+
+def _infer_layers(graph: Dict[str, List[str]]) -> Dict[str, int]:
+    layer_map: Dict[str, int] = {node: 0 for node in graph.keys()}
+    changed = True
+    max_iterations = max(1, len(graph) * 2)
+    iteration = 0
+    while changed and iteration < max_iterations:
+        changed = False
+        iteration += 1
+        for source, targets in graph.items():
+            for target in targets:
+                if layer_map.get(target, 0) <= layer_map.get(source, 0):
+                    layer_map[target] = layer_map[source] + 1
+                    changed = True
+    if iteration >= max_iterations:
+        logging.warning(
+            "Drift topology: layer inference hit iteration cap (%d). Graph may contain cycles.",
+            max_iterations,
+        )
+    return layer_map

@@ -60,7 +60,14 @@ async def test_analyze_with_structured_data(mock_dependencies):
 async def test_incremental_update_structured(mock_dependencies):
     mock_py_ext, mock_ts_ext, mock_builder, mock_store, mock_struct_ext = mock_dependencies
     
-    config = {'watch_directories': ['.'], 'chromadb_path': './test_chroma'}
+    config = {
+        'project_root': '.',
+        'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
+        'chromadb_path': './test_chroma'
+    }
     
     with patch('pathlib.Path.exists', return_value=True):
         analyzer = MCPAnalyzer(config)

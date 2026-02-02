@@ -27,7 +27,14 @@ def main():
 
     # Pass config dict to server for analyzer initialization
     # The analyzer expects a dict, so we dump the pydantic model
-    server.config = config.model_dump()
+    config_dict = config.model_dump()
+    config_dict.update({
+        "chroma_dir": str(config.chroma_dir()),
+        "memory_dir": str(config.memory_dir()),
+        "reports_dir": str(config.reports_dir()),
+        "cache_dir": str(config.cache_dir()),
+    })
+    server.config = config_dict
 
     logging.info(f"Server starting with config: {server.config}")
     logging.info("Server running on stdio")

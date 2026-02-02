@@ -10,6 +10,8 @@ from code_flow.core.drift_config import (
     DEFAULT_DRIFT_GRANULARITY,
     DEFAULT_DRIFT_MIN_ENTITY_SIZE,
     DEFAULT_DRIFT_CLUSTER_ALGORITHM,
+    DEFAULT_DRIFT_CLUSTER_EPS,
+    DEFAULT_DRIFT_CLUSTER_MIN_SAMPLES,
     DEFAULT_DRIFT_NUMERIC_FEATURES,
     DEFAULT_DRIFT_TEXTUAL_FEATURES,
     DEFAULT_DRIFT_IGNORE_PATH_PATTERNS,
@@ -21,10 +23,14 @@ DEFAULT_CONFIG_PATH = "codeflow.config.yaml"
 DEFAULT_WATCH_DIRECTORIES = ["."]
 DEFAULT_IGNORED_PATTERNS = ["venv", "**/__pycache__", ".git", ".idea", ".vscode", "node_modules"]
 DEFAULT_CHROMADB_PATH = "./code_vectors_chroma"
+DEFAULT_PROJECT_ROOT = None
+DEFAULT_CODEFLOW_DIR = ".codeflow"
 DEFAULT_MAX_GRAPH_DEPTH = 3
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_MAX_TOKENS = 256
 DEFAULT_LANGUAGE = "python"
+DEFAULT_MIN_SIMILARITY = 0.1
+DEFAULT_CALL_GRAPH_CONFIDENCE_THRESHOLD = 0.8
 
 # Cortex memory defaults
 DEFAULT_MEMORY_ENABLED = True
@@ -52,11 +58,14 @@ class CodeFlowConfig(BaseModel):
     """
     watch_directories: List[str] = Field(default_factory=lambda: DEFAULT_WATCH_DIRECTORIES)
     ignored_patterns: List[str] = Field(default_factory=lambda: DEFAULT_IGNORED_PATTERNS)
+    project_root: Optional[str] = Field(default=DEFAULT_PROJECT_ROOT)
     chromadb_path: str = Field(default=DEFAULT_CHROMADB_PATH)
     max_graph_depth: int = Field(default=DEFAULT_MAX_GRAPH_DEPTH)
     embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL)
     max_tokens: int = Field(default=DEFAULT_MAX_TOKENS)
     language: str = Field(default=DEFAULT_LANGUAGE)
+    min_similarity: float = Field(default=DEFAULT_MIN_SIMILARITY)
+    call_graph_confidence_threshold: float = Field(default=DEFAULT_CALL_GRAPH_CONFIDENCE_THRESHOLD)
     
     # Optional LLM config for summaries (can be expanded)
     summary_generation_enabled: bool = False
@@ -78,6 +87,8 @@ class CodeFlowConfig(BaseModel):
     drift_granularity: str = DEFAULT_DRIFT_GRANULARITY
     drift_min_entity_size: int = DEFAULT_DRIFT_MIN_ENTITY_SIZE
     drift_cluster_algorithm: str = DEFAULT_DRIFT_CLUSTER_ALGORITHM
+    drift_cluster_eps: float = DEFAULT_DRIFT_CLUSTER_EPS
+    drift_cluster_min_samples: int = DEFAULT_DRIFT_CLUSTER_MIN_SAMPLES
     drift_numeric_features: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_NUMERIC_FEATURES))
     drift_textual_features: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_TEXTUAL_FEATURES))
     drift_ignore_path_patterns: List[str] = Field(default_factory=lambda: list(DEFAULT_DRIFT_IGNORE_PATH_PATTERNS))
@@ -86,6 +97,26 @@ class CodeFlowConfig(BaseModel):
     # Allow extra fields for flexibility
     class Config:
         extra = "allow"
+
+    def require_project_root(self) -> Path:
+        if not self.project_root:
+            raise ValueError("project_root must be set in config to resolve .codeflow paths")
+        return Path(self.project_root).resolve()
+
+    def codeflow_dir(self) -> Path:
+        return self.require_project_root() / DEFAULT_CODEFLOW_DIR
+
+    def chroma_dir(self) -> Path:
+        return self.codeflow_dir() / "chroma"
+
+    def memory_dir(self) -> Path:
+        return self.codeflow_dir() / "memory"
+
+    def reports_dir(self) -> Path:
+        return self.codeflow_dir() / "reports"
+
+    def cache_dir(self) -> Path:
+        return self.codeflow_dir() / "cache"
 
 
 def load_config(

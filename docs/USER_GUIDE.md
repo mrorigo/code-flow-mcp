@@ -84,13 +84,13 @@ uvx --from code-flow code_flow --help
 Analyze a codebase and generate a report:
 
 ```bash
-code_flow -- .
+code_flow analyze -- .
 ```
 
 Run a semantic query after analysis:
 
 ```bash
-code_flow -- . --query "authentication flows" --mermaid
+code_flow query -- . --query "authentication flows" --mermaid
 ```
 
 Useful flags include:
@@ -120,13 +120,14 @@ All configuration flows through the Pydantic model in [`../code_flow/core/config
 Minimal example:
 
 ```yaml
+project_root: "/path/to/project"
 watch_directories: ["."]
-ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]
-chromadb_path: "./code_vectors_chroma"
-max_graph_depth: 3
-embedding_model: "all-MiniLM-L6-v2"
-max_tokens: 256
-language: "python"
+  ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]
+  max_graph_depth: 3
+  embedding_model: "all-MiniLM-L6-v2"
+  max_tokens: 256
+  language: "python"
+  call_graph_confidence_threshold: 0.8
 ```
 
 ### Configuration Precedence
@@ -205,7 +206,7 @@ Semantic search uses embeddings from SentenceTransformers in the vector store. Q
 CLI usage:
 
 ```bash
-code_flow -- . --query "JWT auth" --mermaid
+code_flow query -- . --query "JWT auth" --mermaid --min-similarity 0.5
 ```
 
 MCP tool: `semantic_search` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:218).
@@ -215,7 +216,14 @@ MCP tool: `semantic_search` in [`../code_flow/mcp_server/server.py`](code_flow/m
 The call graph is derived from Tree-sitter extraction and call graph building. You can retrieve it as JSON or Mermaid.
 
 - MCP tool: `get_call_graph` and `generate_mermaid_graph` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:261).
-- CLI option: `--mermaid` to generate Mermaid for query results.
+- CLI option: `query --mermaid` to generate Mermaid for query results.
+
+Call resolution uses module-local symbol tables and import-aware matching with confidence scores. Drift analysis consumes only edges at or above `call_graph_confidence_threshold`.
+
+Metrics are emitted to `.codeflow/reports/` as:
+
+- `call_graph_metrics.json`
+- `call_graph_metrics.md`
 
 ## Entry Points and Function Metadata
 
@@ -251,6 +259,7 @@ drift_granularity: "module"  # module | file
 drift_min_entity_size: 3
 drift_cluster_algorithm: "hdbscan"
 drift_confidence_threshold: 0.6
+call_graph_confidence_threshold: 0.8
 ```
 
 ### CLI Output
@@ -258,7 +267,7 @@ drift_confidence_threshold: 0.6
 When enabled, drift analysis writes a sibling report next to the main analysis output:
 
 ```bash
-code_flow -- . --output analysis.json
+code_flow analyze -- . --output analysis.json
 # writes: analysis.json.drift.json
 ```
 
@@ -294,7 +303,7 @@ Memory tests live in [`tests/core/test_cortex_memory.py`](tests/core/test_cortex
 
 If you see messages about the vector store being unavailable, verify:
 
-- `chromadb_path` exists or is writeable.
+- `<project_root>/.codeflow/chroma` exists or is writeable.
 - Embedding model dependencies are installed.
 - Configuration points to the correct directory.
 

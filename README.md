@@ -56,6 +56,7 @@ The tool provides three main interfaces:
 - **Interactive Querying:** Semantic search against analyzed codebases.
 - **Flexible Output:** JSON reports, Mermaid diagrams, and console output.
 - **Incremental Updates:** Query existing analyses without full re-processing.
+- **Call Graph Metrics:** Writes `.codeflow/reports/call_graph_metrics.json` and `.codeflow/reports/call_graph_metrics.md` for baseline comparisons.
 
 ### Cognitive Load Optimization
 - Designed with principles to make the tool's output and its own codebase easy to understand and use.
@@ -81,6 +82,8 @@ Before running CodeFlow, ensure you have Python 3.8+ and the following dependenc
 ```txt
 chromadb
 sentence-transformers
+hdbscan
+scikit-learn
 mcp[cli]
 pyyaml
 watchdog>=2.0
@@ -146,18 +149,18 @@ code_flow_mcp_server --help
 
 ### CLI Tool
 
-The `code_flow.cli.code_flow` module is the main entry point for command-line analysis. All commands start with:
+The `code_flow.cli.code_flow` module is the main entry point for command-line analysis. All commands start with a subcommand:
 
-`code_flow -- [YOUR_CODE_DIRECTORY]`
+`code_flow analyze -- [YOUR_CODE_DIRECTORY]`
 
 Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the current directory (`.`) will be used.
 
 #### 1. Analyze a Codebase and Generate a Report
 
-This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<YOUR_CODE_DIRECTORY>/code_vectors_chroma/`), and generate a JSON report. Language detection is automatic.
+This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<project_root>/.codeflow/chroma/`), and generate a JSON report. Language detection is automatic.
 
 ```bash
-code_flow -- [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
+code_flow analyze -- [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
 ```
 
 #### 2. Querying the Codebase (Analysis + Query)
@@ -165,15 +168,15 @@ code_flow -- [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
 Run a full analysis and then immediately perform a semantic search. This will update the vector store if code has changed.
 
 ```bash
-code_flow -- [YOUR_CODE_DIRECTORY] --query "functions that handle user authentication"
+code_flow query -- [YOUR_CODE_DIRECTORY] --query "functions that handle user authentication"
 ```
 
 #### 3. Querying an Existing Analysis (Query Only)
 
-Once a codebase has been analyzed (i.e., the `code_vectors_chroma/` directory exists in `[YOUR_CODE_DIRECTORY]`), you can query it much faster without re-running the full analysis:
+Once a codebase has been analyzed (i.e., the `.codeflow/chroma/` directory exists under `project_root`), you can query it much faster without re-running the full analysis:
 
 ```bash
-code_flow -- [YOUR_CODE_DIRECTORY] --no-analyze --query "functions related to data serialization"
+code_flow query -- [YOUR_CODE_DIRECTORY] --no-analyze --query "functions related to data serialization"
 ```
 
 #### 4. Generating Mermaid Call Graphs
@@ -182,28 +185,33 @@ You can generate Mermaid diagrams of the call graph for functions relevant to yo
 
 **Standard Mermaid (for visual rendering):**
 ```bash
-code_flow -- [YOUR_CODE_DIRECTORY] --query "database connection pooling" --mermaid
+code_flow query -- [YOUR_CODE_DIRECTORY] --query "database connection pooling" --mermaid
 ```
 The output is Mermaid syntax, which can be copied into a Mermaid viewer (e.g., VS Code extension, Mermaid.live) for visualization.
 
 **LLM-Optimized Mermaid (for AI agents):**
 ```bash
-code_flow -- [YOUR_CODE_DIRECTORY] --query "main entry point setup" --llm-optimized
+code_flow query -- [YOUR_CODE_DIRECTORY] --query "main entry point setup" --llm-optimized
 ```
 This output is stripped of visual styling and uses short aliases for node IDs, with explicit `%% Alias: ShortID = Fully.Qualified.Name` comments. This minimizes token count for LLMs while providing all necessary structural information.
 
 #### Command Line Arguments
 
+Common arguments (available on subcommands):
+
 - `<directory>`: (Positional, optional) Path to the codebase directory. If provided, overrides `watch_directories` in config. If not provided, uses `watch_directories` from config or defaults to current directory.
 - `--config`: Path to configuration YAML file (default: `codeflow.config.yaml`).
-- `--output`: Output file for the analysis report (default: `code_analysis_report.json`). *Only used during full analysis.*
-- `--query <QUESTION>`: Perform a semantic query.
-- `--no-analyze`: (Flag) Skips AST extraction and graph building. Requires `--query`. Assumes an existing vector store.
-- `--mermaid`: (Flag) Generates a Mermaid graph for query results. Requires `--query`.
-- `--llm-optimized`: (Flag) Generates Mermaid graph optimized for LLM token count (removes styling). Implies `--mermaid`.
 - `--embedding-model`: Embedding model to use. Shortcuts: `fast` (384-dim), `medium` (384-dim), or `accurate` (768-dim). Default: `fast`. See [Embedding Model Configuration](#embedding-model-configuration) for details.
 - `--max-tokens`: Maximum tokens per chunk for embedding model. Default: `256`. Increase for larger context windows (must match model max sequence length).
 - `--language`: Force language selection (`python`, `typescript`, `rust`). Defaults to auto-detection.
+
+Subcommand-specific arguments:
+
+- `analyze`: `--output`, `--summaries`, `--drift`.
+- `query`: `--query`, `--no-analyze`, `--mermaid`, `--llm-optimized`, `--limit`.
+- `graphs`: `--format`, `--fqns`, `--output`, `--llm-optimized`.
+- `drift`: `--output`.
+- `memory`: `add|query|list|reinforce|forget`.
 
 
 #### Example Report Output
@@ -269,13 +277,14 @@ This performs a handshake and tests basic tool functionality.
 Both the CLI tool and MCP server share a central configuration system. The default configuration file is `codeflow.config.yaml` in the current working directory.
 
 ```yaml
+project_root: "/path/to/project"
 watch_directories: ["."]  # Directories to analyze (default: current directory)
 ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]  # Patterns to ignore
-chromadb_path: "./code_vectors_chroma"  # Path to ChromaDB vector store
 max_graph_depth: 3  # Maximum depth for graph traversal
 embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use
 max_tokens: 256  # Maximum tokens per chunk
 language: "python" # Default language ("python", "typescript", or "rust")
+call_graph_confidence_threshold: 0.8
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
@@ -336,18 +345,18 @@ Use the `--embedding-model` flag with either a shorthand or specific model name:
 
 ```bash
 # Using shorthand (recommended)
-code_flow -- . --embedding-model fast
-code_flow -- . --embedding-model accurate
+code_flow analyze -- . --embedding-model fast
+code_flow analyze -- . --embedding-model accurate
 
 # Using specific model name
-code_flow -- . --embedding-model all-MiniLM-L6-v2
+code_flow analyze -- . --embedding-model all-MiniLM-L6-v2
 ```
 
 Adjust chunk size with `--max-tokens` (default: 256):
 
 ```bash
 # Note: all models have max sequence length of 384 tokens
-code_flow -- . --embedding-model accurate --max-tokens 384
+code_flow analyze -- . --embedding-model accurate --max-tokens 384
 ```
 
 #### MCP Server Configuration
@@ -467,10 +476,10 @@ TypeScript analysis is performed using Tree-sitter parsing with the bundled lang
 #### Basic TypeScript Analysis
 ```bash
 # Analyze a TypeScript project (language detection is automatic)
-code_flow -- /path/to/typescript/project --output analysis.json
+code_flow analyze -- /path/to/typescript/project --output analysis.json
 
 # Query TypeScript codebase
-code_flow -- /path/to/typescript/project --query "user authentication functions"
+code_flow query -- /path/to/typescript/project --query "user authentication functions"
 ```
 
 #### Framework-Specific Examples
@@ -478,28 +487,28 @@ code_flow -- /path/to/typescript/project --query "user authentication functions"
 **Angular Application Analysis:**
 ```bash
 # Analyze Angular project (language detection automatic)
-code_flow -- /path/to/angular-app --query "component lifecycle methods"
+code_flow query -- /path/to/angular-app --query "component lifecycle methods"
 
 # Find Angular services
-code_flow -- /path/to/angular-app --query "injectable services"
+code_flow query -- /path/to/angular-app --query "injectable services"
 ```
 
 **NestJS Application Analysis:**
 ```bash
 # Analyze NestJS backend (language detection automatic)
-code_flow -- /path/to/nestjs-app --query "controller endpoints"
+code_flow query -- /path/to/nestjs-app --query "controller endpoints"
 
 # Find service dependencies
-code_flow -- /path/to/nestjs-app --query "database service dependencies"
+code_flow query -- /path/to/nestjs-app --query "database service dependencies"
 ```
 
 **React TypeScript Analysis:**
 ```bash
 # Analyze React TypeScript components (language detection automatic)
-code_flow -- /path/to/react-ts-app --query "custom hooks"
+code_flow query -- /path/to/react-ts-app --query "custom hooks"
 
 # Find component prop types
-code_flow -- /path/to/react-ts-app --query "component interfaces"
+code_flow query -- /path/to/react-ts-app --query "component interfaces"
 ```
 
 #### TypeScript-Specific Features
@@ -561,10 +570,10 @@ Rust analysis uses the bundled `tree-sitter-rust` grammar.
 
 ```bash
 # Analyze a Rust project (language detection is automatic)
-code_flow -- /path/to/rust/project --output analysis.json
+code_flow analyze -- /path/to/rust/project --output analysis.json
 
 # Query Rust codebase
-code_flow -- /path/to/rust/project --query "trait implementations"
+code_flow query -- /path/to/rust/project --query "trait implementations"
 ```
 
 **Supported File Types:**
@@ -577,28 +586,28 @@ code_flow -- /path/to/rust/project --query "trait implementations"
 #### Basic Analysis
 ```bash
 # Analyze current directory and generate report (language detection automatic)
-code_flow -- . --output analysis.json
+code_flow analyze -- . --output analysis.json
 
 # Analyze a specific project
-code_flow -- /path/to/my/project
+code_flow analyze -- /path/to/my/project
 ```
 
 #### Semantic Search
 ```bash
 # Find authentication functions
-code_flow -- . --query "user authentication login"
+code_flow query -- . --query "user authentication login"
 
 # Search for database operations
-code_flow -- . --query "database queries CRUD operations"
+code_flow query -- . --query "database queries CRUD operations"
 ```
 
 #### Visualization
 ```bash
 # Generate Mermaid diagram for API endpoints
-code_flow -- . --query "API endpoints" --mermaid
+code_flow query -- . --query "API endpoints" --mermaid
 
 # LLM-optimized graph for AI analysis
-code_flow -- . --query "error handling" --llm-optimized
+code_flow query -- . --query "error handling" --llm-optimized
 ```
 
 ### MCP Server Examples
@@ -667,10 +676,10 @@ Test the CLI tool by running analysis on the test files:
 
 ```bash
 # Test basic functionality
-code_flow -- tests/ --output test_report.json
+code_flow analyze -- tests/ --output test_report.json
 
 # Test querying
-code_flow -- tests/ --query "test functions"
+code_flow query -- tests/ --query "test functions"
 ```
 
 ### Integration Testing

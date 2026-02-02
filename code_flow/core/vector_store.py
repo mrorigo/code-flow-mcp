@@ -9,8 +9,6 @@ from sentence_transformers import SentenceTransformer
 import uuid
 import json # For serializing complex metadata
 import os
-import asyncio
-from pathlib import Path
 import logging
 
 # Import the specific, enriched data types from the call graph builder
@@ -28,6 +26,7 @@ class CodeVectorStore:
             persist_directory: Where to persist the vector database on disk.
             embedding_model_name: Model to use for embeddings (defaults to 384-dim for consistency)
         """
+        self.persist_directory = persist_directory
         logging.info(f"Initializing ChromaDB client at: {persist_directory}")
         try:
             self.client = chromadb.PersistentClient(path=persist_directory)
@@ -539,7 +538,13 @@ class CodeVectorStore:
                 
         return doc_ids
 
-    def query_codebase(self, query: str, n_results: int = 10, where_filter: Dict|None = None) -> List[Dict]:
+    def query_codebase(
+        self,
+        query: str,
+        n_results: int = 10,
+        where_filter: Dict | None = None,
+        min_similarity: float = 0.0,
+    ) -> List[Dict]:
         """
         Query the codebase (functions and structured data) using semantic search.
         
@@ -552,10 +557,11 @@ class CodeVectorStore:
             List of documents with metadata and distance.
         """
         # Only include where filter if it's not None and not empty
+        query_embeddings = self.embedding_model.encode([query]).tolist()
         query_kwargs = {
-            "query_texts": [query],
+            "query_embeddings": query_embeddings,
             "n_results": n_results * 4,  # Request more to account for grouping
-            "include": ["metadatas", "documents", "distances"]
+            "include": ["metadatas", "documents", "distances"],
         }
         
         if where_filter:
@@ -563,9 +569,14 @@ class CodeVectorStore:
             
         raw_results = self.collection.query(**query_kwargs)
 
-        return self._group_chunks_by_document(raw_results, n_results)
+        return self._group_chunks_by_document(raw_results, n_results, min_similarity=min_similarity)
 
-    def _group_chunks_by_document(self, results: Dict, max_results: int) -> List[Dict]:
+    def _group_chunks_by_document(
+        self,
+        results: Dict,
+        max_results: int,
+        min_similarity: float = 0.0,
+    ) -> List[Dict]:
         """
         Group chunks by fully_qualified_name and reconstruct complete documents.
         
@@ -607,8 +618,15 @@ class CodeVectorStore:
             if results['distances'][0][i] < document_groups[fqn]['best_distance']:
                 document_groups[fqn]['best_distance'] = results['distances'][0][i]
 
-        # Sort documents by best distance and take top max_results
-        sorted_documents = sorted(document_groups.values(), key=lambda x: x['best_distance'])
+        # Filter by similarity threshold and sort by best distance
+        filtered_documents = []
+        for doc in document_groups.values():
+            similarity = 1.0 - doc['best_distance']
+            if similarity >= min_similarity:
+                doc['similarity'] = similarity
+                filtered_documents.append(doc)
+
+        sorted_documents = sorted(filtered_documents, key=lambda x: x['best_distance'])
         
         formatted_results = []
         for doc_group in sorted_documents[:max_results]:
@@ -627,6 +645,7 @@ class CodeVectorStore:
             formatted_results.append({
                 'document': complete_content,
                 'distance': doc_group['best_distance'],
+                'similarity': 1.0 - doc_group['best_distance'],
                 'metadata': primary_meta,
                 'id': results['ids'][0][sorted_chunks[0]['metadata'].get('chunk_index', 0)],
                 'chunk_info': {

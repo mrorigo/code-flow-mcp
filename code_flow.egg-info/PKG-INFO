@@ -10,6 +10,8 @@ Requires-Dist: pytest-asyncio
 Requires-Dist: pydantic
 Requires-Dist: chromadb>=1.1.0
 Requires-Dist: sentence-transformers>=5.1.0
+Requires-Dist: scikit-learn
+Requires-Dist: hdbscan
 Requires-Dist: openai[aiohttp]>=1.0.0
 Requires-Dist: aiohttp>=3.9.0
 Requires-Dist: tree-sitter

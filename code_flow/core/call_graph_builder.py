@@ -4,7 +4,7 @@ Uses explicit data structures to minimize cognitive load.
 """
 
 import os
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional, Any, Tuple, cast
 from dataclasses import dataclass, field
 from pathlib import Path
 import ast
@@ -80,13 +80,16 @@ class PotentialCall:
 class CallGraphBuilder:
     """Builds call graphs from code elements with explicit processing steps."""
 
-    def __init__(self):
+    def __init__(self, confidence_threshold: float = 0.8):
         self.functions: Dict[str, FunctionNode] = {}
         self.modules: Dict[str, ModuleNode] = {}
         self.edges: List[CallEdge] = []
         self.functions_by_name: Dict[str, FunctionNode] = {}  # Local name to node mapping
         self.known_imports: Dict[str, Dict[str, str]] = {}  # module -> {local_name: fqn} (Not fully implemented/used here)
         self.project_root: Optional[Path] = None
+        self.confidence_threshold = confidence_threshold
+        self.module_symbol_tables: Dict[str, Dict[str, str]] = {}
+        self.module_imports: Dict[str, Dict[str, str]] = {}
 
     def add_function(self, func_element: FunctionElement) -> FunctionNode:
         """Add a function to the graph with fully qualified naming and complete metadata."""
@@ -152,21 +155,40 @@ class CallGraphBuilder:
         function_elements = [e for e in elements if hasattr(e, 'kind') and e.kind == 'function']
         logging.info(f"Step 1: Creating function nodes... {len(function_elements)} functions found")
         for element in function_elements:
-            self.add_function(element)
+            self.add_function(cast(FunctionElement, element))
 
         logging.info(f"   Created {len(self.functions)} function nodes")
         logging.info(f"   Methods: {sum(1 for f in self.functions.values() if f.is_method)}")
         logging.info(f"   Async functions: {sum(1 for f in self.functions.values() if f.is_async)}")
         # logging.info(f"   Available functions: {list(self.functions_by_name.keys())[:10]}...")
 
-        logging.info("Step 2: Extracting call edges...")
+        logging.info("Step 2: Building module symbol tables...")
+        self._build_module_symbol_tables(elements)
+
+        logging.info("Step 3: Extracting call edges...")
         for element in function_elements:
-            self._extract_calls_from_function(element)
+            self._extract_calls_from_function(cast(FunctionElement, element))
 
         logging.info(f"   Found {len(self.edges)} call edges")
 
-        logging.info("Step 3: Identifying entry points...")
+        logging.info("Step 4: Identifying entry points...")
         self._identify_entry_points()
+
+    def _build_module_symbol_tables(self, elements: List[CodeElement]) -> None:
+        """Build symbol tables per module for local defs and imports."""
+        self.module_symbol_tables = {}
+        self.module_imports = {}
+
+        for element in elements:
+            if not hasattr(element, "file_path"):
+                continue
+            module_name = self._get_module_name(Path(element.file_path))
+            self.module_symbol_tables.setdefault(module_name, {})
+            if hasattr(element, "kind") and element.kind == "function":
+                self.module_symbol_tables[module_name][element.name] = f"{module_name}.{element.name}"
+
+        for module_name, module in self.modules.items():
+            self.module_imports[module_name] = self._extract_imports_for_module(Path(module.file_path))
 
     def _extract_calls_from_function(self, func_element: FunctionElement) -> None:
         """Extract all function calls from a single function's source using AST for Python, regex for TypeScript."""
@@ -196,7 +218,7 @@ class CallGraphBuilder:
                 self._create_edge_if_valid(caller_fqn, call, func_element)
 
         except Exception as e:
-            logging.info(f"   Warning: Error extracting calls from {func_element.name} in {func_element.file_path}: {e}", file=sys.stderr)
+            logging.warning(f"   Warning: Error extracting calls from {func_element.name} in {func_element.file_path}: {e}")
 
     def _extract_calls_from_typescript_function(self, func_element: FunctionElement, full_source: str) -> List[PotentialCall]:
         """Extract function calls from TypeScript function using comprehensive regex patterns."""
@@ -247,6 +269,8 @@ class CallGraphBuilder:
                         # Extract parameters
                         params = self._extract_typescript_call_parameters(match.group(0))
 
+                        if not self._is_allowed_typescript_call(call_text, func_element):
+                            continue
                         call = PotentialCall(
                             callee=call_text,
                             file_path=func_element.file_path,
@@ -257,7 +281,7 @@ class CallGraphBuilder:
                         calls.append(call)
 
         except Exception as e:
-            logging.info(f"   Warning: Error in TypeScript call extraction for {func_element.name}: {e}", file=sys.stderr)
+            logging.warning(f"   Warning: Error in TypeScript call extraction for {func_element.name}: {e}")
 
         return calls
 
@@ -296,6 +320,19 @@ class CallGraphBuilder:
                 return True
 
         return True
+
+    def _is_allowed_typescript_call(self, call_text: str, func_element: FunctionElement) -> bool:
+        module_name = self._get_module_name(Path(func_element.file_path))
+        module_symbols = self.module_symbol_tables.get(module_name, {})
+        module_imports = self.module_imports.get(module_name, {})
+        base = call_text.split("<")[0]
+        if base in module_symbols or base in module_imports:
+            return True
+        if "." in base:
+            prefix = base.split(".", 1)[0]
+            if prefix in module_symbols or prefix in module_imports:
+                return True
+        return False
 
     def _extract_typescript_call_parameters(self, call_text: str) -> List[str]:
         """Extract parameters from a TypeScript function call."""
@@ -445,54 +482,89 @@ class CallGraphBuilder:
         """Create a call edge if the target function exists with improved resolution."""
         target_fqn = None
         target_node = None
+        confidence = 0.0
+
+        module_name = self._get_module_name(Path(func_element.file_path))
+        module_symbols = self.module_symbol_tables.get(module_name, {})
+        module_imports = self.module_imports.get(module_name, {})
+
+        def _resolve_imported_target(callee: str, imports: Dict[str, str]) -> Optional[str]:
+            if callee in imports:
+                return imports[callee]
+            if "." in callee:
+                base, attr = callee.split(".", 1)
+                base_target = imports.get(base)
+                if base_target:
+                    return f"{base_target}.{attr}"
+            return None
 
         # Strategy 1: Check if it's a local function call by its simple name
-        if call.callee in self.functions_by_name:
-            target_node = self.functions_by_name[call.callee]
-            target_fqn = target_node.fully_qualified_name
+        if call.callee in module_symbols:
+            target_fqn = module_symbols[call.callee]
+            target_node = self.functions.get(target_fqn)
+            confidence = 0.95
 
         # Strategy 2: Handle method calls (e.g., "obj.method", "this.method", "super.method")
         elif '.' in call.callee:
             parts = call.callee.split('.')
             method_name = parts[-1]
 
+            imported_target = _resolve_imported_target(call.callee, module_imports)
+            if imported_target:
+                target_fqn = imported_target
+                if target_fqn in self.functions:
+                    target_node = self.functions.get(target_fqn)
+                confidence = 0.9
+
             # First try to find the exact method name
-            if method_name in self.functions_by_name:
+            if not target_node and method_name in module_symbols:
                 candidate_node = self.functions_by_name[method_name]
                 # Check if this could be a method (has class_name or is_method=True)
                 if candidate_node.is_method or candidate_node.class_name:
                     target_node = candidate_node
                     target_fqn = candidate_node.fully_qualified_name
+                    confidence = 0.95
 
             # If not found, try to find any method with this name
-            if not target_node:
+            if not target_node and method_name in self.functions_by_name:
                 for fqn, node in self.functions.items():
                     if (node.name == method_name and
                         (node.is_method or node.class_name) and
                         node.fully_qualified_name != caller_fqn):  # Avoid self-calls
                         target_node = node
                         target_fqn = node.fully_qualified_name
+                        confidence = 0.6
                         break
 
         # Strategy 3: Handle constructor calls and static method calls
-        elif call.callee in [node.name for node in self.functions.values() if node.is_method or node.class_name]:
+        elif call.callee in module_symbols:
             # Look for methods or class functions with this name
-            for fqn, node in self.functions.items():
-                if node.name == call.callee and (node.is_method or node.class_name):
-                    target_node = node
-                    target_fqn = node.fully_qualified_name
-                    break
+            candidate_fqn = module_symbols.get(call.callee)
+            if candidate_fqn in self.functions:
+                candidate_node = self.functions[candidate_fqn]
+                if candidate_node.is_method or candidate_node.class_name:
+                    target_node = candidate_node
+                    target_fqn = candidate_node.fully_qualified_name
+                    confidence = 0.95
 
         # Strategy 4: Handle generic function calls (functionName<T>())
         else:
             # Remove generic type parameters for matching
             simple_name = call.callee.split('<')[0] if '<' in call.callee else call.callee
-            if simple_name in self.functions_by_name:
-                target_node = self.functions_by_name[simple_name]
-                target_fqn = target_node.fully_qualified_name
+            if simple_name in module_symbols:
+                target_fqn = module_symbols[simple_name]
+                target_node = self.functions.get(target_fqn)
+                confidence = 0.95
+
+            imported_target = _resolve_imported_target(simple_name, module_imports)
+            if not target_node and imported_target:
+                target_fqn = imported_target
+                if target_fqn in self.functions:
+                    target_node = self.functions.get(target_fqn)
+                confidence = 0.9
 
         # Final check if the resolved FQN actually exists in our graph
-        if target_fqn and target_fqn in self.functions:
+        if target_fqn and target_fqn in self.functions and confidence > 0:
             # Determine call type based on the target
             call_type = 'direct'
             if target_node and target_node.is_method:
@@ -505,13 +577,6 @@ class CallGraphBuilder:
                              (target_node and target_node.is_static) or
                              '.' not in call.callee or
                              call.callee.startswith(('this.', 'super.')))
-
-            # Calculate confidence based on how well we matched
-            confidence = 0.9
-            if '.' in call.callee and target_node and target_node.is_method:
-                confidence = 0.95  # Higher confidence for method calls
-            elif call.callee == target_node.name:
-                confidence = 0.85  # Slightly lower for simple name matches
 
             edge = CallEdge(
                 caller=caller_fqn,
@@ -530,6 +595,10 @@ class CallGraphBuilder:
             # logging.info(f"     ✓ Created edge: {caller_fqn} -> {target_fqn} ({call_type}, {confidence:.2f})")
         # else:
             # logging.info(f"     Info: Could not resolve call target for '{call.callee}' from '{caller_fqn}'")
+
+    def get_drift_edges(self) -> List[CallEdge]:
+        """Return edges above the configured confidence threshold for drift analysis."""
+        return [edge for edge in self.edges if edge.confidence >= self.confidence_threshold]
 
 
     def _get_module_name(self, file_path: Path) -> str:
@@ -568,8 +637,73 @@ class CallGraphBuilder:
                 return module_path
             except ValueError:
                 # Last resort: use full path, but this often results in very long FQNs
-                logging.info(f"   Warning: Could not determine relative module name for {file_path}. Using absolute path segment.", file=sys.stderr)
+                logging.warning(f"   Warning: Could not determine relative module name for {file_path}. Using absolute path segment.")
                 return str(file_path.stem) # Use just the file name as module name, without path
+
+    def _extract_imports_for_module(self, file_path: Path) -> Dict[str, str]:
+        """Extract Python/TypeScript imports for a module."""
+        try:
+            source = file_path.read_text(encoding="utf-8")
+        except Exception:
+            return {}
+
+        imports: Dict[str, str] = {}
+        if file_path.suffix == ".py":
+            try:
+                tree = ast.parse(source, filename=str(file_path))
+                for node in tree.body:
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            local_name = alias.asname or alias.name.split(".")[-1]
+                            imports[local_name] = alias.name
+                    elif isinstance(node, ast.ImportFrom):
+                        if not node.module:
+                            continue
+                        for alias in node.names:
+                            local_name = alias.asname or alias.name
+                            imports[local_name] = f"{node.module}.{alias.name}"
+            except Exception:
+                return {}
+        else:
+            import re
+            for match in re.finditer(r"import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]", source):
+                names = match.group(1)
+                module = match.group(2)
+                for name in names.split(","):
+                    local = name.strip()
+                    if not local:
+                        continue
+                    if " as " in local:
+                        original, alias = [part.strip() for part in local.split(" as ", 1)]
+                        imports[alias] = module
+                    else:
+                        imports[local] = module
+
+            for match in re.finditer(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", source):
+                alias = match.group(1)
+                module = match.group(2)
+                imports[alias] = module
+
+            for match in re.finditer(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", source):
+                alias = match.group(1)
+                module = match.group(2)
+                imports[alias] = module
+
+        return imports
+
+    def compute_metrics(self) -> Dict[str, Any]:
+        edges_per_module: Dict[str, int] = {}
+        for edge in self.edges:
+            source_module = self._get_module_name(Path(self.functions[edge.caller].file_path))
+            edges_per_module[source_module] = edges_per_module.get(source_module, 0) + 1
+
+        low_confidence = sum(1 for edge in self.edges if edge.confidence < self.confidence_threshold)
+
+        return {
+            "total_edges": len(self.edges),
+            "edges_per_module": edges_per_module,
+            "low_confidence_edges": low_confidence,
+        }
 
     def _identify_entry_points(self) -> None:
         """Identify entry points using multiple strategies."""
@@ -668,7 +802,7 @@ class CallGraphBuilder:
     def export_graph(self, format: str = 'json') -> Optional[Dict | str]:
         """Export the call graph in various formats."""
         if not self.functions:
-            logging.info("Warning: No functions in graph to export", file=sys.stderr)
+            logging.warning("Warning: No functions in graph to export")
             return None
 
         if format == 'json':
@@ -961,4 +1095,4 @@ class CallGraphBuilder:
             logging.info(f"     Connections: {len(ep.incoming_edges)} in, {len(ep.outgoing_edges)} out")
             if ep.docstring:
                 logging.info(f"     Docstring: {ep.docstring[:80]}{'...' if len(ep.docstring) > 80 else ''}")
-            logging.info()
+            logging.info("")

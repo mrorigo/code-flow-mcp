@@ -17,6 +17,7 @@ class TestCLITypeScriptIntegration:
         """Test that CLI accepts --language typescript flag."""
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             '--help'
         ], capture_output=True, text=True, cwd='.')
 
@@ -29,6 +30,7 @@ class TestCLITypeScriptIntegration:
         """Test that CLI accepts --language rust flag."""
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             '--help'
         ], capture_output=True, text=True, cwd='.')
 
@@ -62,6 +64,7 @@ class TestCLITypeScriptIntegration:
 
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -128,6 +131,7 @@ class TestCLITypeScriptIntegration:
 
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -178,6 +182,7 @@ class TestCLITypeScriptIntegration:
         # First run analysis
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -187,6 +192,7 @@ class TestCLITypeScriptIntegration:
         # Now test query functionality
         query_result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'query',
             str(temp_dir),
             '--language', 'typescript',
             '--query', 'functions that handle users',
@@ -238,6 +244,7 @@ class TestCLITypeScriptIntegration:
         # Run analysis with Mermaid output
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'query',
             str(temp_dir),
             '--language', 'typescript',
             '--embedding-model', 'fast',
@@ -253,6 +260,7 @@ class TestCLITypeScriptIntegration:
         """Test CLI error handling for invalid directory."""
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             '/nonexistent/directory',
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -264,6 +272,7 @@ class TestCLITypeScriptIntegration:
         """Test CLI language validation."""
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             '.',
             '--language', 'invalid_language'
         ], capture_output=True, text=True, cwd='.')
@@ -292,6 +301,7 @@ class TestCLITypeScriptIntegration:
         # Run analysis (vector store should be created)
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -299,7 +309,7 @@ class TestCLITypeScriptIntegration:
         assert result.returncode == 0
 
         # Check that vector store directory was created
-        vector_dir = temp_dir / "code_vectors_chroma"
+        vector_dir = temp_dir / ".codeflow" / "chroma"
         assert vector_dir.exists()
 
         # Check for vector store files
@@ -344,6 +354,7 @@ class TestCLITypeScriptIntegration:
 
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.', timeout=60)
@@ -484,6 +495,7 @@ class TestTypeScriptEndToEndWorkflow:
 
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -558,6 +570,7 @@ class TestTypeScriptEndToEndWorkflow:
 
         result = subprocess.run([
             'python', '-m', 'code_flow.cli.code_flow',
+            'analyze',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')

@@ -19,9 +19,9 @@ Both CLI and MCP server use unified configuration via `code_flow/core/config.py`
 
 ### Config File Example
 ```yaml
+project_root: "/path/to/project"
 watch_directories: ["."]
 ignored_patterns: ["venv", "**/__pycache__", ".git", "node_modules"]
-chromadb_path: "./code_vectors_chroma"
 max_graph_depth: 3
 embedding_model: "all-MiniLM-L6-v2"
 max_tokens: 256
@@ -34,10 +34,10 @@ language: "python"  # or "typescript"
 code_flow [directory]
 
 # Custom config
-code_flow --config custom.yaml
+code_flow analyze --config custom.yaml
 
 # Override config values
-code_flow --language typescript --embedding-model accurate
+code_flow analyze --language typescript --embedding-model accurate
 ```
 
 ### MCP Server Usage
@@ -129,7 +129,7 @@ See `pyproject.toml` for complete dependency list.
 - Exceptions explicitly listed in function metadata
 
 ### Vector Store
-- Persistent ChromaDB storage in `<directory>/code_vectors_chroma/`
+- Persistent ChromaDB storage in `<project_root>/.codeflow/chroma/`
 - Embeddings use SentenceTransformers (configurable model)
 - Automatic cleanup of stale references (background task)
 - Supports both code functions and structured data elements

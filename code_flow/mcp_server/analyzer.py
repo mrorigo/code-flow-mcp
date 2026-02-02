@@ -18,7 +18,7 @@ from code_flow.core.structured_extractor import StructuredDataExtractor
 from code_flow.core.call_graph_builder import CallGraphBuilder
 from code_flow.core.vector_store import CodeVectorStore
 from code_flow.core.cortex_memory import CortexMemoryStore
-from code_flow.mcp_server.llm import SummaryGenerator, SummaryProcessor
+from code_flow.core.llm_summary import SummaryGenerator, SummaryProcessor
 
 class AnalysisState(Enum):
     """Enum representing the current state of code analysis."""
@@ -56,7 +56,7 @@ class MCPAnalyzer:
             config: Configuration dictionary containing watch_directories, chromadb_path, and optional language
         """
         self.config = config
-        root = Path(config['watch_directories'][0]).resolve()
+        root = Path(config['project_root']).resolve()
         language = config.get('language', 'python').lower()
         logging.info(f"Initializing MCPAnalyzer with root: {root}, language: {language}")
         
@@ -76,6 +76,7 @@ class MCPAnalyzer:
         
         self.builder = CallGraphBuilder()
         self.builder.project_root = root
+        self.builder.confidence_threshold = float(config.get("call_graph_confidence_threshold", 0.8))
         self.vector_store: Optional[CodeVectorStore] = None
         self.memory_store: Optional[CortexMemoryStore] = None
         self.observer = None
@@ -86,21 +87,20 @@ class MCPAnalyzer:
         self.analysis_error: Optional[Exception] = None
 
         # Initialize vector store if path exists
-        if Path(config['chromadb_path']).exists():
-            self.vector_store = CodeVectorStore(
-                persist_directory=config['chromadb_path'],
-                embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
-                max_tokens=config.get('max_tokens', 256)
-            )
-        else:
-            logging.warning(
-                f"ChromaDB path {config['chromadb_path']} does not exist, skipping vector store initialization"
-            )
+        chroma_path = Path(config['chroma_dir'])
+        chroma_path.mkdir(parents=True, exist_ok=True)
+        self.vector_store = CodeVectorStore(
+            persist_directory=str(chroma_path),
+            embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
+            max_tokens=config.get('max_tokens', 256)
+        )
 
         # Initialize memory store if enabled
-        if config.get('memory_enabled', True) and Path(config['chromadb_path']).exists():
+        if config.get('memory_enabled', True):
+            memory_path = Path(config['memory_dir'])
+            memory_path.mkdir(parents=True, exist_ok=True)
             self.memory_store = CortexMemoryStore(
-                persist_directory=config['chromadb_path'],
+                persist_directory=str(memory_path),
                 embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
                 collection_name=config.get('memory_collection_name', 'cortex_memory_v1'),
             )

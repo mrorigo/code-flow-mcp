@@ -29,7 +29,11 @@ def test_mcp_analyzer_init(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
 
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
 
@@ -45,7 +49,11 @@ def test_mcp_analyzer_init_rust(mock_core_components_rust):
     """Test MCPAnalyzer initialization for Rust."""
     mock_extractor, mock_builder, _ = mock_core_components_rust
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma',
         'language': 'rust'
     }
@@ -61,8 +69,12 @@ def test_mcp_analyzer_init_rust(mock_core_components_rust):
 def test_mcp_analyzer_init_with_existing_store():
     """Test MCPAnalyzer initialization when ChromaDB path exists."""
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
-        'chromadb_path': './code_vectors_chroma',  # This exists
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
+        'chromadb_path': './code_vectors_chroma',  # legacy field
         'embedding_model': 'all-MiniLM-L6-v2'
     }
 
@@ -70,7 +82,7 @@ def test_mcp_analyzer_init_with_existing_store():
         with patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
             analyzer = MCPAnalyzer(config)
             mock_store.assert_called_once_with(
-                persist_directory='./code_vectors_chroma',
+                persist_directory='./.codeflow/chroma',
                 embedding_model_name='all-MiniLM-L6-v2',
                 max_tokens=256
             )
@@ -83,7 +95,11 @@ async def test_analyze(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
 
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
 
@@ -137,7 +153,11 @@ async def test_analyze_no_vector_store(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
 
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './nonexistent'
     }
 
@@ -161,7 +181,11 @@ async def test_populate_vector_store(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
 
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './code_vectors_chroma',
         'embedding_model': 'all-MiniLM-L6-v2'
     }
@@ -197,7 +221,11 @@ async def test_watcher_handler_on_modified(mock_core_components):
     mock_extractor, mock_builder, mock_store = mock_core_components
 
     config = {
+        'project_root': '.',
         'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
         'chromadb_path': './test_chroma'
     }
 

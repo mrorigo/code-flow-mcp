@@ -26,11 +26,14 @@ class DriftAnalyzer:
         feature_vectors = extractor.build_feature_vectors(functions, edges)
 
         clusterer = DriftClusterer(
-            confidence_threshold=float(self.config.get("drift_confidence_threshold", 0.6))
+            confidence_threshold=float(self.config.get("drift_confidence_threshold", 0.6)),
+            algorithm=str(self.config.get("drift_cluster_algorithm", "hdbscan")),
+            eps=float(self.config.get("drift_cluster_eps", 0.75)),
+            min_samples=int(self.config.get("drift_cluster_min_samples", 5)),
         )
         clusters, structural_findings = clusterer.cluster(feature_vectors)
 
-        topology_analyzer = TopologyAnalyzer()
+        topology_analyzer = TopologyAnalyzer(project_root=str(self._project_root_path()))
         _, topological_findings = topology_analyzer.analyze(functions, edges)
 
         report_builder = DriftReportBuilder()

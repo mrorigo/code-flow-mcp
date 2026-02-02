@@ -95,6 +95,7 @@ class TestTypeScriptEndToEndWorkflow:
 
             result = subprocess.run([
                 'python', '-m', 'code_flow.cli.code_flow',
+                'analyze',
                 str(temp_path),
                 '--language', 'typescript',
                 '--output', str(output_file)
@@ -391,6 +392,7 @@ class TestTypeScriptEndToEndWorkflow:
 
                 result = subprocess.run([
                     'python', '-m', 'code_flow.cli.code_flow',
+                    'analyze',
                     project_path,
                     '--language', 'typescript'
                 ], capture_output=True, text=True, cwd='.', timeout=60)
@@ -713,6 +715,7 @@ class TestTypeScriptEndToEndWorkflow:
 
             result = subprocess.run([
                 'python', '-m', 'code_flow.cli.code_flow',
+                'analyze',
                 str(temp_path),
                 '--language', 'typescript',
                 '--output', str(output_file)

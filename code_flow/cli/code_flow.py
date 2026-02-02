@@ -16,10 +16,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.treesitter.python_extractor import TreeSitterPythonExtractor
 from core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 from core.models import FunctionElement, ClassElement, CodeElement
+from code_flow.core.config import load_config
+from code_flow.core.drift_topology import TopologyAnalyzer
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
 from core.drift_analyzer import DriftAnalyzer
-from code_flow.mcp_server.llm import SummaryGenerator, SummaryProcessor
+from code_flow.core.llm_summary import SummaryGenerator, SummaryProcessor
 
 def resolve_embedding_model(model_name: str) -> str:
     """
@@ -39,9 +41,22 @@ def resolve_embedding_model(model_name: str) -> str:
     return shortcuts.get(model_name.lower(), model_name)
 
 
-def _safe_query(analyzer: "CodeGraphAnalyzer", query: str, generate_mermaid: bool = False, llm_optimized_mermaid: bool = False) -> int:
+def _safe_query(
+    analyzer: "CodeGraphAnalyzer",
+    query: str,
+    n_results: int = 5,
+    generate_mermaid: bool = False,
+    llm_optimized_mermaid: bool = False,
+    min_similarity: float = 0.0,
+) -> int:
     try:
-        analyzer.query(query, generate_mermaid=generate_mermaid, llm_optimized_mermaid=llm_optimized_mermaid)
+        analyzer.query(
+            query,
+            n_results=n_results,
+            generate_mermaid=generate_mermaid,
+            llm_optimized_mermaid=llm_optimized_mermaid,
+            min_similarity=min_similarity,
+        )
         return 0
     except Exception as exc:
         message = str(exc)
@@ -58,7 +73,7 @@ def _safe_query(analyzer: "CodeGraphAnalyzer", query: str, generate_mermaid: boo
 class CodeGraphAnalyzer:
     """Main analyzer that orchestrates the entire pipeline."""
 
-    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2', max_tokens: int = 256, enable_summaries: bool = False, llm_config: Dict = None):
+    def __init__(self, root_directory: Path, language: str = "python", embedding_model: str = 'all-MiniLM-L6-v2', max_tokens: int = 256, enable_summaries: bool = False, llm_config: Optional[Dict] = None, chromadb_path: str | None = None):
         """
         Initialize the analyzer.
 
@@ -76,8 +91,8 @@ class CodeGraphAnalyzer:
         # Pass the root_directory to the graph_builder for consistent FQN generation
         self.graph_builder.project_root = root_directory
 
-        # Vector store path derived from root_directory for project-specific persistence
-        vector_store_path = self.root_directory / "code_vectors_chroma"
+        # Vector store path derived from config (.codeflow/chroma)
+        vector_store_path = Path(chromadb_path) if chromadb_path else (self.root_directory / "code_vectors_chroma")
         try:
             self.vector_store = CodeVectorStore(
                 persist_directory=str(vector_store_path),
@@ -136,8 +151,8 @@ class CodeGraphAnalyzer:
         print(f"   Found {len(self.all_elements)} code elements")
 
         # Categorize elements for reporting
-        functions = [e for e in self.all_elements if hasattr(e, 'kind') and e.kind == 'function']
-        classes = [e for e in self.all_elements if hasattr(e, 'kind') and e.kind == 'class']
+        functions = [e for e in self.all_elements if isinstance(e, FunctionElement)]
+        classes = [e for e in self.all_elements if isinstance(e, ClassElement)]
         self.classes = {c.name: c for c in classes}
 
         # Step 2: Build call graph
@@ -160,6 +175,7 @@ class CodeGraphAnalyzer:
             print("\n📊 Step 4: Generating analysis report...")
         
         report = self._generate_report(classes, functions)
+        self._export_metrics(report)
 
         print("\n✅ Analysis complete!")
         return report
@@ -192,6 +208,9 @@ class CodeGraphAnalyzer:
                 except Exception as e:
                     print(f"   Warning: Could not read source file {node.file_path}: {e}", file=sys.stderr)
                     sources[node.file_path] = ""
+
+        if self.vector_store and hasattr(self.vector_store, "persist_directory"):
+            Path(self.vector_store.persist_directory).mkdir(parents=True, exist_ok=True)
 
         # Batch store functions
         try:
@@ -231,6 +250,8 @@ class CodeGraphAnalyzer:
     async def _generate_summaries_async(self) -> None:
         """Async implementation of summary generation."""
         # Start the processor
+        if not self.summary_processor or not self.vector_store:
+            return
         await self.summary_processor.start_async()
         
         # Find nodes missing summaries
@@ -336,7 +357,50 @@ class CodeGraphAnalyzer:
 
         return report
 
-    def query(self, question: str, n_results: int = 5, generate_mermaid: bool = False, llm_optimized_mermaid: bool = False) -> None: # NEW: llm_optimized_mermaid flag
+    def _export_metrics(self, report: Dict[str, Any]) -> None:
+        config = load_config()
+        config.reports_dir().mkdir(parents=True, exist_ok=True)
+        metrics_path = config.reports_dir() / "call_graph_metrics.json"
+        markdown_path = config.reports_dir() / "call_graph_metrics.md"
+
+        topology = TopologyAnalyzer(project_root=str(self.root_directory))
+        module_graph = topology._build_module_graph(
+            list(self.graph_builder.functions.values()),
+            self.graph_builder.edges,
+        )
+        cycles = topology._detect_cycles(module_graph)
+
+        metrics = self.graph_builder.compute_metrics()
+        metrics["cycles"] = cycles
+        metrics["cycle_count"] = len(cycles)
+
+        metrics_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        edges_per_module = metrics.get("edges_per_module", {})
+        md_lines = [
+            "# Call Graph Metrics",
+            "",
+            f"- Total edges: {metrics.get('total_edges', 0)}",
+            f"- Low-confidence edges: {metrics.get('low_confidence_edges', 0)}",
+            f"- Cycle count: {metrics.get('cycle_count', 0)}",
+            "",
+            "## Edges per module",
+            "| Module | Edges |",
+            "| --- | --- |",
+        ]
+        for module, count in sorted(edges_per_module.items()):
+            md_lines.append(f"| {module} | {count} |")
+
+        markdown_path.write_text("\n".join(md_lines), encoding="utf-8")
+
+    def query(
+        self,
+        question: str,
+        n_results: int = 5,
+        generate_mermaid: bool = False,
+        llm_optimized_mermaid: bool = False,
+        min_similarity: float = 0.0,
+    ) -> None:
         """
         Query the vector store for insights and print the results.
         Args:
@@ -350,7 +414,11 @@ class CodeGraphAnalyzer:
             return
 
         print(f"\n🔍 Running semantic search for: '{question}'")
-        results = self.vector_store.query_codebase(question, n_results)
+        results = self.vector_store.query_codebase(
+            question,
+            n_results,
+            min_similarity=min_similarity,
+        )
 
         if not results:
             print("   No relevant functions found. Try a different query.")
@@ -364,7 +432,8 @@ class CodeGraphAnalyzer:
             if fqn:
                 highlight_fqns.append(fqn)
 
-            print(f"{i}. {meta.get('name', 'unknown')} (Similarity: {1 - result['distance']:.3f})")
+            similarity = result.get('similarity', 1 - result['distance'])
+            print(f"{i}. {meta.get('name', 'unknown')} (Similarity: {similarity:.3f})")
             print(f"   FQN: {fqn}")
             print(f"   Location: {meta.get('file_path', 'unknown')}:L{meta.get('line_start', '?')}-{meta.get('line_end', '?')}")
             print(f"   Type: {'Method' if meta.get('is_method') else 'Function'}{' (async)' if meta.get('is_async') else ''}")
@@ -515,185 +584,298 @@ def _memory_command(config, args) -> int:
     return 1
 
 
-def main():
-    """Main entry point for the analyzer."""
-    if len(sys.argv) > 1 and sys.argv[1] == "memory":
-        memory_parser = argparse.ArgumentParser(
-            description="Manage Cortex memory entries."
-        )
-        memory_sub = memory_parser.add_subparsers(dest="memory_action", required=True)
-
-        memory_add = memory_sub.add_parser("add", help="Add a memory")
-        memory_add.add_argument("--type", default="FACT", help="Memory type TRIBAL|EPISODIC|FACT")
-        memory_add.add_argument("--content", required=True, help="Memory content")
-        memory_add.add_argument("--tags", nargs='*', default=[], help="Tags")
-        memory_add.add_argument("--scope", default="repo", help="Scope: repo|project|file")
-        memory_add.add_argument("--file-paths", nargs='*', default=[], help="Related file paths")
-        memory_add.add_argument("--source", default="user", help="Source: user|system|tool")
-        memory_add.add_argument("--base-confidence", type=float, default=1.0, help="Base confidence")
-
-        memory_query = memory_sub.add_parser("query", help="Query memory")
-        memory_query.add_argument("--query", required=True, help="Query string")
-        memory_query.add_argument("--type", default=None, help="Filter by memory type")
-        memory_query.add_argument("--limit", type=int, default=5, help="Number of results")
-
-        memory_list = memory_sub.add_parser("list", help="List memory")
-        memory_list.add_argument("--type", default=None, help="Filter by memory type")
-        memory_list.add_argument("--limit", type=int, default=50, help="Number of results")
-        memory_list.add_argument("--offset", type=int, default=0, help="Offset")
-
-        memory_reinforce = memory_sub.add_parser("reinforce", help="Reinforce memory")
-        memory_reinforce.add_argument("--knowledge-id", required=True, help="Memory ID")
-
-        memory_forget = memory_sub.add_parser("forget", help="Delete memory")
-        memory_forget.add_argument("--knowledge-id", required=True, help="Memory ID")
-
-        memory_parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
-
-        args = memory_parser.parse_args()
-
-        from code_flow.core.config import load_config
-        config = load_config(config_path=args.config, cli_args={})
-        return_code = _memory_command(config, args)
-        sys.exit(return_code)
-
-    parser = argparse.ArgumentParser(
-        description="Analyze a codebase to build a call graph and identify entry points. "
-                    "Optionally query an existing analysis."
+def _add_directory_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "directory",
+        nargs='?',
+        default=None,
+        help="Path to codebase directory. If not provided, uses 'watch_directories' from config or defaults to current directory.",
     )
-    parser.add_argument("directory", nargs='?', default=None,
-                        help="Path to codebase directory. If not provided, uses 'watch_directories' from config or defaults to current directory.")
+
+
+def _add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
     parser.add_argument("--language", choices=["python", "typescript", "rust"],
                         help="Programming language of the codebase (overrides config)")
-    parser.add_argument("--output", default="code_analysis_report.json",
-                        help="Output file for the analysis report (only used when performing analysis).")
-    parser.add_argument("--query",
-                        help="Run a semantic query against the analyzed codebase or a previously stored vector store.")
-    parser.add_argument("--no-analyze", action="store_true",
-                        help="Do not perform analysis. Assume the vector store is already populated "
-                             "from a previous run in the specified directory. This flag must be "
-                             "used with --query.")
-    parser.add_argument("--mermaid", action="store_true",
-                        help="Generate a Mermaid graph for query results (requires --query).")
-    parser.add_argument("--llm-optimized", action="store_true",
-                        help="Generate Mermaid graph optimized for LLM token count (removes styling). Implies --mermaid.")
     parser.add_argument("--embedding-model",
                         help="Embedding model to use. Shortcuts: 'fast' (all-MiniLM-L6-v2, 384-dim), "
                              "'medium' (all-MiniLM-L12-v2, 384-dim), or 'accurate' (all-mpnet-base-v2, 768-dim). "
                              "Default: 'fast'.")
     parser.add_argument("--max-tokens", type=int,
-                      help="Maximum tokens per chunk for embedding model (default: 256).")
-    parser.add_argument("--generate-summaries", action="store_true",
-                      help="Enable LLM-driven summary generation (requires OPENAI_API_KEY).")
+                        help="Maximum tokens per chunk for embedding model (default: 256).")
 
-    args = parser.parse_args()
 
-    # Prepare overrides
+def _resolve_config_and_root(args: argparse.Namespace):
     cli_overrides = {}
-    if args.directory:
+    if getattr(args, "directory", None):
         cli_overrides['watch_directories'] = [str(Path(args.directory).resolve())]
-    if args.language:
+    if getattr(args, "language", None):
         cli_overrides['language'] = args.language
-    if args.embedding_model:
+    if getattr(args, "embedding_model", None):
         cli_overrides['embedding_model'] = args.embedding_model
-    if args.max_tokens:
+    if getattr(args, "max_tokens", None):
         cli_overrides['max_tokens'] = args.max_tokens
 
-    # Load config
     from code_flow.core.config import load_config
-    config = load_config(config_path=args.config, cli_args=cli_overrides)
+    config = load_config(config_path=getattr(args, "config", None), cli_args=cli_overrides)
 
-    # Determine root directory
-    # If watch_directories has multiple, CLI currently only supports one root for analysis context usually.
-    # But the analyzer supports multiple.
-    # However, for the CLI tool's "directory" arg, it usually implies the root.
-    # Let's take the first watch directory as the root if not explicitly provided.
-    if config.watch_directories:
-        root_dir = Path(config.watch_directories[0]).resolve()
-    else:
-        root_dir = Path('.').resolve()
+    root_dir = config.require_project_root()
 
-    if not args.no_analyze and not root_dir.is_dir():
+    if not config.project_root:
+        raise ValueError("project_root is required; set it in codeflow.config.yaml")
+    return config, root_dir
+
+
+def _init_analyzer(root_dir: Path, config, enable_summaries: bool) -> CodeGraphAnalyzer:
+    embedding_model = resolve_embedding_model(config.embedding_model)
+    analyzer = CodeGraphAnalyzer(
+        root_directory=root_dir,
+        language=config.language,
+        embedding_model=embedding_model,
+        max_tokens=config.max_tokens,
+        enable_summaries=enable_summaries,
+        llm_config=config.llm_config if hasattr(config, 'llm_config') else {},
+        chromadb_path=str(config.chroma_dir()),
+    )
+    analyzer.graph_builder.confidence_threshold = float(getattr(config, "call_graph_confidence_threshold", 0.8))
+    return analyzer
+
+
+def _run_analyze(args: argparse.Namespace) -> int:
+    config, root_dir = _resolve_config_and_root(args)
+    config.chroma_dir().mkdir(parents=True, exist_ok=True)
+    config.reports_dir().mkdir(parents=True, exist_ok=True)
+    if not root_dir.is_dir():
         print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
-    if args.no_analyze and not args.query:
-        print("❌ Error: The --no-analyze flag must be used with --query.", file=sys.stderr)
-        sys.exit(1)
+    enable_summaries = args.summaries or getattr(config, "summary_generation_enabled", False)
+    analyzer = _init_analyzer(root_dir, config, enable_summaries=enable_summaries)
 
-    # If --llm-optimized is set, implicitly set --mermaid
+    output_path = args.output
+    if not Path(args.output).is_absolute():
+        output_path = str(config.reports_dir() / args.output)
+
+    analyzer.export_report(output_path)
+
+    drift_enabled = args.drift or getattr(config, "drift_enabled", False)
+    if drift_enabled:
+        drift_report = DriftAnalyzer(
+            project_root=str(root_dir),
+            config=config.model_dump(),
+        ).analyze(
+            functions=list(analyzer.graph_builder.functions.values()),
+            edges=analyzer.graph_builder.get_drift_edges(),
+        )
+        drift_output_path = str(Path(output_path).with_suffix(".drift.json"))
+        with open(drift_output_path, 'w', encoding='utf-8') as f:
+            json.dump(drift_report, f, indent=2, ensure_ascii=False)
+        print(f"📄 Drift report exported to {drift_output_path}")
+
+    return 0
+
+
+def _run_query(args: argparse.Namespace) -> int:
     if args.llm_optimized:
         args.mermaid = True
 
-    if args.mermaid and not args.query:
-        print("❌ Error: The --mermaid flag must be used with --query.", file=sys.stderr)
-        sys.exit(1)
+    config, root_dir = _resolve_config_and_root(args)
+    if not root_dir.is_dir() and not args.no_analyze:
+        print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
+        return 1
 
-    try:
-        # Resolve embedding model shorthand to actual model name
-        # Config already has the model name (default or overridden), but we need to resolve shorthand if it came from CLI or Config
-        # The resolve_embedding_model function handles names too, so it's safe to pass the full name.
-        embedding_model = resolve_embedding_model(config.embedding_model)
-        
-        # Initialize Analyzer with config values
-        # Note: CodeGraphAnalyzer signature might need update or we pass individual args
-        # The current signature is: __init__(self, root_directory, language, embedding_model, max_tokens)
-        # We can use the config values.
-        analyzer = CodeGraphAnalyzer(
-            root_directory=root_dir, 
-            language=config.language, 
-            embedding_model=embedding_model, 
-            max_tokens=config.max_tokens,
-            enable_summaries=args.generate_summaries,
-            llm_config=config.llm_config if hasattr(config, 'llm_config') else {}
+    config.chroma_dir().mkdir(parents=True, exist_ok=True)
+    analyzer = _init_analyzer(root_dir, config, enable_summaries=False)
+    min_similarity = args.min_similarity if args.min_similarity is not None else getattr(config, "min_similarity", 0.0)
+
+    if args.no_analyze:
+        print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")
+        return _safe_query(
+            analyzer,
+            args.query,
+            n_results=args.limit,
+            generate_mermaid=args.mermaid,
+            llm_optimized_mermaid=args.llm_optimized,
+            min_similarity=min_similarity,
         )
 
-        if args.no_analyze:
-            # We need to make sure we look in the right place for vector store
-            # The analyzer init sets it up based on root_dir.
-            print(f"⏩ Skipping code analysis. Attempting to query existing vector store in '{root_dir / 'code_vectors_chroma'}'.")
-            exit_code = _safe_query(
-                analyzer,
-                args.query,
-                generate_mermaid=args.mermaid,
-                llm_optimized_mermaid=args.llm_optimized,
-            )
-            if exit_code != 0:
-                sys.exit(exit_code)
-        elif args.query:
-            # Analyze first to populate/update the store, then query
-            analyzer.analyze()
-            exit_code = _safe_query(
-                analyzer,
-                args.query,
-                generate_mermaid=args.mermaid,
-                llm_optimized_mermaid=args.llm_optimized,
-            )
-            if exit_code != 0:
-                sys.exit(exit_code)
+    analyzer.analyze()
+    return _safe_query(
+        analyzer,
+        args.query,
+        n_results=args.limit,
+        generate_mermaid=args.mermaid,
+        llm_optimized_mermaid=args.llm_optimized,
+        min_similarity=min_similarity,
+    )
+
+
+def _run_graphs(args: argparse.Namespace) -> int:
+    if args.llm_optimized and args.format != "mermaid":
+        print("❌ Error: --llm-optimized is only valid with --format mermaid.", file=sys.stderr)
+        return 1
+
+    config, root_dir = _resolve_config_and_root(args)
+    if not root_dir.is_dir():
+        print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
+        return 1
+
+    config.chroma_dir().mkdir(parents=True, exist_ok=True)
+    analyzer = _init_analyzer(root_dir, config, enable_summaries=False)
+    analyzer.analyze()
+
+    if args.format == "mermaid":
+        output = analyzer.graph_builder.export_mermaid_graph(
+            highlight_fqns=args.fqns or None,
+            llm_optimized=args.llm_optimized,
+        )
+    else:
+        output = analyzer.graph_builder.export_graph(format="json")
+
+    if args.output:
+        output_path = Path(args.output)
+        if isinstance(output, dict):
+            output_path.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
         else:
-            # Just generate the report (implies analysis)
-            # Ensure output file is created in the analyzed directory if no explicit output path given
-            output_path = args.output
-            if not Path(args.output).is_absolute():
-                output_path = str(root_dir / args.output)
+            output_path.write_text(str(output), encoding="utf-8")
+        print(f"📄 Graph exported to {output_path}")
+    else:
+        if isinstance(output, dict):
+            print(json.dumps(output, indent=2, ensure_ascii=False))
+        else:
+            print(output)
 
-            analyzer.export_report(output_path)
-            drift_enabled = getattr(config, "drift_enabled", False)
-            if drift_enabled:
-                drift_report = DriftAnalyzer(
-                    project_root=str(root_dir),
-                    config=config.model_dump(),
-                ).analyze(
-                    functions=list(analyzer.graph_builder.functions.values()),
-                    edges=analyzer.graph_builder.edges,
-                )
-                drift_output_path = str(Path(output_path).with_suffix(".drift.json"))
-                with open(drift_output_path, 'w', encoding='utf-8') as f:
-                    json.dump(drift_report, f, indent=2, ensure_ascii=False)
-                print(f"📄 Drift report exported to {drift_output_path}")
+    return 0
 
+
+def _run_drift(args: argparse.Namespace) -> int:
+    config, root_dir = _resolve_config_and_root(args)
+    if not root_dir.is_dir():
+        print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
+        return 1
+
+    config.chroma_dir().mkdir(parents=True, exist_ok=True)
+    config.reports_dir().mkdir(parents=True, exist_ok=True)
+    analyzer = _init_analyzer(root_dir, config, enable_summaries=False)
+    analyzer.analyze()
+
+    drift_report = DriftAnalyzer(
+        project_root=str(root_dir),
+        config=config.model_dump(),
+    ).analyze(
+        functions=list(analyzer.graph_builder.functions.values()),
+        edges=analyzer.graph_builder.get_drift_edges(),
+    )
+
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        output_path = (config.reports_dir() / "code_analysis_report.json").with_suffix(".drift.json")
+
+    output_path.write_text(json.dumps(drift_report, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"📄 Drift report exported to {output_path}")
+    return 0
+
+
+def _run_memory(args: argparse.Namespace) -> int:
+    from code_flow.core.config import load_config
+    config = load_config(config_path=args.config, cli_args={})
+    return _memory_command(config, args)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="CodeFlow CLI: analysis, search, graphs, drift detection, and cortex memory."
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    analyze = subparsers.add_parser("analyze", help="Analyze a codebase and generate a report")
+    _add_directory_arg(analyze)
+    _add_common_flags(analyze)
+    analyze.add_argument("--output", default="code_analysis_report.json",
+                         help="Output file for the analysis report.")
+    analyze.add_argument("--summaries", action="store_true",
+                         help="Enable LLM-driven summary generation (requires OPENAI_API_KEY).")
+    analyze.add_argument("--drift", action="store_true",
+                         help="Generate a drift report alongside the analysis report.")
+    analyze.set_defaults(func=_run_analyze)
+
+    query = subparsers.add_parser("query", help="Run a semantic query against a codebase")
+    _add_directory_arg(query)
+    _add_common_flags(query)
+    query.add_argument("--query", required=True,
+                       help="Run a semantic query against the analyzed codebase or a previously stored vector store.")
+    query.add_argument("--no-analyze", action="store_true",
+                       help="Do not perform analysis. Assume the vector store is already populated.")
+    query.add_argument("--limit", type=int, default=5, help="Number of results to return.")
+    query.add_argument("--min-similarity", type=float, default=None,
+                       help="Minimum similarity threshold (0-1). Uses config min_similarity if omitted.")
+    query.add_argument("--mermaid", action="store_true",
+                       help="Generate a Mermaid graph for query results.")
+    query.add_argument("--llm-optimized", action="store_true",
+                       help="Generate Mermaid graph optimized for LLM token count (removes styling). Implies --mermaid.")
+    query.set_defaults(func=_run_query)
+
+    graphs = subparsers.add_parser("graphs", help="Export call graph data")
+    _add_directory_arg(graphs)
+    _add_common_flags(graphs)
+    graphs.add_argument("--format", choices=["json", "mermaid"], default="json",
+                        help="Graph output format.")
+    graphs.add_argument("--fqns", nargs='*', default=None,
+                        help="Optional list of fully qualified names to highlight (mermaid only).")
+    graphs.add_argument("--llm-optimized", action="store_true",
+                        help="Generate Mermaid graph optimized for LLM token count (mermaid only).")
+    graphs.add_argument("--output", help="Write graph output to a file instead of stdout.")
+    graphs.set_defaults(func=_run_graphs)
+
+    drift = subparsers.add_parser("drift", help="Generate a drift report")
+    _add_directory_arg(drift)
+    _add_common_flags(drift)
+    drift.add_argument("--output", help="Output path for drift report (default: code_analysis_report.drift.json)")
+    drift.set_defaults(func=_run_drift)
+
+    memory = subparsers.add_parser("memory", help="Manage Cortex memory entries")
+    memory.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
+    memory_sub = memory.add_subparsers(dest="memory_action", required=True)
+
+    memory_add = memory_sub.add_parser("add", help="Add a memory")
+    memory_add.add_argument("--type", default="FACT", help="Memory type TRIBAL|EPISODIC|FACT")
+    memory_add.add_argument("--content", required=True, help="Memory content")
+    memory_add.add_argument("--tags", nargs='*', default=[], help="Tags")
+    memory_add.add_argument("--scope", default="repo", help="Scope: repo|project|file")
+    memory_add.add_argument("--file-paths", nargs='*', default=[], help="Related file paths")
+    memory_add.add_argument("--source", default="user", help="Source: user|system|tool")
+    memory_add.add_argument("--base-confidence", type=float, default=1.0, help="Base confidence")
+
+    memory_query = memory_sub.add_parser("query", help="Query memory")
+    memory_query.add_argument("--query", required=True, help="Query string")
+    memory_query.add_argument("--type", default=None, help="Filter by memory type")
+    memory_query.add_argument("--limit", type=int, default=5, help="Number of results")
+
+    memory_list = memory_sub.add_parser("list", help="List memory")
+    memory_list.add_argument("--type", default=None, help="Filter by memory type")
+    memory_list.add_argument("--limit", type=int, default=50, help="Number of results")
+    memory_list.add_argument("--offset", type=int, default=0, help="Offset")
+
+    memory_reinforce = memory_sub.add_parser("reinforce", help="Reinforce memory")
+    memory_reinforce.add_argument("--knowledge-id", required=True, help="Memory ID")
+
+    memory_forget = memory_sub.add_parser("forget", help="Delete memory")
+    memory_forget.add_argument("--knowledge-id", required=True, help="Memory ID")
+
+    memory.set_defaults(func=_run_memory)
+
+    return parser
+
+
+def main():
+    """Main entry point for the analyzer."""
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        exit_code = args.func(args)
+        sys.exit(exit_code)
     except Exception as e:
         print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
         import traceback
