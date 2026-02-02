@@ -361,7 +361,6 @@ class CodeVectorStore:
             f"Decorators: {decorators_str}",
             f"Catches: {catches_str}",
             f"Locals: {local_vars_str}",
-            f"Locals: {local_vars_str}",
             f"Doc: {node.docstring[:150] + '...' if node.docstring and len(node.docstring) > 150 else (node.docstring or 'None')}",
             f"Summary: {node.summary}" if node.summary else "",
             f"Code: {func_snippet[:400]}..."
