@@ -1,3 +1,4 @@
+drift_enabled: true
 watch_directories: ["code_flow_graph"]
 ignored_patterns: ["venv", "**/__pycache__"]
 chromadb_path: "./code_vectors_chroma"

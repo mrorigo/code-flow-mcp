@@ -517,39 +517,50 @@ def _memory_command(config, args) -> int:
 
 def main():
     """Main entry point for the analyzer."""
+    if len(sys.argv) > 1 and sys.argv[1] == "memory":
+        memory_parser = argparse.ArgumentParser(
+            description="Manage Cortex memory entries."
+        )
+        memory_sub = memory_parser.add_subparsers(dest="memory_action", required=True)
+
+        memory_add = memory_sub.add_parser("add", help="Add a memory")
+        memory_add.add_argument("--type", default="FACT", help="Memory type TRIBAL|EPISODIC|FACT")
+        memory_add.add_argument("--content", required=True, help="Memory content")
+        memory_add.add_argument("--tags", nargs='*', default=[], help="Tags")
+        memory_add.add_argument("--scope", default="repo", help="Scope: repo|project|file")
+        memory_add.add_argument("--file-paths", nargs='*', default=[], help="Related file paths")
+        memory_add.add_argument("--source", default="user", help="Source: user|system|tool")
+        memory_add.add_argument("--base-confidence", type=float, default=1.0, help="Base confidence")
+
+        memory_query = memory_sub.add_parser("query", help="Query memory")
+        memory_query.add_argument("--query", required=True, help="Query string")
+        memory_query.add_argument("--type", default=None, help="Filter by memory type")
+        memory_query.add_argument("--limit", type=int, default=5, help="Number of results")
+
+        memory_list = memory_sub.add_parser("list", help="List memory")
+        memory_list.add_argument("--type", default=None, help="Filter by memory type")
+        memory_list.add_argument("--limit", type=int, default=50, help="Number of results")
+        memory_list.add_argument("--offset", type=int, default=0, help="Offset")
+
+        memory_reinforce = memory_sub.add_parser("reinforce", help="Reinforce memory")
+        memory_reinforce.add_argument("--knowledge-id", required=True, help="Memory ID")
+
+        memory_forget = memory_sub.add_parser("forget", help="Delete memory")
+        memory_forget.add_argument("--knowledge-id", required=True, help="Memory ID")
+
+        memory_parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
+
+        args = memory_parser.parse_args()
+
+        from code_flow_graph.core.config import load_config
+        config = load_config(config_path=args.config, cli_args={})
+        return_code = _memory_command(config, args)
+        sys.exit(return_code)
+
     parser = argparse.ArgumentParser(
         description="Analyze a codebase to build a call graph and identify entry points. "
                     "Optionally query an existing analysis."
     )
-    subparsers = parser.add_subparsers(dest="command")
-    memory_parser = subparsers.add_parser("memory", help="Manage Cortex memory")
-    memory_sub = memory_parser.add_subparsers(dest="memory_action", required=True)
-
-    memory_add = memory_sub.add_parser("add", help="Add a memory")
-    memory_add.add_argument("--type", default="FACT", help="Memory type TRIBAL|EPISODIC|FACT")
-    memory_add.add_argument("--content", required=True, help="Memory content")
-    memory_add.add_argument("--tags", nargs='*', default=[], help="Tags")
-    memory_add.add_argument("--scope", default="repo", help="Scope: repo|project|file")
-    memory_add.add_argument("--file-paths", nargs='*', default=[], help="Related file paths")
-    memory_add.add_argument("--source", default="user", help="Source: user|system|tool")
-    memory_add.add_argument("--base-confidence", type=float, default=1.0, help="Base confidence")
-
-    memory_query = memory_sub.add_parser("query", help="Query memory")
-    memory_query.add_argument("--query", required=True, help="Query string")
-    memory_query.add_argument("--type", default=None, help="Filter by memory type")
-    memory_query.add_argument("--limit", type=int, default=5, help="Number of results")
-
-    memory_list = memory_sub.add_parser("list", help="List memory")
-    memory_list.add_argument("--type", default=None, help="Filter by memory type")
-    memory_list.add_argument("--limit", type=int, default=50, help="Number of results")
-    memory_list.add_argument("--offset", type=int, default=0, help="Offset")
-
-    memory_reinforce = memory_sub.add_parser("reinforce", help="Reinforce memory")
-    memory_reinforce.add_argument("--knowledge-id", required=True, help="Memory ID")
-
-    memory_forget = memory_sub.add_parser("forget", help="Delete memory")
-    memory_forget.add_argument("--knowledge-id", required=True, help="Memory ID")
-
     parser.add_argument("directory", nargs='?', default=None,
                         help="Path to codebase directory. If not provided, uses 'watch_directories' from config or defaults to current directory.")
     parser.add_argument("--config", help="Path to configuration YAML file (default: codeflow.config.yaml)")
@@ -592,11 +603,6 @@ def main():
     # Load config
     from code_flow_graph.core.config import load_config
     config = load_config(config_path=args.config, cli_args=cli_overrides)
-    
-    # Memory command bypasses analysis pipeline
-    if args.command == "memory":
-        return_code = _memory_command(config, args)
-        sys.exit(return_code)
 
     # Determine root directory
     # If watch_directories has multiple, CLI currently only supports one root for analysis context usually.
@@ -674,7 +680,8 @@ def main():
                 output_path = str(root_dir / args.output)
 
             analyzer.export_report(output_path)
-            if getattr(config, "drift_enabled", False):
+            drift_enabled = getattr(config, "drift_enabled", False)
+            if drift_enabled:
                 drift_report = DriftAnalyzer(
                     project_root=str(root_dir),
                     config=config.model_dump(),

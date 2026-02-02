@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
+import logging
 
 from code_flow_graph.core.call_graph_builder import CallEdge, FunctionNode
 from code_flow_graph.core.drift_models import DriftFinding, TopologyViolation
@@ -13,6 +14,11 @@ from code_flow_graph.core.drift_models import DriftFinding, TopologyViolation
 class TopologyAnalyzer:
     def analyze(self, functions: List[FunctionNode], edges: List[CallEdge]) -> Tuple[List[TopologyViolation], List[DriftFinding]]:
         module_graph = self._build_module_graph(functions, edges)
+        logging.info(
+            "Drift topology: modules=%d edges=%d",
+            len(module_graph),
+            sum(len(targets) for targets in module_graph.values()),
+        )
         violations: List[TopologyViolation] = []
         findings: List[DriftFinding] = []
 
@@ -28,6 +34,7 @@ class TopologyAnalyzer:
             )
 
         layer_map = self._infer_layers(module_graph)
+        logging.info("Drift topology: inferred layers for %d modules", len(layer_map))
         for source, targets in module_graph.items():
             for target in targets:
                 if layer_map.get(source, 0) > layer_map.get(target, 0):
@@ -62,6 +69,8 @@ class TopologyAnalyzer:
             target_module = module_by_fqn.get(edge.callee)
             if not source_module or not target_module:
                 continue
+            if source_module == target_module:
+                continue
             graph.setdefault(source_module, [])
             if target_module not in graph[source_module]:
                 graph[source_module].append(target_module)
@@ -74,33 +83,52 @@ class TopologyAnalyzer:
     @staticmethod
     def _detect_cycles(graph: Dict[str, List[str]]) -> List[List[str]]:
         cycles: List[List[str]] = []
-        visited = set()
-        stack = []
+        visited: set[str] = set()
+        stack: set[str] = set()
+        path: List[str] = []
 
-        def visit(node: str, path: List[str]):
-            if node in path:
-                cycle_start = path.index(node)
-                cycles.append(path[cycle_start:] + [node])
-                return
-            if node in visited:
-                return
+        def dfs(node: str) -> None:
             visited.add(node)
+            stack.add(node)
+            path.append(node)
+
             for neighbor in graph.get(node, []):
-                visit(neighbor, path + [neighbor])
+                if neighbor not in visited:
+                    dfs(neighbor)
+                elif neighbor in stack:
+                    try:
+                        cycle_start = path.index(neighbor)
+                        cycle = path[cycle_start:] + [neighbor]
+                        if len(cycle) > 2:
+                            cycles.append(cycle)
+                    except ValueError:
+                        continue
+
+            stack.remove(node)
+            path.pop()
 
         for node in graph.keys():
-            visit(node, [node])
+            if node not in visited:
+                dfs(node)
         return cycles
 
     @staticmethod
     def _infer_layers(graph: Dict[str, List[str]]) -> Dict[str, int]:
         layer_map: Dict[str, int] = {node: 0 for node in graph.keys()}
         changed = True
-        while changed:
+        max_iterations = max(1, len(graph) * 2)
+        iteration = 0
+        while changed and iteration < max_iterations:
             changed = False
+            iteration += 1
             for source, targets in graph.items():
                 for target in targets:
                     if layer_map.get(target, 0) <= layer_map.get(source, 0):
                         layer_map[target] = layer_map[source] + 1
                         changed = True
+        if iteration >= max_iterations:
+            logging.warning(
+                "Drift topology: layer inference hit iteration cap (%d). Graph may contain cycles.",
+                max_iterations,
+            )
         return layer_map

@@ -64,13 +64,13 @@ The project dependencies are defined in [`pyproject.toml`](pyproject.toml:1). Yo
 Analyze a codebase and generate a report:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph .
+python -m code_flow_graph.cli.code_flow_graph -- .
 ```
 
 Run a semantic query after analysis:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph . --query "authentication flows" --mermaid
+python -m code_flow_graph.cli.code_flow_graph -- . --query "authentication flows" --mermaid
 ```
 
 Useful flags include:
@@ -185,7 +185,7 @@ Semantic search uses embeddings from SentenceTransformers in the vector store. Q
 CLI usage:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph . --query "JWT auth" --mermaid
+python -m code_flow_graph.cli.code_flow_graph -- . --query "JWT auth" --mermaid
 ```
 
 MCP tool: `semantic_search` in [`code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:218).
@@ -238,7 +238,7 @@ drift_confidence_threshold: 0.6
 When enabled, drift analysis writes a sibling report next to the main analysis output:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
+python -m code_flow_graph.cli.code_flow_graph -- . --output analysis.json
 # writes: analysis.json.drift.json
 ```
 
