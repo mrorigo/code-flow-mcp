@@ -31,3 +31,6 @@ code_flow = "code_flow.cli.code_flow:main"
 
 [tool.setuptools.packages.find]
 exclude = ["code_vectors_chroma*"]
+
+[tool.setuptools.package-data]
+"code_flow.mcp_server.config" = ["*.yaml"]
