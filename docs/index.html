@@ -119,11 +119,12 @@
                     Seconds</span>
             </h1>
 
-            <p class="mt-4 max-w-2xl mx-auto text-xl text-slate-400 mb-10 animate-slide-up"
-                style="animation-delay: 0.1s;">
-                CodeFlow is a powerful code analysis tool for developers and AI agents. Generate call graphs, perform
-                semantic search, and reduce cognitive load with Tree-sitter-powered parsing and a persistent vector store.
-            </p>
+                <p class="mt-4 max-w-3xl mx-auto text-xl text-slate-400 mb-10 animate-slide-up"
+                    style="animation-delay: 0.1s;">
+                    CodeFlow gives developers and AI agents a complete understanding stack: Tree-sitter metadata,
+                    import-aware call graphs with confidence scoring, semantic search, drift detection, and optional
+                    Cortex memory + LLM summaries — all persisted for fast repeat queries.
+                </p>
 
             <div class="flex flex-col sm:flex-row justify-center gap-4 animate-slide-up" style="animation-delay: 0.2s;">
                 <a href="#installation"
@@ -172,14 +173,15 @@
     <div id="features" class="py-24 bg-slate-950">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-3xl font-bold text-white mb-4">Built for Modern Development</h2>
-                <p class="text-slate-400 max-w-2xl mx-auto">Everything you need to navigate, understand, and document
-                    complex codebases efficiently.</p>
+                <h2 class="text-3xl font-bold text-white mb-4">Built for Drift Governance and Long-Term Context</h2>
+                <p class="text-slate-400 max-w-3xl mx-auto">CodeFlow pairs structural drift detection with Cortex memory
+                    so teams can enforce architecture while preserving institutional knowledge for agents and humans.</p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 <!-- Feature 1 -->
-                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                <a href="#feature-deep-ast"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
                     <div
                         class="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
                         <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,11 +192,12 @@
                     </div>
                     <h3 class="text-lg font-semibold text-white mb-2">Deep AST Extraction</h3>
                     <p class="text-slate-400 text-sm leading-relaxed">Tree-sitter metadata extraction for Python,
-                        TypeScript/TSX, and Rust. Understands classes, functions, and dependencies.</p>
-                </div>
+                        TypeScript/TSX, and Rust with complexity, decorators, dependencies, and exceptions.</p>
+                </a>
 
                 <!-- Feature 2 -->
-                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                <a href="#feature-semantic-search"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
                     <div
                         class="w-12 h-12 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-500/20 transition-colors">
                         <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,12 +206,58 @@
                         </svg>
                     </div>
                     <h3 class="text-lg font-semibold text-white mb-2">Semantic Search</h3>
-                    <p class="text-slate-400 text-sm leading-relaxed">Query your code with natural language. Ask "Where
-                        is auth handled?" and get instant answers.</p>
-                </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Query by intent with embedding-backed search across
+                        code, call edges, and structured config data.</p>
+                </a>
 
                 <!-- Feature 3 -->
-                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                <a href="#feature-drift-detection"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
+                    <div
+                        class="w-12 h-12 bg-pink-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-pink-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Drift Detection</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Detect cycles and layer inversions with topology
+                        analysis and confidence-gated call edges.</p>
+                </a>
+
+                <!-- Feature 4 -->
+                <a href="#feature-cortex-memory"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
+                    <div
+                        class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-cyan-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-10V4m0 12v4"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Cortex Memory</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Long-term, decay-aware knowledge store for tribal
+                        rules and episodic context.</p>
+                </a>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-8">
+                <a href="#feature-call-graph"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
+                    <div
+                        class="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Call Graph Accuracy</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Import-aware resolution, confidence scoring, and
+                        drift gating keep topology clean and actionable.</p>
+                </a>
+
+                <a href="#feature-mcp-server"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
                     <div
                         class="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
                         <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,12 +266,12 @@
                         </svg>
                     </div>
                     <h3 class="text-lg font-semibold text-white mb-2">MCP Server</h3>
-                    <p class="text-slate-400 text-sm leading-relaxed">Ready-to-use Model Context Protocol integration.
-                        Connect seamlessly with AI assistants and IDEs.</p>
-                </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">Live analysis, file watching, and tool APIs for
+                        semantic search, call graphs, entry points, and metadata.</p>
+                </a>
 
-                <!-- Feature 4 -->
-                <div class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group">
+                <a href="#feature-multi-language"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
                     <div
                         class="w-12 h-12 bg-orange-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-orange-500/20 transition-colors">
                         <svg class="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,7 +283,21 @@
                     <h3 class="text-lg font-semibold text-white mb-2">Multi-language</h3>
                     <p class="text-slate-400 text-sm leading-relaxed">Unified API that automatically detects and
                         analyzes Python, TypeScript/TSX, and Rust codebases.</p>
-                </div>
+                </a>
+
+                <a href="#feature-meta-rag"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
+                    <div
+                        class="w-12 h-12 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 8h10M7 12h6m-6 4h10M5 6h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Meta-RAG Summaries</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Optional Meta-RAG summaries for compact
+                        retrieval and lower token cost.</p>
+                </a>
             </div>
         </div>
     </div>
@@ -246,9 +309,8 @@
                 <div class="lg:w-1/2">
                     <h2 class="text-3xl font-bold text-white mb-6">Powering the Next Generation of AI Agents</h2>
                     <p class="text-slate-400 text-lg mb-8">
-                        CodeFlow's MCP Server provides a standardized interface for LLMs to interact with your code.
-                        Give your AI agents the ability to navigate, search, and understand complex project structures
-                        autonomously.
+                        CodeFlow’s MCP Server streams live code intelligence to agents, combining drift governance, Cortex
+                        memory, and high-precision call graphs behind a single tool interface.
                     </p>
                     <ul class="space-y-4 mb-8">
                         <li class="flex items-start gap-3">
@@ -260,9 +322,8 @@
                                 </svg>
                             </div>
                             <div>
-                                <h4 class="text-white font-medium">Semantic Search Tool</h4>
-                                <p class="text-slate-500 text-sm">Let agents find code by meaning, not just keywords.
-                                </p>
+                                <h4 class="text-white font-medium">Semantic Search + Memory</h4>
+                                <p class="text-slate-500 text-sm">Rank results with summaries and Cortex recall.</p>
                             </div>
                         </li>
                         <li class="flex items-start gap-3">
@@ -275,8 +336,8 @@
                                 </svg>
                             </div>
                             <div>
-                                <h4 class="text-white font-medium">Call Graph Analysis</h4>
-                                <p class="text-slate-500 text-sm">Agents can trace execution paths and dependencies.</p>
+                                <h4 class="text-white font-medium">Call Graph + Drift Signals</h4>
+                                <p class="text-slate-500 text-sm">Trace execution paths and flag topology drift.</p>
                             </div>
                         </li>
                         <li class="flex items-start gap-3">
@@ -289,9 +350,21 @@
                                 </svg>
                             </div>
                             <div>
-                                <h4 class="text-white font-medium">Rich AST Metadata</h4>
-                                <p class="text-slate-500 text-sm">Expose function complexity, decorators, and types to
-                                    the AI.</p>
+                                <h4 class="text-white font-medium">Agent-Ready Metadata</h4>
+                                <p class="text-slate-500 text-sm">Expose complexity, decorators, and types for reasoning.</p>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <div class="p-1 bg-brand-500/10 rounded">
+                                <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-white font-medium">Analysis Status Awareness</h4>
+                                <p class="text-slate-500 text-sm">Tools respond with progress while indexing runs.</p>
                             </div>
                         </li>
                     </ul>
@@ -368,7 +441,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
-                        New in v0.2.0
+                        Unique Feature 
                     </div>
                     <h2 class="text-3xl font-bold text-white mb-6">Meta-RAG: Context-Aware Intelligence</h2>
                     <p class="text-slate-400 text-lg mb-8">
@@ -497,6 +570,318 @@
         </div>
     </div>
 
+    <!-- Feature Detail: Drift Detection -->
+    <div id="feature-drift-detection" class="py-24 bg-slate-900 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/20 text-sm text-pink-400 mb-6">
+                        Governance
+                    </div>
+                    <h2 class="text-3xl font-bold text-white mb-6">Drift Detection</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Identify architectural drift with topology analysis that flags cycles and layer inversions using
+                        confidence-gated call edges.
+                    </p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Topological findings for cycles and layer inversions
+                        </li>
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Confidence threshold to suppress noisy edges
+                        </li>
+                    </ul>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Drift signals</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-pink-400"></span>
+                                Topology maps flag cycles, layer inversions, and dependency loops.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-pink-400"></span>
+                                Confidence thresholds suppress noisy edges before analysis.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-pink-400"></span>
+                                Reports surface actionable findings with ownership metadata.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Cortex Memory -->
+    <div id="feature-cortex-memory" class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-sm text-cyan-400 mb-6">
+                        Memory Layer
+                    </div>
+                    <h2 class="text-3xl font-bold text-white mb-6">Cortex Memory</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Store tribal rules and episodic context with decay-aware scoring, so critical guidance stays
+                        accessible across sessions.
+                    </p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            TRIBAL, EPISODIC, and FACT memory types
+                        </li>
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Decay, reinforcement, and ranked recall
+                        </li>
+                    </ul>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Memory lifecycle</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-cyan-400"></span>
+                                Capture team rules and episodic decisions in structured entries.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-cyan-400"></span>
+                                Reinforcement boosts relevance; decay keeps noise low.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-cyan-400"></span>
+                                Ranked recall integrates with semantic search and summaries.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Deep AST Extraction -->
+    <div id="feature-deep-ast" class="py-24 bg-slate-900 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Deep AST Extraction</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Parse code with Tree-sitter to capture complexity, decorators, dependencies, exception handling,
+                        and stable hashes for change detection.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Structured output</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-blue-400"></span>
+                                Function metadata, docstrings, and return types in one layer.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-blue-400"></span>
+                                Complexity and NLOC for prioritization and drift scoring.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-blue-400"></span>
+                                Stable hashes for change detection across runs.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Semantic Search -->
+    <div id="feature-semantic-search" class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Semantic Search</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Search by intent over functions, call edges, and structured configs, returning ranked metadata
+                        with context for reasoning.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Search signals</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+                                Rank functions, edges, and configs by intent.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+                                Include summaries, metadata, and file context in results.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+                                Combine with memory for grounded recall.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Call Graph Accuracy -->
+    <div id="feature-call-graph" class="py-24 bg-slate-900 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Call Graph Accuracy</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Module-local symbol tables and import-aware matching produce higher-confidence edges and cleaner
+                        topology for reasoning.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Signal quality</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-orange-400"></span>
+                                Module-local symbol tables improve precision.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-orange-400"></span>
+                                Import-aware resolution strengthens cross-module edges.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-orange-400"></span>
+                                Confidence gating keeps drift detection trustworthy.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: MCP Server -->
+    <div id="feature-mcp-server" class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">MCP Server Tooling</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Serve tools for semantic search, call graphs, entry points, and memory with background analysis
+                        and file watching.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Real-time tooling</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-purple-400"></span>
+                                Background analysis with live file watching.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-purple-400"></span>
+                                Tools for semantic search, call graphs, and memory.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-purple-400"></span>
+                                Status-aware responses while analysis completes.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Multi-language -->
+    <div id="feature-multi-language" class="py-24 bg-slate-900 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Multi-language Coverage</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Auto-detect and analyze Python, TypeScript/TSX, and Rust with a unified API and consistent
+                        metadata model.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Supported stacks</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-indigo-400"></span>
+                                Python and TypeScript/TSX with unified metadata.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-indigo-400"></span>
+                                Rust analysis for systems and backend services.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-indigo-400"></span>
+                                Auto-detection picks the right extractor per file.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Meta-RAG Summaries -->
+    <div id="feature-meta-rag" class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <h2 class="text-3xl font-bold text-white mb-6">Meta-RAG Summaries</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Optional Meta-RAG summaries for functions and classes reduce token costs while preserving the
+                        strongest context for retrieval.
+                    </p>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Summary controls</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-violet-400"></span>
+                                Configurable depth for class and function summaries.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-violet-400"></span>
+                                Lower token usage without losing key context.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-violet-400"></span>
+                                Optional Meta-RAG integration for curated insights.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- CLI Tool Section -->
     <div class="py-24 bg-slate-950 border-t border-white/5">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -562,22 +947,47 @@
     <div id="installation" class="py-24 bg-slate-950">
         <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h2 class="text-3xl font-bold text-white mb-8">Get Started in Seconds</h2>
-            <div
-                class="bg-slate-900 rounded-lg p-6 border border-slate-800 flex items-center justify-between group hover:border-brand-500/50 transition-colors">
-                <code class="font-mono text-brand-400 text-lg">pip install -e .</code>
-                <button class="text-slate-400 hover:text-white transition-colors"
-                    onclick="navigator.clipboard.writeText('pip install -e .')">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
-                        </path>
-                    </svg>
-                </button>
+            <div class="space-y-4 text-left">
+                <div
+                    class="bg-slate-900 rounded-lg p-6 border border-slate-800 flex items-center justify-between group hover:border-brand-500/50 transition-colors">
+                    <code class="font-mono text-brand-400 text-lg">uv tool install code-flow</code>
+                    <button class="text-slate-400 hover:text-white transition-colors"
+                        onclick="navigator.clipboard.writeText('uv tool install code-flow')">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <div
+                    class="bg-slate-900 rounded-lg p-6 border border-slate-800 flex items-center justify-between group hover:border-brand-500/50 transition-colors">
+                    <code class="font-mono text-brand-400 text-lg">export PATH="$(uv tool dir --bin):$PATH"</code>
+                    <button class="text-slate-400 hover:text-white transition-colors"
+                        onclick='navigator.clipboard.writeText("export PATH=\"$(uv tool dir --bin):$PATH\"")'>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <div
+                    class="bg-slate-900 rounded-lg p-6 border border-slate-800 flex items-center justify-between group hover:border-brand-500/50 transition-colors">
+                    <code class="font-mono text-brand-400 text-lg">code_flow analyze -- . --output report.json</code>
+                    <button class="text-slate-400 hover:text-white transition-colors"
+                        onclick='navigator.clipboard.writeText("code_flow analyze -- . --output report.json")'>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <p class="mt-6 text-slate-400">
-                Requires Python 3.8+. Check out the <a href="#"
-                    class="text-brand-400 hover:text-brand-300 hover:underline">documentation</a> for advanced
-                configuration.
+                Requires Python 3.11+. Use <span class="text-white">codeflow.config.yaml</span> to set
+                <span class="text-white">project_root</span>, embeddings, drift, and call-graph confidence thresholds.
             </p>
         </div>
     </div>
