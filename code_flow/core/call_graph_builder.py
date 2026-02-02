@@ -799,10 +799,50 @@ class CallGraphBuilder:
         """Get all identified entry points."""
         return [f for f in self.functions.values() if f.is_entry_point]
 
-    def export_graph(self, format: str = 'json') -> Optional[Dict | str]:
+    def _build_subgraph(self, seed_fqns: Optional[List[str]], depth: int = 1) -> tuple[Dict[str, FunctionNode], List[CallEdge]]:
+        """Build a subgraph from seed FQNs within the given depth (undirected traversal)."""
+        if not seed_fqns:
+            return self.functions, self.edges
+
+        normalized_depth = max(0, depth)
+        seed_set = {fqn for fqn in seed_fqns if fqn in self.functions}
+        missing = [fqn for fqn in seed_fqns if fqn not in self.functions]
+        if missing:
+            logging.warning(f"Warning: {len(missing)} seed FQNs not found in call graph: {missing[:5]}{'...' if len(missing) > 5 else ''}")
+
+        if not seed_set:
+            return {}, []
+
+        neighbors: Dict[str, set[str]] = {fqn: set() for fqn in self.functions}
+        for edge in self.edges:
+            if edge.caller in neighbors and edge.callee in neighbors:
+                neighbors[edge.caller].add(edge.callee)
+                neighbors[edge.callee].add(edge.caller)
+
+        visited: set[str] = set(seed_set)
+        queue: list[tuple[str, int]] = [(fqn, 0) for fqn in seed_set]
+        while queue:
+            current, distance = queue.pop(0)
+            if distance >= normalized_depth:
+                continue
+            for neighbor in neighbors.get(current, set()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, distance + 1))
+
+        sub_functions = {fqn: self.functions[fqn] for fqn in visited}
+        sub_edges = [edge for edge in self.edges if edge.caller in visited and edge.callee in visited]
+        return sub_functions, sub_edges
+
+    def export_graph(self, format: str = 'json', fqns: Optional[List[str]] = None, depth: int = 1, llm_optimized: bool = False) -> Optional[Dict | str]:
         """Export the call graph in various formats."""
         if not self.functions:
             logging.warning("Warning: No functions in graph to export")
+            return None
+
+        functions, edges = self._build_subgraph(fqns, depth) if fqns else (self.functions, self.edges)
+        if not functions:
+            logging.warning("Warning: No functions in subgraph to export")
             return None
 
         if format == 'json':
@@ -833,7 +873,7 @@ class CallGraphBuilder:
                         'local_variables_declared': f.local_variables_declared,
                         'hash_body': f.hash_body,
                     }
-                    for f in self.functions.values()
+                    for f in functions.values()
                 },
                 'edges': [
                     {
@@ -845,22 +885,41 @@ class CallGraphBuilder:
                         'parameters': edge.parameters,
                         'confidence': edge.confidence
                     }
-                    for edge in self.edges
+                    for edge in edges
                 ],
-                'entry_points': [f.fully_qualified_name for f in self.get_entry_points()],
+                'entry_points': [f.fully_qualified_name for f in functions.values() if f.is_entry_point],
                 'summary': {
-                    'total_functions': len(self.functions),
-                    'total_methods': sum(1 for f in self.functions.values() if f.is_method),
-                    'total_async': sum(1 for f in self.functions.values() if f.is_async),
-                    'total_edges': len(self.edges),
-                    'total_modules': len(self.modules),
-                    'entry_points_count': len(self.get_entry_points()),
-                    'avg_degree': round(len(self.edges) / len(self.functions), 2) if self.functions else 0
+                    'total_functions': len(functions),
+                    'total_methods': sum(1 for f in functions.values() if f.is_method),
+                    'total_async': sum(1 for f in functions.values() if f.is_async),
+                    'total_edges': len(edges),
+                    'total_modules': len({self._get_module_name(Path(f.file_path)) for f in functions.values()}),
+                    'entry_points_count': sum(1 for f in functions.values() if f.is_entry_point),
+                    'avg_degree': round(len(edges) / len(functions), 2) if functions else 0
                 }
             }
+            logging.info(
+                "Exporting call graph (json) with %s functions, %s edges, depth=%s, seeds=%s",
+                len(functions),
+                len(edges),
+                depth,
+                len(fqns or []),
+            )
             return graph_data
         elif format == 'mermaid':
-            return self.export_mermaid_graph()
+            logging.info(
+                "Exporting call graph (mermaid) with %s functions, %s edges, depth=%s, seeds=%s",
+                len(functions),
+                len(edges),
+                depth,
+                len(fqns or []),
+            )
+            return self.export_mermaid_graph(
+                highlight_fqns=fqns,
+                llm_optimized=llm_optimized,
+                functions=functions,
+                edges=edges,
+            )
         return None
 
     def _sanitize_mermaid_id(self, identifier: str) -> str:
@@ -966,7 +1025,13 @@ class CallGraphBuilder:
         return f"node_{abs(hash(fqn)) % 10000}"
 
 
-    def export_mermaid_graph(self, highlight_fqns: Optional[List[str]] = None, llm_optimized: bool = False) -> str:
+    def export_mermaid_graph(
+        self,
+        highlight_fqns: Optional[List[str]] = None,
+        llm_optimized: bool = False,
+        functions: Optional[Dict[str, FunctionNode]] = None,
+        edges: Optional[List[CallEdge]] = None,
+    ) -> str:
         """
         Exports the call graph in Mermaid format (Flowchart or Graph).
         Args:
@@ -975,7 +1040,10 @@ class CallGraphBuilder:
         Returns:
             A string containing the Mermaid graph definition.
         """
-        if not self.functions and not self.edges:
+        functions = functions or self.functions
+        edges = edges or self.edges
+
+        if not functions and not edges:
             return "graph TD\n    No graph data available."
 
         mermaid_lines = []
@@ -984,13 +1052,13 @@ class CallGraphBuilder:
         relevant_fqns = set()
         if highlight_fqns:
             relevant_fqns.update(highlight_fqns)
-        for edge in self.edges:
-            if edge.caller in self.functions and edge.callee in self.functions:
+        for edge in edges:
+            if edge.caller in functions and edge.callee in functions:
                 relevant_fqns.add(edge.caller)
                 relevant_fqns.add(edge.callee)
 
-        if not relevant_fqns and self.functions:
-            for func_fqn, _ in list(self.functions.items())[:5]:
+        if not relevant_fqns and functions:
+            for func_fqn, _ in list(functions.items())[:5]:
                 relevant_fqns.add(func_fqn)
 
         # Map FQN to alias (node ID) and actual label
@@ -1006,7 +1074,7 @@ class CallGraphBuilder:
 
         # 1. Generate Aliases and Node Definitions
         for fqn in sorted(list(relevant_fqns)):
-            func = self.functions.get(fqn)
+            func = functions.get(fqn)
             if not func:
                 continue
 
@@ -1048,7 +1116,7 @@ class CallGraphBuilder:
 
 
         # 2. Define Edges
-        for edge in self.edges:
+        for edge in edges:
             if edge.caller in seen_nodes_in_graph and edge.callee in seen_nodes_in_graph:
                 caller_id_for_mermaid = fqn_to_alias.get(edge.caller, self._sanitize_mermaid_id(edge.caller)) # Fallback if alias not found
                 callee_id_for_mermaid = fqn_to_alias.get(edge.callee, self._sanitize_mermaid_id(edge.callee)) # Fallback if alias not found

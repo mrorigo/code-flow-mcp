@@ -1,5 +1,4 @@
 from mcp.server.fastmcp import FastMCP
-from mcp.server.lowlevel.helper_types import ReadResourceContents
 import mcp.types as types
 import logging
 import sys
@@ -247,74 +246,53 @@ async def _get_memory_resource_items() -> List[Dict[str, Any]]:
     return scored[:limit]
 
 
-@server.list_resources()
-async def list_resources() -> List[types.Resource]:
-    config = getattr(server, "config", {}) or {}
-    if not config.get("memory_resources_enabled", True):
-        return []
-
-    items = await _get_memory_resource_items()
-    resources: List[types.Resource] = []
-    for item in items:
-        score = item.get("final_score")
-        priority = None
-        if score is not None:
-            priority = max(0.0, min(1.0, float(score)))
-        resources.append(_build_memory_resource(item, priority=priority))
-
-    summary_uri = f"{MEMORY_RESOURCE_URI_PREFIX}top"
-    summary_filters = config.get("memory_resources_filters", {}) or {}
-    if summary_filters:
-        summary_uri = f"{summary_uri}?filters=1"
-    resources.insert(
-        0,
-        types.Resource(
-            uri=summary_uri,
-            name="cortex-memory-top",
-            title="Cortex Memory: Top Memories",
-            description="Top Cortex memory entries for quick context.",
-            mimeType="text/markdown",
-            annotations=types.Annotations(audience=["assistant"], priority=1.0),
-            meta={"filters": summary_filters},
-        ),
-    )
-    return resources
-
-
-@server.read_resource()
-async def read_resource(uri: str) -> List[ReadResourceContents]:
+@server.resource(
+    f"{MEMORY_RESOURCE_URI_PREFIX}top",
+    name="cortex-memory-top",
+    title="Cortex Memory: Top Memories",
+    description="Top Cortex memory entries for quick context.",
+    mime_type="text/markdown",
+    annotations=types.Annotations(audience=["assistant"], priority=1.0),
+)
+async def read_memory_top() -> str:
     config = getattr(server, "config", {}) or {}
     if not config.get("memory_resources_enabled", True):
         raise MCPError(4001, "Memory resources disabled", "Enable memory_resources_enabled")
 
-    knowledge_id = _parse_memory_resource_uri(uri)
-    if not knowledge_id:
-        raise MCPError(4001, "Resource not found", "Invalid memory resource URI")
+    items = await _get_memory_resource_items()
+    lines = ["# Cortex Memory: Top Memories", ""]
+    summary_filters = config.get("memory_resources_filters", {}) or {}
+    if summary_filters:
+        lines.append(f"Filters: {summary_filters}")
+        lines.append("")
+    for item in items:
+        metadata = item.get("metadata") or {}
+        entry_id = metadata.get("knowledge_id", item.get("id", ""))
+        title = (metadata.get("content") or item.get("document") or "").strip()
+        if len(title) > 120:
+            title = f"{title[:117]}..."
+        memory_type = metadata.get("memory_type", "FACT")
+        lines.append(f"- [{memory_type}] {title} (id: {entry_id})")
+    return "\n".join(lines)
 
-    if knowledge_id.startswith("top"):
-        items = await _get_memory_resource_items()
-        lines = ["# Cortex Memory: Top Memories", ""]
-        for item in items:
-            metadata = item.get("metadata") or {}
-            entry_id = metadata.get("knowledge_id", item.get("id", ""))
-            title = (metadata.get("content") or item.get("document") or "").strip()
-            if len(title) > 120:
-                title = f"{title[:117]}..."
-            memory_type = metadata.get("memory_type", "FACT")
-            lines.append(f"- [{memory_type}] {title} (id: {entry_id})")
-        return [ReadResourceContents(content="\n".join(lines), mime_type="text/markdown")]
+
+@server.resource(
+    f"{MEMORY_RESOURCE_URI_PREFIX}{{knowledge_id}}",
+    name="cortex-memory-entry",
+    title="Cortex Memory Entry",
+    description="Cortex memory entry by id.",
+    mime_type="text/markdown",
+)
+async def read_memory_entry(knowledge_id: str) -> str:
+    config = getattr(server, "config", {}) or {}
+    if not config.get("memory_resources_enabled", True):
+        raise MCPError(4001, "Memory resources disabled", "Enable memory_resources_enabled")
 
     items = await _get_memory_resource_items()
     for item in items:
         metadata = item.get("metadata") or {}
         if metadata.get("knowledge_id") == knowledge_id or item.get("id") == knowledge_id:
-            text = _format_memory_resource_text(item)
-            meta = {
-                "memory_type": metadata.get("memory_type"),
-                "knowledge_id": knowledge_id,
-                "filters": config.get("memory_resources_filters", {}),
-            }
-            return [ReadResourceContents(content=text, mime_type="text/markdown", meta=meta)]
+            return _format_memory_resource_text(item)
 
     raise MCPError(4001, "Resource not found", "Memory id not in current top list")
 
@@ -475,7 +453,12 @@ async def get_call_graph(fqns: list[str] = Field(default=[], description="List o
     
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
-    graph = server.analyzer.builder.export_graph(format=format if format == "mermaid" else "json")
+    graph = server.analyzer.builder.export_graph(
+        format=format if format == "mermaid" else "json",
+        fqns=fqns or None,
+        depth=depth,
+        llm_optimized=False,
+    )
     return GraphResponse(graph=graph, analysis_status=analysis_status)
 
 

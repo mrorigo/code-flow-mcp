@@ -19,6 +19,7 @@ code_flow/core/drift_features.py
 code_flow/core/drift_models.py
 code_flow/core/drift_report.py
 code_flow/core/drift_topology.py
+code_flow/core/llm_summary.py
 code_flow/core/models.py
 code_flow/core/python_extractor.py
 code_flow/core/structured_extractor.py
@@ -38,10 +39,10 @@ code_flow/core/treesitter/typescript_extractor.py
 code_flow/mcp_server/__init__.py
 code_flow/mcp_server/__main__.py
 code_flow/mcp_server/analyzer.py
-code_flow/mcp_server/llm.py
 code_flow/mcp_server/server.py
 tests/test_summary_generation.py
 tests/core/test_cortex_memory.py
+tests/core/test_drift_topology.py
 tests/core/test_structured_integration.py
 tests/core/python/conftest.py
 tests/core/python/fixtures/sample_files/basic_function.py

@@ -725,12 +725,18 @@ def _run_graphs(args: argparse.Namespace) -> int:
     analyzer.analyze()
 
     if args.format == "mermaid":
-        output = analyzer.graph_builder.export_mermaid_graph(
-            highlight_fqns=args.fqns or None,
+        output = analyzer.graph_builder.export_graph(
+            format="mermaid",
+            fqns=args.fqns or None,
+            depth=args.depth,
             llm_optimized=args.llm_optimized,
         )
     else:
-        output = analyzer.graph_builder.export_graph(format="json")
+        output = analyzer.graph_builder.export_graph(
+            format="json",
+            fqns=args.fqns or None,
+            depth=args.depth,
+        )
 
     if args.output:
         output_path = Path(args.output)
@@ -823,6 +829,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Graph output format.")
     graphs.add_argument("--fqns", nargs='*', default=None,
                         help="Optional list of fully qualified names to highlight (mermaid only).")
+    graphs.add_argument("--depth", type=int, default=1,
+                        help="Depth of the call graph to export when --fqns is provided (default: 1).")
     graphs.add_argument("--llm-optimized", action="store_true",
                         help="Generate Mermaid graph optimized for LLM token count (mermaid only).")
     graphs.add_argument("--output", help="Write graph output to a file instead of stdout.")
@@ -884,3 +892,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

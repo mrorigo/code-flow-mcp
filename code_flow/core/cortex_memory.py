@@ -170,8 +170,9 @@ class CortexMemoryStore:
         memory_score_weight: float = 0.3,
     ) -> List[Dict[str, Any]]:
         where_filter = self._build_where_filter(filters or {})
+        query_embedding = self.embedding_model.encode([query]).tolist()[0]
         results = self.collection.query(
-            query_texts=[query],
+            query_embeddings=[query_embedding],
             n_results=max(1, n_results * 4),
             include=["documents", "metadatas", "distances"],
             where=where_filter or None,
@@ -227,7 +228,7 @@ class CortexMemoryStore:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         where_filter = self._build_where_filter(filters or {})
-        results = self.collection.get(include=["documents", "metadatas", "ids"], where=where_filter or None)
+        results = self.collection.get(include=["documents", "metadatas"], where=where_filter or None)
         if not results or not results.get("ids"):
             return []
 
@@ -256,7 +257,7 @@ class CortexMemoryStore:
             return False
 
     def cleanup_stale_memory(self, min_score: float, grace_seconds: int) -> Dict[str, Any]:
-        results = self.collection.get(include=["documents", "metadatas", "ids"])
+        results = self.collection.get(include=["documents", "metadatas"])
         if not results or not results.get("ids"):
             return {"removed": 0, "checked": 0}
 
