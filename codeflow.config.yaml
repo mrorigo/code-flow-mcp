@@ -7,7 +7,7 @@ embedding_model: "all-mpnet-base-v2"
 max_tokens: 256
 language: "python"
 min_similarity: 0.1
-call_graph_confidence_threshold: 0.5
+call_graph_confidence_threshold: 0.1
 drift_cluster_algorithm: "hdbscan"
 drift_cluster_eps: 0.75
 drift_cluster_min_samples: 5
@@ -20,12 +20,15 @@ memory_cleanup_interval_seconds: 3600
 memory_grace_seconds: 86400
 memory_half_life_days:
   TRIBAL: 180.0
-  EPISODIC: 7.0
+  EPISODIC: 14.0
   FACT: 30.0
 memory_decay_floor:
   TRIBAL: 0.1
   EPISODIC: 0.01
   FACT: 0.05
+memory_resources_enabled: true
+memory_resources_limit: 10
+memory_resources_filters: {}
 llm_config:
   api_key_env_var: "OPENAI_API_KEY"
   base_url: "https://openrouter.ai/api/v1"  # Default: OpenRouter

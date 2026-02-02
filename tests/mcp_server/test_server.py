@@ -6,6 +6,7 @@ import uuid
 from pydantic import ValidationError
 from code_flow.mcp_server.server import MCPError
 from code_flow.mcp_server.analyzer import AnalysisState
+import mcp.types as types
 
 
 @pytest.fixture
@@ -144,6 +145,95 @@ def test_ping_response_schema():
     assert "echoed" in schema["properties"]
     assert schema["properties"]["status"]["type"] == "string"
     assert schema["properties"]["echoed"]["type"] == "string"
+
+
+@pytest.mark.asyncio
+async def test_memory_resources_list_and_read():
+    from code_flow.mcp_server.server import list_resources, read_resource, server
+
+    mock_store = MagicMock()
+    mock_store.list_memory.return_value = [
+        {
+            "id": "mem-1",
+            "document": "Use snake_case for DB columns",
+            "metadata": {
+                "knowledge_id": "mem-1",
+                "memory_type": "TRIBAL",
+                "content": "Use snake_case for DB columns",
+                "created_at": 111,
+                "last_reinforced": 222,
+                "reinforcement_count": 3,
+                "base_confidence": 1.0,
+                "tags": "[\"conventions\"]",
+                "scope": "repo",
+                "file_paths": "[]",
+                "source": "user",
+                "decay_half_life_days": 180.0,
+                "decay_floor": 0.1,
+            },
+        }
+    ]
+    mock_store._now_epoch.return_value = 1000
+    mock_store._compute_decay.return_value = 1.0
+    mock_store._compute_memory_score.return_value = 0.8
+
+    mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
+    mock_analyzer.memory_store = mock_store
+    server.analyzer = mock_analyzer
+    server.config = {
+        "memory_resources_enabled": True,
+        "memory_resources_limit": 5,
+        "memory_resources_filters": {},
+        "memory_similarity_weight": 0.7,
+        "memory_score_weight": 0.3,
+    }
+
+    try:
+        resources = await list_resources()
+        assert resources[0].name == "cortex-memory-top"
+        assert any(str(resource.uri) == "memory://mem-1" for resource in resources)
+
+        contents = await read_resource("memory://mem-1")
+        assert contents[0].mime_type == "text/markdown"
+        assert "Use snake_case" in contents[0].content
+
+        top_contents = await read_resource("memory://top")
+        assert "Cortex Memory: Top Memories" in top_contents[0].content
+    finally:
+        if hasattr(server, "analyzer"):
+            delattr(server, "analyzer")
+
+
+@pytest.mark.asyncio
+async def test_memory_resources_read_invalid_uri():
+    from code_flow.mcp_server.server import read_resource, server
+
+    server.config = {
+        "memory_resources_enabled": True,
+        "memory_resources_limit": 5,
+        "memory_resources_filters": {},
+    }
+
+    with pytest.raises(MCPError) as exc_info:
+        await read_resource("invalid://mem-1")
+    assert exc_info.value.code == 4001
+
+
+@pytest.mark.asyncio
+async def test_memory_resources_disabled():
+    from code_flow.mcp_server.server import list_resources, read_resource, server
+
+    server.config = {
+        "memory_resources_enabled": False,
+    }
+
+    resources = await list_resources()
+    assert resources == []
+
+    with pytest.raises(MCPError) as exc_info:
+        await read_resource("memory://mem-1")
+    assert exc_info.value.code == 4001
 
 
 @pytest.mark.asyncio
@@ -521,6 +611,3 @@ async def test_generate_mermaid_graph_tool_no_builder():
     finally:
         if hasattr(server, 'analyzer'):
             delattr(server, 'analyzer')
-
-
-

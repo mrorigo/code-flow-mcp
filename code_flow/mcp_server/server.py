@@ -1,4 +1,5 @@
 from mcp.server.fastmcp import FastMCP
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 import mcp.types as types
 import logging
 import sys
@@ -129,6 +130,193 @@ async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         await on_shutdown()
 
 server = FastMCP("CodeFlowGraphMCP", lifespan=lifespan)
+
+MEMORY_RESOURCE_URI_PREFIX = "memory://"
+
+
+def _parse_memory_resource_uri(uri: str) -> Optional[str]:
+    if not uri.startswith(MEMORY_RESOURCE_URI_PREFIX):
+        return None
+    remainder = uri[len(MEMORY_RESOURCE_URI_PREFIX):]
+    if remainder.startswith("top?"):
+        return "top"
+    if remainder.startswith("top"):
+        return "top"
+    if "?" in remainder:
+        remainder = remainder.split("?", 1)[0]
+    return remainder or None
+
+
+def _extract_memory_tags(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if item]
+        except json.JSONDecodeError:
+            return [value]
+    return []
+
+
+def _format_memory_resource_text(record: Dict[str, Any]) -> str:
+    metadata = record.get("metadata") or {}
+    created_at = metadata.get("created_at")
+    last_reinforced = metadata.get("last_reinforced")
+    lines = [
+        f"# Cortex Memory ({metadata.get('memory_type', 'FACT')})",
+        f"- ID: {metadata.get('knowledge_id', record.get('id', ''))}",
+        f"- Scope: {metadata.get('scope', 'repo')}",
+        f"- Source: {metadata.get('source', 'user')}",
+        f"- Created: {created_at}",
+        f"- Last Reinforced: {last_reinforced}",
+        f"- Reinforcement Count: {metadata.get('reinforcement_count', 0)}",
+    ]
+    tags = _extract_memory_tags(metadata.get("tags"))
+    if tags:
+        lines.append(f"- Tags: {', '.join(tags)}")
+    file_paths = _extract_memory_tags(metadata.get("file_paths"))
+    if file_paths:
+        lines.append("- Files:")
+        lines.extend([f"  - {path}" for path in file_paths])
+    lines.append("")
+    lines.append("## Content")
+    lines.append(record.get("document") or metadata.get("content") or "")
+    return "\n".join(lines)
+
+
+def _build_memory_resource(record: Dict[str, Any], priority: Optional[float] = None) -> types.Resource:
+    metadata = record.get("metadata") or {}
+    knowledge_id = metadata.get("knowledge_id", record.get("id", ""))
+    title = metadata.get("content", "").strip() or "Cortex Memory"
+    if len(title) > 80:
+        title = f"{title[:77]}..."
+    annotations = None
+    if priority is not None:
+        annotations = types.Annotations(audience=["assistant"], priority=priority)
+    return types.Resource(
+        uri=f"{MEMORY_RESOURCE_URI_PREFIX}{knowledge_id}",
+        name=knowledge_id,
+        title=title,
+        description=f"{metadata.get('memory_type', 'FACT')} memory entry",
+        mimeType="text/markdown",
+        annotations=annotations,
+    )
+
+
+async def _get_memory_resource_items() -> List[Dict[str, Any]]:
+    if not server.analyzer or not server.analyzer.memory_store:
+        raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
+
+    config = server.analyzer.config
+    limit = int(config.get("memory_resources_limit", 10))
+    filters = config.get("memory_resources_filters", {}) or {}
+    query = filters.get("query", "")
+    similarity_weight = float(config.get("memory_similarity_weight", 0.7))
+    memory_score_weight = float(config.get("memory_score_weight", 0.3))
+
+    if query:
+        results = server.analyzer.memory_store.query_memory(
+            query=query,
+            n_results=limit,
+            filters=filters,
+            similarity_weight=similarity_weight,
+            memory_score_weight=memory_score_weight,
+        )
+        return results
+
+    items = server.analyzer.memory_store.list_memory(filters=filters, limit=limit, offset=0)
+    now_epoch = server.analyzer.memory_store._now_epoch()
+    scored = []
+    for item in items:
+        metadata = item.get("metadata") or {}
+        decay = server.analyzer.memory_store._compute_decay(
+            int(metadata.get("last_reinforced", 0)),
+            float(metadata.get("decay_half_life_days", 30.0)),
+            float(metadata.get("decay_floor", 0.05)),
+            now_epoch=now_epoch,
+        )
+        memory_score = server.analyzer.memory_store._compute_memory_score(
+            float(metadata.get("base_confidence", 1.0)),
+            int(metadata.get("reinforcement_count", 0)),
+            decay,
+        )
+        scored.append({**item, "final_score": memory_score})
+    scored.sort(key=lambda entry: entry.get("final_score", 0.0), reverse=True)
+    return scored[:limit]
+
+
+@server.list_resources()
+async def list_resources() -> List[types.Resource]:
+    config = getattr(server, "config", {}) or {}
+    if not config.get("memory_resources_enabled", True):
+        return []
+
+    items = await _get_memory_resource_items()
+    resources: List[types.Resource] = []
+    for item in items:
+        score = item.get("final_score")
+        priority = None
+        if score is not None:
+            priority = max(0.0, min(1.0, float(score)))
+        resources.append(_build_memory_resource(item, priority=priority))
+
+    summary_uri = f"{MEMORY_RESOURCE_URI_PREFIX}top"
+    summary_filters = config.get("memory_resources_filters", {}) or {}
+    if summary_filters:
+        summary_uri = f"{summary_uri}?filters=1"
+    resources.insert(
+        0,
+        types.Resource(
+            uri=summary_uri,
+            name="cortex-memory-top",
+            title="Cortex Memory: Top Memories",
+            description="Top Cortex memory entries for quick context.",
+            mimeType="text/markdown",
+            annotations=types.Annotations(audience=["assistant"], priority=1.0),
+            meta={"filters": summary_filters},
+        ),
+    )
+    return resources
+
+
+@server.read_resource()
+async def read_resource(uri: str) -> List[ReadResourceContents]:
+    config = getattr(server, "config", {}) or {}
+    if not config.get("memory_resources_enabled", True):
+        raise MCPError(4001, "Memory resources disabled", "Enable memory_resources_enabled")
+
+    knowledge_id = _parse_memory_resource_uri(uri)
+    if not knowledge_id:
+        raise MCPError(4001, "Resource not found", "Invalid memory resource URI")
+
+    if knowledge_id.startswith("top"):
+        items = await _get_memory_resource_items()
+        lines = ["# Cortex Memory: Top Memories", ""]
+        for item in items:
+            metadata = item.get("metadata") or {}
+            entry_id = metadata.get("knowledge_id", item.get("id", ""))
+            title = (metadata.get("content") or item.get("document") or "").strip()
+            if len(title) > 120:
+                title = f"{title[:117]}..."
+            memory_type = metadata.get("memory_type", "FACT")
+            lines.append(f"- [{memory_type}] {title} (id: {entry_id})")
+        return [ReadResourceContents(content="\n".join(lines), mime_type="text/markdown")]
+
+    items = await _get_memory_resource_items()
+    for item in items:
+        metadata = item.get("metadata") or {}
+        if metadata.get("knowledge_id") == knowledge_id or item.get("id") == knowledge_id:
+            text = _format_memory_resource_text(item)
+            meta = {
+                "memory_type": metadata.get("memory_type"),
+                "knowledge_id": knowledge_id,
+                "filters": config.get("memory_resources_filters", {}),
+            }
+            return [ReadResourceContents(content=text, mime_type="text/markdown", meta=meta)]
+
+    raise MCPError(4001, "Resource not found", "Memory id not in current top list")
 
 # Tool functions with decorators
 @server.tool(name="ping")

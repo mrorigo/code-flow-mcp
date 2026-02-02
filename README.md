@@ -257,6 +257,7 @@ The server exposes the following tools through the MCP protocol:
 - **`query_memory`**: Search Cortex memory with decay-aware ranking.
 - **`list_memory`**: List Cortex memory entries with filters/pagination.
 - **`forget_memory`**: Delete a Cortex memory entry by id.
+- **Resources**: `memory://top` and `memory://<knowledge_id>` expose top Cortex memories as MCP resources.
 
 **Note**: All analysis-dependent tools include an `analysis_status` field in their responses to inform clients about the current state of code analysis.
 

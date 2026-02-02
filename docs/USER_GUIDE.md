@@ -15,6 +15,7 @@ This guide explains how to install, configure, and use CodeFlow’s CLI and MCP 
   - [Cortex Memory](#cortex-memory)
     - [Memory Types](#memory-types)
     - [MCP Tools](#mcp-tools)
+    - [MCP Resources (Top Memories)](#mcp-resources-top-memories)
     - [CLI Commands](#cli-commands)
     - [Memory Configuration](#memory-configuration)
   - [Semantic Search](#semantic-search)
@@ -156,6 +157,27 @@ Available tools (defined in [`../code_flow/mcp_server/server.py`](code_flow/mcp_
 - `query_memory`
 - `list_memory`
 - `forget_memory`
+
+### MCP Resources (Top Memories)
+
+CodeFlow can expose the top Cortex memories as MCP resources so clients can pull them
+as contextual documents. The server registers resources under the `memory://` URI
+scheme and provides a summary resource for the current top list.
+
+**Resource URIs:**
+
+- `memory://top` – summary list of top memories
+- `memory://<knowledge_id>` – full memory entry
+
+**Configuration:**
+
+```yaml
+memory_resources_enabled: true
+memory_resources_limit: 10
+memory_resources_filters:
+  memory_type: TRIBAL
+  tags: ["conventions"]
+```
 
 ### CLI Commands
 

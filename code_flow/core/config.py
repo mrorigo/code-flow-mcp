@@ -51,6 +51,11 @@ DEFAULT_MEMORY_DECAY_FLOOR = {
     "FACT": 0.05,
 }
 
+# Cortex memory resources (MCP)
+DEFAULT_MEMORY_RESOURCES_ENABLED = True
+DEFAULT_MEMORY_RESOURCES_LIMIT = 10
+DEFAULT_MEMORY_RESOURCES_FILTERS: Dict[str, Any] = {}
+
 
 class CodeFlowConfig(BaseModel):
     """
@@ -81,6 +86,11 @@ class CodeFlowConfig(BaseModel):
     memory_grace_seconds: int = DEFAULT_MEMORY_GRACE_SECONDS
     memory_half_life_days: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_HALF_LIFE_DAYS.copy())
     memory_decay_floor: Dict[str, float] = Field(default_factory=lambda: DEFAULT_MEMORY_DECAY_FLOOR.copy())
+
+    # Cortex memory resources (MCP)
+    memory_resources_enabled: bool = DEFAULT_MEMORY_RESOURCES_ENABLED
+    memory_resources_limit: int = DEFAULT_MEMORY_RESOURCES_LIMIT
+    memory_resources_filters: Dict[str, Any] = Field(default_factory=lambda: DEFAULT_MEMORY_RESOURCES_FILTERS.copy())
 
     # Drift detection
     drift_enabled: bool = DEFAULT_DRIFT_ENABLED
