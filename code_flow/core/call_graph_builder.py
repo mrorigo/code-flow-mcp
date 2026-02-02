@@ -799,6 +799,108 @@ class CallGraphBuilder:
         """Get all identified entry points."""
         return [f for f in self.functions.values() if f.is_entry_point]
 
+    def _score_entry_point(self, func: FunctionNode) -> Dict[str, Any]:
+        """Score and categorize an entry point using lightweight heuristics."""
+        name_lower = func.name.lower() if func.name else ""
+        file_lower = func.file_path.lower() if func.file_path else ""
+        fqn_lower = func.fully_qualified_name.lower() if func.fully_qualified_name else ""
+        decorators = [d.get("name", "").lower() for d in func.decorators]
+
+        signals: List[str] = []
+        score = 0
+
+        # Strong negatives: tests and dunder/private helpers
+        if any(token in file_lower for token in ["/tests/", "/test/", "_test.py", "test_", "/tests_"]):
+            signals.append("test_path")
+            score -= 5
+        if func.name.startswith("__") and func.name.endswith("__"):
+            signals.append("dunder")
+            score -= 4
+        if func.name.startswith("_") and not func.name.startswith("__"):
+            signals.append("private_name")
+            score -= 2
+
+        # Runtime entry hints
+        runtime_name_hits = [
+            "main", "run", "app", "server", "start", "bootstrap", "cli", "execute"
+        ]
+        if any(token in name_lower for token in runtime_name_hits):
+            signals.append("runtime_name")
+            score += 3
+        if any(token in file_lower for token in ["__main__", "main.py", "app.py", "server.py", "cli", "index.py"]):
+            signals.append("runtime_file")
+            score += 3
+        if "__main__" in fqn_lower:
+            signals.append("runtime_module")
+            score += 4
+
+        # Framework/CLI decorators
+        if any("command" in d for d in decorators):
+            signals.append("cli_decorator")
+            score += 3
+        if any(d in ["route", "get", "post", "put", "delete", "patch"] for d in decorators):
+            signals.append("http_decorator")
+            score += 2
+
+        # Graph structure signals
+        if len(func.incoming_edges) == 0:
+            signals.append("no_incoming")
+            score += 1
+        if not func.is_method:
+            signals.append("top_level")
+            score += 1
+        if func.docstring:
+            signals.append("docstring")
+            score += 1
+        outgoing = len(func.outgoing_edges)
+        if outgoing >= 8:
+            signals.append("high_fanout")
+            score += 2
+        elif outgoing >= 3:
+            signals.append("moderate_fanout")
+            score += 1
+        if func.complexity and func.complexity >= 10:
+            signals.append("high_complexity")
+            score += 1
+
+        # Method penalty (entry points are more likely module-level)
+        if func.is_method and func.class_name:
+            signals.append("method_penalty")
+            score -= 1
+
+        # Category assignment
+        category = "low-signal"
+        if "test_path" in signals:
+            category = "test"
+        elif any(s in signals for s in ["runtime_module", "runtime_file", "runtime_name"]):
+            category = "runtime"
+        elif any(s in signals for s in ["cli_decorator", "http_decorator"]):
+            category = "framework"
+        elif func.is_exported or (not func.name.startswith("_") and func.incoming_edges and outgoing > 0):
+            category = "library"
+
+        priority = "low"
+        if score >= 5:
+            priority = "likely"
+        elif score >= 2:
+            priority = "candidate"
+
+        return {
+            "score": score,
+            "category": category,
+            "priority": priority,
+            "signals": signals,
+        }
+
+    def get_entry_points_scored(self) -> List[Dict[str, Any]]:
+        """Return entry points with score and category metadata."""
+        scored = []
+        for func in self.get_entry_points():
+            meta = self._score_entry_point(func)
+            scored.append({"function": func, "meta": meta})
+        scored.sort(key=lambda item: item["meta"]["score"], reverse=True)
+        return scored
+
     def _build_subgraph(self, seed_fqns: Optional[List[str]], depth: int = 1) -> tuple[Dict[str, FunctionNode], List[CallEdge]]:
         """Build a subgraph from seed FQNs within the given depth (undirected traversal)."""
         if not seed_fqns:

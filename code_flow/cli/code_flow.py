@@ -307,7 +307,7 @@ class CodeGraphAnalyzer:
                 "call_graph": {"functions": {}, "edges": {}}
             }
 
-        graph_entry_points = self.graph_builder.get_entry_points()
+        graph_entry_points = self.graph_builder.get_entry_points_scored()
 
         graph_export = self.graph_builder.export_graph()
         if not isinstance(graph_export, dict):
@@ -316,27 +316,31 @@ class CodeGraphAnalyzer:
             "summary": graph_export.get("summary", {}),
             "entry_points": [
                 {
-                    "name": ep.name,
-                    "fully_qualified_name": ep.fully_qualified_name,
-                    "file_path": ep.file_path,
-                    "line_number": ep.line_start,
-                    "line_end": ep.line_end,
-                    "is_method": ep.is_method,
-                    "class_name": ep.class_name,
-                    "is_async": ep.is_async,
-                    "has_docstring": bool(ep.docstring),
-                    "incoming_connections": len(ep.incoming_edges),
-                    "outgoing_connections": len(ep.outgoing_edges),
-                    "parameters": ep.parameters,
-                    "complexity": ep.complexity,
-                    "nloc": ep.nloc,
-                    "external_dependencies": ep.external_dependencies,
-                    "decorators": ep.decorators,
-                    "catches_exceptions": ep.catches_exceptions,
-                    "local_variables_declared": ep.local_variables_declared,
-                    "hash_body": ep.hash_body,
+                    "name": item["function"].name,
+                    "fully_qualified_name": item["function"].fully_qualified_name,
+                    "file_path": item["function"].file_path,
+                    "line_number": item["function"].line_start,
+                    "line_end": item["function"].line_end,
+                    "is_method": item["function"].is_method,
+                    "class_name": item["function"].class_name,
+                    "is_async": item["function"].is_async,
+                    "has_docstring": bool(item["function"].docstring),
+                    "incoming_connections": len(item["function"].incoming_edges),
+                    "outgoing_connections": len(item["function"].outgoing_edges),
+                    "parameters": item["function"].parameters,
+                    "complexity": item["function"].complexity,
+                    "nloc": item["function"].nloc,
+                    "external_dependencies": item["function"].external_dependencies,
+                    "decorators": item["function"].decorators,
+                    "catches_exceptions": item["function"].catches_exceptions,
+                    "local_variables_declared": item["function"].local_variables_declared,
+                    "hash_body": item["function"].hash_body,
+                    "entry_point_score": item["meta"]["score"],
+                    "entry_point_category": item["meta"]["category"],
+                    "entry_point_priority": item["meta"]["priority"],
+                    "entry_point_signals": item["meta"]["signals"],
                 }
-                for ep in graph_entry_points
+                for item in graph_entry_points
             ],
             "classes_summary": {
                 "total": len(classes),
@@ -892,4 +896,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

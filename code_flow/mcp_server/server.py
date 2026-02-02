@@ -70,6 +70,10 @@ class MetadataResponse(BaseModel):
 
 class EntryPointsResponse(BaseModel):
     entry_points: list[dict]
+    total: Optional[int] = None
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    include_details: Optional[bool] = None
     analysis_status: Optional[str] = None
 
 
@@ -491,16 +495,67 @@ async def get_function_metadata(fqn: str = Field(description="Fully qualified na
 
 
 @server.tool(name="query_entry_points")
-async def query_entry_points() -> EntryPointsResponse:
+async def query_entry_points(
+    limit: int = Field(default=50, description="Maximum number of entry points to return"),
+    offset: int = Field(default=0, description="Offset for pagination"),
+    include_details: bool = Field(default=False, description="Include full function metadata (edges, decorators, etc.)"),
+) -> EntryPointsResponse:
     """
-    Retrieve all identified entry points in the codebase.
+    Retrieve identified entry points in the codebase with optional pagination and detail level.
     """
     analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
     
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
-    eps = server.analyzer.builder.get_entry_points()
-    return EntryPointsResponse(entry_points=[vars(ep) for ep in eps], analysis_status=analysis_status)
+
+    scored = server.analyzer.builder.get_entry_points_scored()
+    total = len(scored)
+
+    safe_offset = max(0, offset)
+    safe_limit = max(0, limit)
+    sliced = scored[safe_offset:safe_offset + safe_limit] if safe_limit else []
+
+    def _serialize_entry_point(item: dict) -> dict:
+        func = item["function"]
+        if include_details:
+            data = {k: v for k, v in vars(func).items() if not k.startswith("_")}
+            data["incoming_edges"] = [vars(edge) for edge in func.incoming_edges]
+            data["outgoing_edges"] = [vars(edge) for edge in func.outgoing_edges]
+            if "summary" not in data:
+                data["summary"] = None
+        else:
+            data = {
+                "name": func.name,
+                "fully_qualified_name": func.fully_qualified_name,
+                "file_path": func.file_path,
+                "line_start": func.line_start,
+                "line_end": func.line_end,
+                "is_method": func.is_method,
+                "class_name": func.class_name,
+                "is_async": func.is_async,
+                "has_docstring": bool(func.docstring),
+                "incoming_connections": len(func.incoming_edges),
+                "outgoing_connections": len(func.outgoing_edges),
+            }
+
+        data.update(
+            {
+                "entry_point_score": item["meta"]["score"],
+                "entry_point_category": item["meta"]["category"],
+                "entry_point_priority": item["meta"]["priority"],
+                "entry_point_signals": item["meta"]["signals"],
+            }
+        )
+        return data
+
+    return EntryPointsResponse(
+        entry_points=[_serialize_entry_point(item) for item in sliced],
+        total=total,
+        limit=safe_limit,
+        offset=safe_offset,
+        include_details=include_details,
+        analysis_status=analysis_status,
+    )
 
 @server.tool(name="generate_mermaid_graph")
 async def generate_mermaid_graph(fqns: list[str] = Field(default=[], description="List of fully qualified names to highlight in the graph"),
