@@ -95,6 +95,28 @@ tree-sitter-rust
 
 ## Installation
 
+### Install with uv (recommended)
+
+Install the CLI and MCP server as user-level tools:
+
+```bash
+uv tool install code-flow-graph
+```
+
+Expose uv's tool bin directory on your PATH:
+
+```bash
+export PATH="$(uv tool dir --bin):$PATH"
+```
+
+Add the export to your shell profile (e.g., `~/.zshrc`) to persist it.
+
+One-off execution without installation:
+
+```bash
+uvx --from code-flow-graph code_flow_graph --help
+```
+
 ### From Source
 Clone the repository and install dependencies:
 
@@ -110,7 +132,7 @@ This will install the package in editable mode and make both the CLI tool and MC
 The CLI tool is available as a module:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph --help
+code_flow_graph --help
 ```
 
 ### MCP Server
@@ -126,7 +148,7 @@ code_flow_graph_mcp_server --help
 
 The `code_flow_graph.cli.code_flow_graph` module is the main entry point for command-line analysis. All commands start with:
 
-`python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY]`
+`code_flow_graph -- [YOUR_CODE_DIRECTORY]`
 
 Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the current directory (`.`) will be used.
 
@@ -135,7 +157,7 @@ Replace `[YOUR_CODE_DIRECTORY]` with the path to your project. If omitted, the c
 This command will parse your codebase, build the call graph, populate the ChromaDB vector store (persisted in `<YOUR_CODE_DIRECTORY>/code_vectors_chroma/`), and generate a JSON report. Language detection is automatic.
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
+code_flow_graph -- [YOUR_CODE_DIRECTORY] --output my_analysis_report.json
 ```
 
 #### 2. Querying the Codebase (Analysis + Query)
@@ -143,7 +165,7 @@ python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --output my_
 Run a full analysis and then immediately perform a semantic search. This will update the vector store if code has changed.
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "functions that handle user authentication"
+code_flow_graph -- [YOUR_CODE_DIRECTORY] --query "functions that handle user authentication"
 ```
 
 #### 3. Querying an Existing Analysis (Query Only)
@@ -151,7 +173,7 @@ python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "fun
 Once a codebase has been analyzed (i.e., the `code_vectors_chroma/` directory exists in `[YOUR_CODE_DIRECTORY]`), you can query it much faster without re-running the full analysis:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --no-analyze --query "functions related to data serialization"
+code_flow_graph -- [YOUR_CODE_DIRECTORY] --no-analyze --query "functions related to data serialization"
 ```
 
 #### 4. Generating Mermaid Call Graphs
@@ -160,13 +182,13 @@ You can generate Mermaid diagrams of the call graph for functions relevant to yo
 
 **Standard Mermaid (for visual rendering):**
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "database connection pooling" --mermaid
+code_flow_graph -- [YOUR_CODE_DIRECTORY] --query "database connection pooling" --mermaid
 ```
 The output is Mermaid syntax, which can be copied into a Mermaid viewer (e.g., VS Code extension, Mermaid.live) for visualization.
 
 **LLM-Optimized Mermaid (for AI agents):**
 ```bash
-python -m code_flow_graph.cli.code_flow_graph [YOUR_CODE_DIRECTORY] --query "main entry point setup" --llm-optimized
+code_flow_graph -- [YOUR_CODE_DIRECTORY] --query "main entry point setup" --llm-optimized
 ```
 This output is stripped of visual styling and uses short aliases for node IDs, with explicit `%% Alias: ShortID = Fully.Qualified.Name` comments. This minimizes token count for LLMs while providing all necessary structural information.
 
@@ -197,13 +219,13 @@ The MCP server provides programmatic access to CodeFlow's analysis capabilities 
 Start the MCP server with default configuration:
 
 ```bash
-python -m code_flow_graph.mcp_server
+code_flow_graph_mcp_server
 ```
 
 Or with a custom configuration file:
 
 ```bash
-python -m code_flow_graph.mcp_server --config path/to/config.yaml
+code_flow_graph_mcp_server --config path/to/config.yaml
 ```
 
 **Note**: The server looks for `codeflow.config.yaml` in the current directory by default.
@@ -282,17 +304,17 @@ memory_decay_floor:
 
 ```bash
 # Add tribal memory
-python -m code_flow_graph.cli.code_flow_graph memory add --type TRIBAL --content "Use snake_case for DB columns" --tags conventions
+code_flow_graph memory add --type TRIBAL --content "Use snake_case for DB columns" --tags conventions
 
 # Query memory
-python -m code_flow_graph.cli.code_flow_graph memory query --query "DB column naming" --type TRIBAL --limit 5
+code_flow_graph memory query --query "DB column naming" --type TRIBAL --limit 5
 
 # List episodic memory
-python -m code_flow_graph.cli.code_flow_graph memory list --type EPISODIC --limit 10
+code_flow_graph memory list --type EPISODIC --limit 10
 
 # Reinforce and forget
-python -m code_flow_graph.cli.code_flow_graph memory reinforce --knowledge-id <uuid>
-python -m code_flow_graph.cli.code_flow_graph memory forget --knowledge-id <uuid>
+code_flow_graph memory reinforce --knowledge-id <uuid>
+code_flow_graph memory forget --knowledge-id <uuid>
 ```
 
 ### Embedding Model Configuration
@@ -314,18 +336,18 @@ Use the `--embedding-model` flag with either a shorthand or specific model name:
 
 ```bash
 # Using shorthand (recommended)
-python -m code_flow_graph.cli.code_flow_graph . --embedding-model fast
-python -m code_flow_graph.cli.code_flow_graph . --embedding-model accurate
+code_flow_graph -- . --embedding-model fast
+code_flow_graph -- . --embedding-model accurate
 
 # Using specific model name
-python -m code_flow_graph.cli.code_flow_graph . --embedding-model all-MiniLM-L6-v2
+code_flow_graph -- . --embedding-model all-MiniLM-L6-v2
 ```
 
 Adjust chunk size with `--max-tokens` (default: 256):
 
 ```bash
 # Note: all models have max sequence length of 384 tokens
-python -m code_flow_graph.cli.code_flow_graph . --embedding-model accurate --max-tokens 384
+code_flow_graph -- . --embedding-model accurate --max-tokens 384
 ```
 
 #### MCP Server Configuration
@@ -417,7 +439,7 @@ You can override configuration via environment variables:
 ```bash
 # Enable in config, then start MCP server
 export OPENAI_API_KEY="your-api-key"
-python -m code_flow_graph.mcp_server
+code_flow_graph_mcp_server
 
 # Summaries will be generated in the background
 # Check progress with the ping tool
@@ -445,10 +467,10 @@ TypeScript analysis is performed using Tree-sitter parsing with the bundled lang
 #### Basic TypeScript Analysis
 ```bash
 # Analyze a TypeScript project (language detection is automatic)
-python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --output analysis.json
+code_flow_graph -- /path/to/typescript/project --output analysis.json
 
 # Query TypeScript codebase
-python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --query "user authentication functions"
+code_flow_graph -- /path/to/typescript/project --query "user authentication functions"
 ```
 
 #### Framework-Specific Examples
@@ -456,28 +478,28 @@ python -m code_flow_graph.cli.code_flow_graph /path/to/typescript/project --quer
 **Angular Application Analysis:**
 ```bash
 # Analyze Angular project (language detection automatic)
-python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --query "component lifecycle methods"
+code_flow_graph -- /path/to/angular-app --query "component lifecycle methods"
 
 # Find Angular services
-python -m code_flow_graph.cli.code_flow_graph /path/to/angular-app --query "injectable services"
+code_flow_graph -- /path/to/angular-app --query "injectable services"
 ```
 
 **NestJS Application Analysis:**
 ```bash
 # Analyze NestJS backend (language detection automatic)
-python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --query "controller endpoints"
+code_flow_graph -- /path/to/nestjs-app --query "controller endpoints"
 
 # Find service dependencies
-python -m code_flow_graph.cli.code_flow_graph /path/to/nestjs-app --query "database service dependencies"
+code_flow_graph -- /path/to/nestjs-app --query "database service dependencies"
 ```
 
 **React TypeScript Analysis:**
 ```bash
 # Analyze React TypeScript components (language detection automatic)
-python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --query "custom hooks"
+code_flow_graph -- /path/to/react-ts-app --query "custom hooks"
 
 # Find component prop types
-python -m code_flow_graph.cli.code_flow_graph /path/to/react-ts-app --query "component interfaces"
+code_flow_graph -- /path/to/react-ts-app --query "component interfaces"
 ```
 
 #### TypeScript-Specific Features
@@ -539,10 +561,10 @@ Rust analysis uses the bundled `tree-sitter-rust` grammar.
 
 ```bash
 # Analyze a Rust project (language detection is automatic)
-python -m code_flow_graph.cli.code_flow_graph /path/to/rust/project --output analysis.json
+code_flow_graph -- /path/to/rust/project --output analysis.json
 
 # Query Rust codebase
-python -m code_flow_graph.cli.code_flow_graph /path/to/rust/project --query "trait implementations"
+code_flow_graph -- /path/to/rust/project --query "trait implementations"
 ```
 
 **Supported File Types:**
@@ -555,28 +577,28 @@ python -m code_flow_graph.cli.code_flow_graph /path/to/rust/project --query "tra
 #### Basic Analysis
 ```bash
 # Analyze current directory and generate report (language detection automatic)
-python -m code_flow_graph.cli.code_flow_graph . --output analysis.json
+code_flow_graph -- . --output analysis.json
 
 # Analyze a specific project
-python -m code_flow_graph.cli.code_flow_graph /path/to/my/project
+code_flow_graph -- /path/to/my/project
 ```
 
 #### Semantic Search
 ```bash
 # Find authentication functions
-python -m code_flow_graph.cli.code_flow_graph . --query "user authentication login"
+code_flow_graph -- . --query "user authentication login"
 
 # Search for database operations
-python -m code_flow_graph.cli.code_flow_graph . --query "database queries CRUD operations"
+code_flow_graph -- . --query "database queries CRUD operations"
 ```
 
 #### Visualization
 ```bash
 # Generate Mermaid diagram for API endpoints
-python -m code_flow_graph.cli.code_flow_graph . --query "API endpoints" --mermaid
+code_flow_graph -- . --query "API endpoints" --mermaid
 
 # LLM-optimized graph for AI analysis
-python -m code_flow_graph.cli.code_flow_graph . --query "error handling" --llm-optimized
+code_flow_graph -- . --query "error handling" --llm-optimized
 ```
 
 ### MCP Server Examples
@@ -645,10 +667,10 @@ Test the CLI tool by running analysis on the test files:
 
 ```bash
 # Test basic functionality
-python -m code_flow_graph.cli.code_flow_graph tests/ --output test_report.json
+code_flow_graph -- tests/ --output test_report.json
 
 # Test querying
-python -m code_flow_graph.cli.code_flow_graph tests/ --query "test functions"
+code_flow_graph -- tests/ --query "test functions"
 ```
 
 ### Integration Testing

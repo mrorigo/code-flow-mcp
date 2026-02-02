@@ -59,18 +59,38 @@ uv sync
 
 The project dependencies are defined in [`pyproject.toml`](pyproject.toml:1). You’ll need Python 3.11+ and a working virtual environment.
 
+Install CodeFlow as a user-level tool (recommended for CLI usage):
+
+```bash
+uv tool install code-flow-graph
+```
+
+Expose uv's tool bin directory on your PATH:
+
+```bash
+export PATH="$(uv tool dir --bin):$PATH"
+```
+
+Persist the PATH update in your shell profile (e.g., `~/.zshrc`).
+
+One-off execution without installation:
+
+```bash
+uvx --from code-flow-graph code_flow_graph --help
+```
+
 ## Quick Start (CLI)
 
 Analyze a codebase and generate a report:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph -- .
+code_flow_graph -- .
 ```
 
 Run a semantic query after analysis:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph -- . --query "authentication flows" --mermaid
+code_flow_graph -- . --query "authentication flows" --mermaid
 ```
 
 Useful flags include:
@@ -86,7 +106,7 @@ CLI entry point: [`../code_flow_graph/cli/code_flow_graph.py`](code_flow_graph/c
 Start the MCP server with defaults:
 
 ```bash
-python -m code_flow_graph.mcp_server
+code_flow_graph_mcp_server
 ```
 
 The server uses the unified config model in [`../code_flow_graph/core/config.py`](code_flow_graph/core/config.py:1) and loads `codeflow.config.yaml` by default.
@@ -140,22 +160,22 @@ Available tools (defined in [`../code_flow_graph/mcp_server/server.py`](code_flo
 
 ```bash
 # Add memory
-python -m code_flow_graph.cli.code_flow_graph memory add \
+code_flow_graph memory add \
   --type TRIBAL \
   --content "Use snake_case for DB columns" \
   --tags conventions
 
 # Query memory
-python -m code_flow_graph.cli.code_flow_graph memory query \
+code_flow_graph memory query \
   --query "DB column naming" \
   --type TRIBAL \
   --limit 5
 
 # Reinforce
-python -m code_flow_graph.cli.code_flow_graph memory reinforce --knowledge-id <uuid>
+code_flow_graph memory reinforce --knowledge-id <uuid>
 
 # Delete
-python -m code_flow_graph.cli.code_flow_graph memory forget --knowledge-id <uuid>
+code_flow_graph memory forget --knowledge-id <uuid>
 ```
 
 ### Memory Configuration
@@ -185,7 +205,7 @@ Semantic search uses embeddings from SentenceTransformers in the vector store. Q
 CLI usage:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph -- . --query "JWT auth" --mermaid
+code_flow_graph -- . --query "JWT auth" --mermaid
 ```
 
 MCP tool: `semantic_search` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:218).
@@ -238,7 +258,7 @@ drift_confidence_threshold: 0.6
 When enabled, drift analysis writes a sibling report next to the main analysis output:
 
 ```bash
-python -m code_flow_graph.cli.code_flow_graph -- . --output analysis.json
+code_flow_graph -- . --output analysis.json
 # writes: analysis.json.drift.json
 ```
 
