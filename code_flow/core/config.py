@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 from pydantic import BaseModel, Field
 
-from code_flow_graph.core.drift_config import (
+from code_flow.core.drift_config import (
     DEFAULT_DRIFT_ENABLED,
     DEFAULT_DRIFT_GRANULARITY,
     DEFAULT_DRIFT_MIN_ENTITY_SIZE,

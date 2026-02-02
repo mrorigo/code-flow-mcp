@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from pathlib import Path
-from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
-from code_flow_graph.core.drift_analyzer import DriftAnalyzer
+from code_flow.mcp_server.analyzer import MCPAnalyzer
+from code_flow.core.drift_analyzer import DriftAnalyzer
 
 # Pydantic models for tools
 class MCPError(Exception):

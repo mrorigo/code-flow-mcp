@@ -106,7 +106,7 @@ get_function_metadata_call = {
     "method": "tools/call",
     "params": {
         "name": "get_function_metadata",
-        "arguments": {"fqn": "code_flow_graph.cli.code_flow_graph.main"}  # Known FQN from index
+        "arguments": {"fqn": "code_flow.cli.code_flow.main"}  # Known FQN from index
     }
 }
 json.dump(get_function_metadata_call, sys.stdout)

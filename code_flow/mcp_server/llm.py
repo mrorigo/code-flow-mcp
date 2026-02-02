@@ -5,8 +5,8 @@ from typing import Optional, List
 import json
 
 from openai import AsyncOpenAI, DefaultAioHttpClient
-from code_flow_graph.core.call_graph_builder import FunctionNode
-from code_flow_graph.core.vector_store import CodeVectorStore
+from code_flow.core.call_graph_builder import FunctionNode
+from code_flow.core.vector_store import CodeVectorStore
 
 logger = logging.getLogger("mcp.llm")
 

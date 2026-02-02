@@ -7,8 +7,8 @@ import ast
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
-from code_flow_graph.core.models import FunctionElement, ClassElement
+from code_flow.core.treesitter.python_extractor import TreeSitterPythonExtractor
+from code_flow.core.models import FunctionElement, ClassElement
 
 
 class TestTreeSitterPythonExtractor:

@@ -8,9 +8,9 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 
-from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
-from code_flow_graph.core.call_graph_builder import CallGraphBuilder
-from code_flow_graph.core.vector_store import CodeVectorStore
+from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from code_flow.core.call_graph_builder import CallGraphBuilder
+from code_flow.core.vector_store import CodeVectorStore
 
 
 @pytest.fixture

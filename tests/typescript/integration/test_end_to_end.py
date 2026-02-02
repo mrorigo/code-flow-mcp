@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from code_flow_graph.core.models import FunctionElement
+from code_flow.core.models import FunctionElement
 
 
 class TestTypeScriptEndToEndWorkflow:
@@ -94,7 +94,7 @@ class TestTypeScriptEndToEndWorkflow:
             output_file = temp_path / "analysis.json"
 
             result = subprocess.run([
-                'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+                'python', '-m', 'code_flow.cli.code_flow',
                 str(temp_path),
                 '--language', 'typescript',
                 '--output', str(output_file)
@@ -121,8 +121,8 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_call_graph_builder_integration(self):
         """Test TypeScript elements work with CallGraphBuilder."""
-        from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
-        from code_flow_graph.core.call_graph_builder import CallGraphBuilder
+        from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+        from code_flow.core.call_graph_builder import CallGraphBuilder
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -174,7 +174,7 @@ class TestTypeScriptEndToEndWorkflow:
             """)
 
             # Extract TypeScript elements
-            from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+            from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
             extractor = TreeSitterTypeScriptExtractor()
             elements = extractor.extract_from_file(ts_file)
 
@@ -197,9 +197,9 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_vector_store_integration(self):
         """Test TypeScript elements work with vector store."""
-        from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
-        from code_flow_graph.core.call_graph_builder import CallGraphBuilder
-        from code_flow_graph.core.vector_store import CodeVectorStore
+        from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+        from code_flow.core.call_graph_builder import CallGraphBuilder
+        from code_flow.core.vector_store import CodeVectorStore
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -268,7 +268,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_framework_detection_integration(self):
         """Test framework detection in end-to-end workflow."""
-        from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+        from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
         # Test different frameworks
         frameworks = {
@@ -342,7 +342,7 @@ class TestTypeScriptEndToEndWorkflow:
 
     def test_typescript_error_handling_integration(self):
         """Test error handling in complete workflow."""
-        from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+        from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -390,7 +390,7 @@ class TestTypeScriptEndToEndWorkflow:
                 start_time = time.time()
 
                 result = subprocess.run([
-                    'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+                    'python', '-m', 'code_flow.cli.code_flow',
                     project_path,
                     '--language', 'typescript'
                 ], capture_output=True, text=True, cwd='.', timeout=60)
@@ -408,7 +408,7 @@ class TestTypeScriptEndToEndWorkflow:
         # Note: This is a basic test since MCP server currently uses Tree-sitter extractor
         # In a full implementation, the MCP server would be updated to support TypeScript
 
-        from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+        from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -446,7 +446,7 @@ class TestTypeScriptEndToEndWorkflow:
             """)
 
             # Extract TypeScript elements
-            from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+            from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
             extractor = TreeSitterTypeScriptExtractor()
             elements = extractor.extract_from_directory(temp_path)
 
@@ -712,7 +712,7 @@ class TestTypeScriptEndToEndWorkflow:
             output_file = temp_path / "comprehensive-analysis.json"
 
             result = subprocess.run([
-                'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+                'python', '-m', 'code_flow.cli.code_flow',
                 str(temp_path),
                 '--language', 'typescript',
                 '--output', str(output_file)

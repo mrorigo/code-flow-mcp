@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 import logging
 
-from code_flow_graph.core.call_graph_builder import CallEdge, FunctionNode
-from code_flow_graph.core.drift_models import DriftFinding, TopologyViolation
+from code_flow.core.call_graph_builder import CallEdge, FunctionNode
+from code_flow.core.drift_models import DriftFinding, TopologyViolation
 
 
 @dataclass

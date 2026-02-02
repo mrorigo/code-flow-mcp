@@ -11,7 +11,7 @@ CodeFlow is a code analysis tool providing:
 
 ## Configuration (v0.3.0+)
 
-Both CLI and MCP server use unified configuration via `code_flow_graph/core/config.py`.
+Both CLI and MCP server use unified configuration via `code_flow/core/config.py`.
 
 **Default config file**: `codeflow.config.yaml` in current directory
 
@@ -31,22 +31,22 @@ language: "python"  # or "typescript"
 ### CLI Usage
 ```bash
 # Use default config
-code_flow_graph [directory]
+code_flow [directory]
 
 # Custom config
-code_flow_graph --config custom.yaml
+code_flow --config custom.yaml
 
 # Override config values
-code_flow_graph --language typescript --embedding-model accurate
+code_flow --language typescript --embedding-model accurate
 ```
 
 ### MCP Server Usage
 ```bash
 # Use default config
-code_flow_graph_mcp_server
+code_flow_mcp_server
 
 # Custom config
-code_flow_graph_mcp_server --config custom.yaml
+code_flow_mcp_server --config custom.yaml
 ```
 
 ## Architecture
@@ -67,7 +67,7 @@ code_flow_graph_mcp_server --config custom.yaml
 - **`mcp_server/__main__.py`**: Entry point with config loading
 
 ### CLI Tool
-- **`cli/code_flow_graph.py`**: Main analyzer orchestrator and CLI entry point
+- **`cli/code_flow.py`**: Main analyzer orchestrator and CLI entry point
 
 ## Key Features
 
@@ -135,9 +135,9 @@ See `pyproject.toml` for complete dependency list.
 - Supports both code functions and structured data elements
 
 ### Entry Points
-- **CLI**: `code_flow_graph` command (via `project.scripts`)
-- **MCP Server**: `code_flow_graph_mcp_server` command (via `project.scripts`)
-- Both use `code_flow_graph/core/config.py` for configuration (v0.3.0+)
+- **CLI**: `code_flow` command (via `project.scripts`)
+- **MCP Server**: `code_flow_mcp_server` command (via `project.scripts`)
+- Both use `code_flow/core/config.py` for configuration (v0.3.0+)
 
 ## Version History
 

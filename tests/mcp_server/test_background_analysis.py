@@ -1,15 +1,15 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import asyncio
-from code_flow_graph.mcp_server.analyzer import MCPAnalyzer, AnalysisState
+from code_flow.mcp_server.analyzer import MCPAnalyzer, AnalysisState
 
 
 @pytest.fixture
 def mock_core_components():
     """Mock core components to avoid actual initialization."""
-    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
-         patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
-         patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+    with patch('code_flow.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
+         patch('code_flow.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
+         patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
         yield mock_extractor, mock_builder, mock_store
 
 
@@ -161,7 +161,7 @@ async def test_wait_for_analysis(mock_core_components):
 @pytest.mark.asyncio
 async def test_ping_tool_includes_status():
     """Test that ping tool includes analysis status."""
-    from code_flow_graph.mcp_server.server import ping_tool, server
+    from code_flow.mcp_server.server import ping_tool, server
     
     # Mock analyzer with IN_PROGRESS state
     mock_analyzer = MagicMock()
@@ -185,7 +185,7 @@ async def test_ping_tool_includes_status():
 @pytest.mark.asyncio
 async def test_semantic_search_includes_status():
     """Test that semantic_search includes analysis status."""
-    from code_flow_graph.mcp_server.server import semantic_search, server
+    from code_flow.mcp_server.server import semantic_search, server
     
     # Mock analyzer with COMPLETED state
     mock_store = MagicMock()

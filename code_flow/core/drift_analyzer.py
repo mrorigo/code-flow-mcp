@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, List
 
-from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
-from code_flow_graph.core.drift_clusterer import DriftClusterer
-from code_flow_graph.core.drift_features import DriftFeatureExtractor
-from code_flow_graph.core.drift_report import DriftReportBuilder
-from code_flow_graph.core.drift_topology import TopologyAnalyzer
+from code_flow.core.call_graph_builder import FunctionNode, CallEdge
+from code_flow.core.drift_clusterer import DriftClusterer
+from code_flow.core.drift_features import DriftFeatureExtractor
+from code_flow.core.drift_report import DriftReportBuilder
+from code_flow.core.drift_topology import TopologyAnalyzer
 
 
 @dataclass

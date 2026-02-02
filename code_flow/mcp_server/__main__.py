@@ -2,13 +2,13 @@ import argparse
 import logging
 import sys
 import asyncio
-from code_flow_graph.mcp_server.server import server
-from code_flow_graph.core.config import load_config
+from code_flow.mcp_server.server import server
+from code_flow.core.config import load_config
 
 def main():
     parser = argparse.ArgumentParser(
         description="CodeFlowGraph MCP Server - Semantic code analysis and search",
-        epilog="Example: python -m code_flow_graph.mcp_server --config custom.yaml"
+        epilog="Example: python -m code_flow.mcp_server --config custom.yaml"
     )
     parser.add_argument(
         "--config",

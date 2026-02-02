@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 import math
 
-from code_flow_graph.core.drift_models import DriftCluster, DriftFinding, DriftFeatureVector
+from code_flow.core.drift_models import DriftCluster, DriftFinding, DriftFeatureVector
 
 
 @dataclass

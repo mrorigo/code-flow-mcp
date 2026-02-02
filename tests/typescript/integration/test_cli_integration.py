@@ -16,7 +16,7 @@ class TestCLITypeScriptIntegration:
     def test_cli_typescript_flag_exists(self):
         """Test that CLI accepts --language typescript flag."""
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             '--help'
         ], capture_output=True, text=True, cwd='.')
 
@@ -28,7 +28,7 @@ class TestCLITypeScriptIntegration:
     def test_cli_rust_flag_exists(self):
         """Test that CLI accepts --language rust flag."""
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             '--help'
         ], capture_output=True, text=True, cwd='.')
 
@@ -61,7 +61,7 @@ class TestCLITypeScriptIntegration:
         output_file = temp_dir / "analysis.json"
 
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -127,7 +127,7 @@ class TestCLITypeScriptIntegration:
         output_file = temp_dir / "angular-analysis.json"
 
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -177,7 +177,7 @@ class TestCLITypeScriptIntegration:
 
         # First run analysis
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -186,7 +186,7 @@ class TestCLITypeScriptIntegration:
 
         # Now test query functionality
         query_result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript',
             '--query', 'functions that handle users',
@@ -237,7 +237,7 @@ class TestCLITypeScriptIntegration:
 
         # Run analysis with Mermaid output
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript',
             '--embedding-model', 'fast',
@@ -252,7 +252,7 @@ class TestCLITypeScriptIntegration:
     def test_cli_typescript_invalid_directory(self):
         """Test CLI error handling for invalid directory."""
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             '/nonexistent/directory',
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -263,7 +263,7 @@ class TestCLITypeScriptIntegration:
     def test_cli_typescript_language_validation(self):
         """Test CLI language validation."""
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             '.',
             '--language', 'invalid_language'
         ], capture_output=True, text=True, cwd='.')
@@ -291,7 +291,7 @@ class TestCLITypeScriptIntegration:
 
         # Run analysis (vector store should be created)
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')
@@ -343,7 +343,7 @@ class TestCLITypeScriptIntegration:
         start_time = time.time()
 
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.', timeout=60)
@@ -483,7 +483,7 @@ class TestTypeScriptEndToEndWorkflow:
         output_file = temp_dir / "complete-analysis.json"
 
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript',
             '--output', str(output_file)
@@ -557,7 +557,7 @@ class TestTypeScriptEndToEndWorkflow:
         """)
 
         result = subprocess.run([
-            'python', '-m', 'code_flow_graph.cli.code_flow_graph',
+            'python', '-m', 'code_flow.cli.code_flow',
             str(temp_dir),
             '--language', 'typescript'
         ], capture_output=True, text=True, cwd='.')

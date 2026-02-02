@@ -9,7 +9,7 @@ pytest.skip("Tree-sitter migration: legacy TypeScript feature coverage retired",
 from pathlib import Path
 from typing import Set, Dict, Any
 
-from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
 
 class TestTypeScriptFeatureCoverage:

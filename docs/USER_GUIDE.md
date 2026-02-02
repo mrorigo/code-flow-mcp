@@ -43,11 +43,11 @@ CodeFlow is a code analysis tool that builds call graphs, extracts metadata usin
 
 Key components live in:
 
-- Tree-sitter extractors in [`../code_flow_graph/core/treesitter`](code_flow_graph/core/treesitter/__init__.py:1)
-- Vector store integration in [`../code_flow_graph/core/vector_store.py`](code_flow_graph/core/vector_store.py:1)
-- MCP server tooling in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:1)
-- MCP analyzer and file watching in [`../code_flow_graph/mcp_server/analyzer.py`](code_flow_graph/mcp_server/analyzer.py:1)
-- Cortex memory store in [`../code_flow_graph/core/cortex_memory.py`](code_flow_graph/core/cortex_memory.py:1)
+- Tree-sitter extractors in [`../code_flow/core/treesitter`](code_flow/core/treesitter/__init__.py:1)
+- Vector store integration in [`../code_flow/core/vector_store.py`](code_flow/core/vector_store.py:1)
+- MCP server tooling in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:1)
+- MCP analyzer and file watching in [`../code_flow/mcp_server/analyzer.py`](code_flow/mcp_server/analyzer.py:1)
+- Cortex memory store in [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1)
 
 ## Install
 
@@ -62,7 +62,7 @@ The project dependencies are defined in [`pyproject.toml`](pyproject.toml:1). Yo
 Install CodeFlow as a user-level tool (recommended for CLI usage):
 
 ```bash
-uv tool install code-flow-graph
+uv tool install code-flow
 ```
 
 Expose uv's tool bin directory on your PATH:
@@ -76,7 +76,7 @@ Persist the PATH update in your shell profile (e.g., `~/.zshrc`).
 One-off execution without installation:
 
 ```bash
-uvx --from code-flow-graph code_flow_graph --help
+uvx --from code-flow code_flow --help
 ```
 
 ## Quick Start (CLI)
@@ -84,13 +84,13 @@ uvx --from code-flow-graph code_flow_graph --help
 Analyze a codebase and generate a report:
 
 ```bash
-code_flow_graph -- .
+code_flow -- .
 ```
 
 Run a semantic query after analysis:
 
 ```bash
-code_flow_graph -- . --query "authentication flows" --mermaid
+code_flow -- . --query "authentication flows" --mermaid
 ```
 
 Useful flags include:
@@ -99,23 +99,23 @@ Useful flags include:
 - `--embedding-model` to pick an embedding model.
 - `--max-tokens` to tune chunk size for embeddings.
 
-CLI entry point: [`../code_flow_graph/cli/code_flow_graph.py`](code_flow_graph/cli/code_flow_graph.py:1).
+CLI entry point: [`../code_flow/cli/code_flow.py`](code_flow/cli/code_flow.py:1).
 
 ## Quick Start (MCP Server)
 
 Start the MCP server with defaults:
 
 ```bash
-code_flow_graph_mcp_server
+code_flow_mcp_server
 ```
 
-The server uses the unified config model in [`../code_flow_graph/core/config.py`](code_flow_graph/core/config.py:1) and loads `codeflow.config.yaml` by default.
+The server uses the unified config model in [`../code_flow/core/config.py`](code_flow/core/config.py:1) and loads `codeflow.config.yaml` by default.
 
-Tool definitions are in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:1).
+Tool definitions are in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:1).
 
 ## Configuration
 
-All configuration flows through the Pydantic model in [`../code_flow_graph/core/config.py`](code_flow_graph/core/config.py:1). The default config file is `codeflow.config.yaml`.
+All configuration flows through the Pydantic model in [`../code_flow/core/config.py`](code_flow/core/config.py:1). The default config file is `codeflow.config.yaml`.
 
 Minimal example:
 
@@ -133,13 +133,13 @@ language: "python"
 
 1. CLI args
 2. Config file
-3. Defaults in [`../code_flow_graph/core/config.py`](code_flow_graph/core/config.py:1)
+3. Defaults in [`../code_flow/core/config.py`](code_flow/core/config.py:1)
 
 ## Cortex Memory
 
 Cortex memory stores “tribal” and “episodic” knowledge in a dedicated Chroma collection. It applies decay over time and ranks results with a memory score.
 
-Core implementation: [`../code_flow_graph/core/cortex_memory.py`](code_flow_graph/core/cortex_memory.py:1).
+Core implementation: [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1).
 
 ### Memory Types
 
@@ -149,7 +149,7 @@ Core implementation: [`../code_flow_graph/core/cortex_memory.py`](code_flow_grap
 
 ### MCP Tools
 
-Available tools (defined in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:78)):
+Available tools (defined in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:78)):
 
 - `reinforce_memory`
 - `query_memory`
@@ -160,22 +160,22 @@ Available tools (defined in [`../code_flow_graph/mcp_server/server.py`](code_flo
 
 ```bash
 # Add memory
-code_flow_graph memory add \
+code_flow memory add \
   --type TRIBAL \
   --content "Use snake_case for DB columns" \
   --tags conventions
 
 # Query memory
-code_flow_graph memory query \
+code_flow memory query \
   --query "DB column naming" \
   --type TRIBAL \
   --limit 5
 
 # Reinforce
-code_flow_graph memory reinforce --knowledge-id <uuid>
+code_flow memory reinforce --knowledge-id <uuid>
 
 # Delete
-code_flow_graph memory forget --knowledge-id <uuid>
+code_flow memory forget --knowledge-id <uuid>
 ```
 
 ### Memory Configuration
@@ -205,30 +205,30 @@ Semantic search uses embeddings from SentenceTransformers in the vector store. Q
 CLI usage:
 
 ```bash
-code_flow_graph -- . --query "JWT auth" --mermaid
+code_flow -- . --query "JWT auth" --mermaid
 ```
 
-MCP tool: `semantic_search` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:218).
+MCP tool: `semantic_search` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:218).
 
 ## Call Graphs and Mermaid
 
 The call graph is derived from Tree-sitter extraction and call graph building. You can retrieve it as JSON or Mermaid.
 
-- MCP tool: `get_call_graph` and `generate_mermaid_graph` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:261).
+- MCP tool: `get_call_graph` and `generate_mermaid_graph` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:261).
 - CLI option: `--mermaid` to generate Mermaid for query results.
 
 ## Entry Points and Function Metadata
 
 Entry points are derived from call graph analysis.
 
-- MCP tool: `query_entry_points` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:304)
-- MCP tool: `get_function_metadata` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:276)
+- MCP tool: `query_entry_points` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:304)
+- MCP tool: `get_function_metadata` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:276)
 
 ## Structured Data Indexing
 
 YAML/JSON files are indexed and searchable as structured data, enabling configuration-aware search.
 
-Implementation: [`../code_flow_graph/core/structured_extractor.py`](code_flow_graph/core/structured_extractor.py:1).
+Implementation: [`../code_flow/core/structured_extractor.py`](code_flow/core/structured_extractor.py:1).
 
 ## Drift Detection
 
@@ -236,10 +236,10 @@ Drift detection analyzes module-level structure and call-graph topology to surfa
 
 Core implementation:
 
-- Feature extraction: [`../code_flow_graph/core/drift_features.py`](code_flow_graph/core/drift_features.py:1)
-- Structural clustering: [`../code_flow_graph/core/drift_clusterer.py`](code_flow_graph/core/drift_clusterer.py:1)
-- Topology analysis: [`../code_flow_graph/core/drift_topology.py`](code_flow_graph/core/drift_topology.py:1)
-- Report assembly: [`../code_flow_graph/core/drift_report.py`](code_flow_graph/core/drift_report.py:1)
+- Feature extraction: [`../code_flow/core/drift_features.py`](code_flow/core/drift_features.py:1)
+- Structural clustering: [`../code_flow/core/drift_clusterer.py`](code_flow/core/drift_clusterer.py:1)
+- Topology analysis: [`../code_flow/core/drift_topology.py`](code_flow/core/drift_topology.py:1)
+- Report assembly: [`../code_flow/core/drift_report.py`](code_flow/core/drift_report.py:1)
 
 ### Enabling Drift
 
@@ -258,25 +258,25 @@ drift_confidence_threshold: 0.6
 When enabled, drift analysis writes a sibling report next to the main analysis output:
 
 ```bash
-code_flow_graph -- . --output analysis.json
+code_flow -- . --output analysis.json
 # writes: analysis.json.drift.json
 ```
 
 ### MCP Tool
 
-Use `check_drift` in [`../code_flow_graph/mcp_server/server.py`](code_flow_graph/mcp_server/server.py:470) to generate a drift report from the current analysis state.
+Use `check_drift` in [`../code_flow/mcp_server/server.py`](code_flow/mcp_server/server.py:470) to generate a drift report from the current analysis state.
 
 ## Background Analysis and File Watching
 
 The MCP server runs analysis in the background and watches for file changes using `watchdog`. This enables incremental updates and keeps the index fresh.
 
-Implementation: [`../code_flow_graph/mcp_server/analyzer.py`](code_flow_graph/mcp_server/analyzer.py:1).
+Implementation: [`../code_flow/mcp_server/analyzer.py`](code_flow/mcp_server/analyzer.py:1).
 
 ## LLM Summaries (Optional)
 
 If enabled, CodeFlow can generate summaries of functions via an LLM pipeline. Configure in `llm_config` and enable `summary_generation_enabled` in your config.
 
-LLM processing is implemented in [`../code_flow_graph/mcp_server/llm.py`](code_flow_graph/mcp_server/llm.py:1).
+LLM processing is implemented in [`../code_flow/mcp_server/llm.py`](code_flow/mcp_server/llm.py:1).
 
 ## Testing
 
@@ -310,12 +310,12 @@ If you switch embedding models across runs, re-run analysis to rebuild embedding
 
 **Q: Do I need Tree-sitter manually installed?**
 
-No. Tree-sitter bindings are bundled and initialized in the extractor modules under [`../code_flow_graph/core/treesitter`](code_flow_graph/core/treesitter/__init__.py:1).
+No. Tree-sitter bindings are bundled and initialized in the extractor modules under [`../code_flow/core/treesitter`](code_flow/core/treesitter/__init__.py:1).
 
 **Q: Where is Cortex memory stored?**
 
-In the same ChromaDB persistence path as code embeddings, but isolated to its own collection. See [`../code_flow_graph/core/cortex_memory.py`](code_flow_graph/core/cortex_memory.py:1).
+In the same ChromaDB persistence path as code embeddings, but isolated to its own collection. See [`../code_flow/core/cortex_memory.py`](code_flow/core/cortex_memory.py:1).
 
 **Q: How do I disable Cortex memory?**
 
-Set `memory_enabled: false` in your config file. See defaults in [`../code_flow_graph/core/config.py`](code_flow_graph/core/config.py:1).
+Set `memory_enabled: false` in your config file. See defaults in [`../code_flow/core/config.py`](code_flow/core/config.py:1).

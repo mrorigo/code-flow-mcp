@@ -14,8 +14,8 @@ from pathlib import Path
 import logging
 
 # Import the specific, enriched data types from the call graph builder
-from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
-from code_flow_graph.core.models import StructuredDataElement
+from code_flow.core.call_graph_builder import FunctionNode, CallEdge
+from code_flow.core.models import StructuredDataElement
 
 class CodeVectorStore:
     """Vector store for code elements with explicit indexing strategy using ChromaDB."""
@@ -226,6 +226,7 @@ class CodeVectorStore:
 
                 # Check if an existing document with this FQN has the same hash_body
                 skip_node = False
+                existing_docs = None
                 if node.hash_body:
                     existing_docs = self.collection.get(
                         where={"$and": [
@@ -237,7 +238,7 @@ class CodeVectorStore:
                     if existing_docs and existing_docs['metadatas']:
                         skip_node = True
 
-                if skip_node:
+                if skip_node and existing_docs:
                     # Add existing chunk IDs to the list
                     existing_ids = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{node.fully_qualified_name}_chunk_{j}")) for j in range(len(existing_docs['metadatas']))]
                     all_doc_ids.extend(existing_ids)
@@ -678,7 +679,7 @@ class CodeVectorStore:
             logging.warning(f"Error retrieving file paths from vector store: {e}")
             return set()
 
-    def cleanup_stale_references(self, valid_file_paths: Set[str] = None) -> Dict[str, Any]:
+    def cleanup_stale_references(self, valid_file_paths: Set[str]|None = None) -> Dict[str, Any]:
         """
         Remove documents that reference files that no longer exist on the filesystem.
 

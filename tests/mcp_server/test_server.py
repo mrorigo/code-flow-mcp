@@ -4,8 +4,8 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import logging
 import uuid
 from pydantic import ValidationError
-from code_flow_graph.mcp_server.server import MCPError
-from code_flow_graph.mcp_server.analyzer import AnalysisState
+from code_flow.mcp_server.server import MCPError
+from code_flow.mcp_server.analyzer import AnalysisState
 
 
 @pytest.fixture
@@ -13,10 +13,10 @@ def mock_dependencies():
     """Mock all dependencies to avoid import issues."""
     with patch.dict('sys.modules', {
         'fastmcp': MagicMock(),
-        'code_flow_graph.mcp_server.analyzer': MagicMock(),
-        'code_flow_graph.core.ast_extractor': MagicMock(),
-        'code_flow_graph.core.call_graph_builder': MagicMock(),
-        'code_flow_graph.core.vector_store': MagicMock(),
+        'code_flow.mcp_server.analyzer': MagicMock(),
+        'code_flow.core.ast_extractor': MagicMock(),
+        'code_flow.core.call_graph_builder': MagicMock(),
+        'code_flow.core.vector_store': MagicMock(),
         'sentence_transformers': MagicMock(),
         'chromadb': MagicMock(),
         'torch': MagicMock(),
@@ -30,14 +30,14 @@ def mock_dependencies():
 
         # Mock analyzer
         mock_analyzer_class = MagicMock()
-        sys.modules['code_flow_graph.mcp_server.analyzer'].MCPAnalyzer = mock_analyzer_class
+        sys.modules['code_flow.mcp_server.analyzer'].MCPAnalyzer = mock_analyzer_class
 
         yield mock_fastmcp_class, mock_server_instance, mock_analyzer_class
 
 
 def test_server_initialization():
     # Import the server module to trigger initialization
-    import code_flow_graph.mcp_server.server as server_module
+    import code_flow.mcp_server.server as server_module
 
     # Assert the server instance is created
     assert hasattr(server_module, 'server')
@@ -52,7 +52,7 @@ def test_server_initialization():
 
 def test_run_stdio_called():
     # Import the server module
-    import code_flow_graph.mcp_server.server as server_module
+    import code_flow.mcp_server.server as server_module
 
     # Assert the server has the run_stdio_async method
     assert hasattr(server_module.server, 'run_stdio_async')
@@ -67,7 +67,7 @@ async def test_shutdown(caplog, mock_dependencies):
     mock_fastmcp_class, mock_server_instance, mock_analyzer_class = mock_dependencies
 
     caplog.set_level(logging.INFO)
-    from code_flow_graph.mcp_server.server import on_shutdown
+    from code_flow.mcp_server.server import on_shutdown
     await on_shutdown()
     assert "Server shutdown" in caplog.text
 
@@ -75,7 +75,7 @@ async def test_shutdown(caplog, mock_dependencies):
 @pytest.mark.asyncio
 async def test_ping_tool_success():
     """Test ping tool with valid message."""
-    from code_flow_graph.mcp_server.server import ping_tool, PingResponse
+    from code_flow.mcp_server.server import ping_tool, PingResponse
 
     # Test successful ping
     response = await ping_tool(message="hi")
@@ -88,7 +88,7 @@ async def test_ping_tool_success():
 @pytest.mark.asyncio
 async def test_ping_tool_missing_message():
     """Test ping tool with missing message raises ValidationError."""
-    from code_flow_graph.mcp_server.server import ping_tool
+    from code_flow.mcp_server.server import ping_tool
 
     # Test missing message - should raise ValidationError since message is required
     with pytest.raises(ValidationError) as exc_info:
@@ -100,7 +100,7 @@ async def test_ping_tool_missing_message():
 @pytest.mark.asyncio
 async def test_ping_tool_call_via_server():
     """Test calling ping tool via server."""
-    from code_flow_graph.mcp_server.server import server
+    from code_flow.mcp_server.server import server
 
     # Call the tool
     result = await server.call_tool("ping", {"message": "test"})
@@ -119,7 +119,7 @@ async def test_ping_tool_call_via_server():
 
 def test_ping_request_schema():
     """Test ping tool parameter validation."""
-    from code_flow_graph.mcp_server.server import ping_tool
+    from code_flow.mcp_server.server import ping_tool
 
     # Test that the function requires the message parameter
     try:
@@ -135,7 +135,7 @@ def test_ping_request_schema():
 
 def test_ping_response_schema():
     """Test PingResponse schema validation."""
-    from code_flow_graph.mcp_server.server import PingResponse
+    from code_flow.mcp_server.server import PingResponse
 
     # Test valid schema
     schema = PingResponse.model_json_schema()
@@ -149,7 +149,7 @@ def test_ping_response_schema():
 @pytest.mark.asyncio
 async def test_semantic_search_tool_success():
     """Test semantic_search tool with valid request."""
-    from code_flow_graph.mcp_server.server import semantic_search, SearchResponse, server
+    from code_flow.mcp_server.server import semantic_search, SearchResponse, server
     from unittest.mock import patch
 
     # Mock analyzer and vector_store
@@ -178,7 +178,7 @@ async def test_semantic_search_tool_success():
 @pytest.mark.asyncio
 async def test_semantic_search_tool_no_store():
     """Test semantic_search tool raises error when no vector store."""
-    from code_flow_graph.mcp_server.server import semantic_search, server
+    from code_flow.mcp_server.server import semantic_search, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED
@@ -199,7 +199,7 @@ async def test_semantic_search_tool_no_store():
 @pytest.mark.asyncio
 async def test_semantic_search_tool_invalid_params():
     """Test semantic_search tool raises error for invalid params."""
-    from code_flow_graph.mcp_server.server import semantic_search, server
+    from code_flow.mcp_server.server import semantic_search, server
 
     # Mock analyzer and vector_store
     mock_store = MagicMock()
@@ -222,7 +222,7 @@ async def test_semantic_search_tool_invalid_params():
 @pytest.mark.asyncio
 async def test_get_call_graph_tool_success_json():
     """Test get_call_graph tool with JSON format."""
-    from code_flow_graph.mcp_server.server import get_call_graph, GraphResponse, server
+    from code_flow.mcp_server.server import get_call_graph, GraphResponse, server
 
     mock_graph_data = {"functions": {"test.func": {"name": "func"}}}
     mock_analyzer = MagicMock()
@@ -244,7 +244,7 @@ async def test_get_call_graph_tool_success_json():
 @pytest.mark.asyncio
 async def test_get_call_graph_tool_success_mermaid():
     """Test get_call_graph tool with Mermaid format."""
-    from code_flow_graph.mcp_server.server import get_call_graph, GraphResponse, server
+    from code_flow.mcp_server.server import get_call_graph, GraphResponse, server
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
@@ -266,7 +266,7 @@ async def test_get_call_graph_tool_success_mermaid():
 @pytest.mark.asyncio
 async def test_get_call_graph_tool_empty_fqns():
     """Test get_call_graph tool with empty fqns (full graph)."""
-    from code_flow_graph.mcp_server.server import get_call_graph, GraphResponse, server
+    from code_flow.mcp_server.server import get_call_graph, GraphResponse, server
 
     mock_graph_data = {"functions": {}}
     mock_analyzer = MagicMock()
@@ -288,7 +288,7 @@ async def test_get_call_graph_tool_empty_fqns():
 @pytest.mark.asyncio
 async def test_get_call_graph_tool_no_builder():
     """Test get_call_graph tool raises error when no builder."""
-    from code_flow_graph.mcp_server.server import get_call_graph, server
+    from code_flow.mcp_server.server import get_call_graph, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED
@@ -309,7 +309,7 @@ async def test_get_call_graph_tool_no_builder():
 @pytest.mark.asyncio
 async def test_get_function_metadata_tool_success():
     """Test get_function_metadata tool with valid FQN."""
-    from code_flow_graph.mcp_server.server import get_function_metadata, MetadataResponse, server
+    from code_flow.mcp_server.server import get_function_metadata, MetadataResponse, server
     from unittest.mock import MagicMock
 
     mock_node = MagicMock()
@@ -358,7 +358,7 @@ async def test_get_function_metadata_tool_success():
 @pytest.mark.asyncio
 async def test_get_function_metadata_tool_invalid_fqn():
     """Test get_function_metadata tool with invalid FQN."""
-    from code_flow_graph.mcp_server.server import get_function_metadata, server
+    from code_flow.mcp_server.server import get_function_metadata, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED
@@ -379,7 +379,7 @@ async def test_get_function_metadata_tool_invalid_fqn():
 @pytest.mark.asyncio
 async def test_get_function_metadata_tool_no_builder():
     """Test get_function_metadata tool raises error when no builder."""
-    from code_flow_graph.mcp_server.server import get_function_metadata, server
+    from code_flow.mcp_server.server import get_function_metadata, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED
@@ -400,7 +400,7 @@ async def test_get_function_metadata_tool_no_builder():
 @pytest.mark.asyncio
 async def test_query_entry_points_tool_success():
     """Test query_entry_points tool with mock entry points."""
-    from code_flow_graph.mcp_server.server import query_entry_points, EntryPointsResponse, server
+    from code_flow.mcp_server.server import query_entry_points, EntryPointsResponse, server
     from unittest.mock import MagicMock
 
     mock_ep1 = MagicMock()
@@ -438,7 +438,7 @@ async def test_query_entry_points_tool_success():
 @pytest.mark.asyncio
 async def test_query_entry_points_tool_no_builder():
     """Test query_entry_points tool raises error when no builder."""
-    from code_flow_graph.mcp_server.server import query_entry_points, server
+    from code_flow.mcp_server.server import query_entry_points, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED
@@ -461,7 +461,7 @@ async def test_query_entry_points_tool_no_builder():
 @pytest.mark.asyncio
 async def test_generate_mermaid_graph_tool_success():
     """Test generate_mermaid_graph tool with valid request."""
-    from code_flow_graph.mcp_server.server import generate_mermaid_graph, MermaidResponse, server
+    from code_flow.mcp_server.server import generate_mermaid_graph, MermaidResponse, server
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
@@ -483,7 +483,7 @@ async def test_generate_mermaid_graph_tool_success():
 @pytest.mark.asyncio
 async def test_generate_mermaid_graph_tool_empty_fqns():
     """Test generate_mermaid_graph tool with empty fqns."""
-    from code_flow_graph.mcp_server.server import generate_mermaid_graph, MermaidResponse, server
+    from code_flow.mcp_server.server import generate_mermaid_graph, MermaidResponse, server
 
     mock_mermaid_str = "graph TD\nA --> B"
     mock_analyzer = MagicMock()
@@ -505,7 +505,7 @@ async def test_generate_mermaid_graph_tool_empty_fqns():
 @pytest.mark.asyncio
 async def test_generate_mermaid_graph_tool_no_builder():
     """Test generate_mermaid_graph tool raises error when no builder."""
-    from code_flow_graph.mcp_server.server import generate_mermaid_graph, server
+    from code_flow.mcp_server.server import generate_mermaid_graph, server
 
     mock_analyzer = MagicMock()
     mock_analyzer.analysis_state = AnalysisState.COMPLETED

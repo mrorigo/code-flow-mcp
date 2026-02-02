@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Any
 
-from code_flow_graph.core.drift_models import DriftCluster, DriftFinding
+from code_flow.core.drift_models import DriftCluster, DriftFinding
 
 
 @dataclass

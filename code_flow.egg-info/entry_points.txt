@@ -1,0 +1,3 @@
+[console_scripts]
+code_flow = code_flow.cli.code_flow:main
+code_flow_mcp_server = code_flow.mcp_server.__main__:main

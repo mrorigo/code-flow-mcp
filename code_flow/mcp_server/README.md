@@ -18,7 +18,7 @@ pip install -e .
 
 Start the MCP server:
 ```bash
-python -m code_flow_graph.mcp_server
+python -m code_flow.mcp_server
 ```
 
 ## Test
@@ -35,7 +35,7 @@ python client.py
 
 ## Config
 
-Edit `code_flow_graph/mcp_server/config/default.yaml` to customize:
+Edit `code_flow/mcp_server/config/default.yaml` to customize:
 - Watch directories for file changes
 - Vector store settings
 - Analysis parameters

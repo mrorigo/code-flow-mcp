@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "code-flow-graph"
+name = "code-flow"
 requires-python = ">=3.11"
 version = "0.3.0"
 dependencies = [
@@ -24,8 +24,8 @@ dependencies = [
 ]
 
 [project.scripts]
-code_flow_graph_mcp_server = "code_flow_graph.mcp_server.__main__:main"
-code_flow_graph = "code_flow_graph.cli.code_flow_graph:main"
+code_flow_mcp_server = "code_flow.mcp_server.__main__:main"
+code_flow = "code_flow.cli.code_flow:main"
 
 [tool.setuptools.packages.find]
 exclude = ["code_vectors_chroma*"]

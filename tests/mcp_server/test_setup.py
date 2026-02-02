@@ -10,7 +10,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "code-flow-graph"
+name = "code-flow"
 version = "0.1.0"
 dependencies = [
     "fastmcp",
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-code_flow_graph.mcp_server = "code_flow_graph.mcp_server.__main__:main"
+code_flow.mcp_server = "code_flow.mcp_server.__main__:main"
 """
     with patch('builtins.open', mock_open(read_data=mock_toml_content)):
         # Since it's toml, but for simplicity, we'll mock the parsed dict

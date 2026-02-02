@@ -1,6 +1,6 @@
 import time
 
-from code_flow_graph.core.cortex_memory import CortexMemoryStore
+from code_flow.core.cortex_memory import CortexMemoryStore
 
 
 def test_decay_and_score_bounds(tmp_path):

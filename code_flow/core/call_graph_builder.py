@@ -12,7 +12,7 @@ import sys
 import logging
 import itertools
 
-from code_flow_graph.core.models import CodeElement, FunctionElement
+from code_flow.core.models import CodeElement, FunctionElement
 
 @dataclass
 class CallEdge:
@@ -535,7 +535,7 @@ class CallGraphBuilder:
     def _get_module_name(self, file_path: Path) -> str:
         """
         Convert file path to module name relative to the project root.
-        Attempts to find the package root (directory containing code_flow_graph)
+        Attempts to find the package root (directory containing code_flow)
         to make FQNs consistent regardless of CWD.
         """
         if self.project_root:
@@ -550,7 +550,7 @@ class CallGraphBuilder:
                 pass
 
         # Fallback if project_root is not set or file is outside it
-        # Try to find the root of the 'codeflowgraph' package
+        # Try to find the root of the 'codeflow' package
         try:
             package_base = Path(__file__).parent.parent.parent.resolve()
             relative_path = file_path.relative_to(package_base)
@@ -814,7 +814,7 @@ class CallGraphBuilder:
         # If simple name conflicts, try with a short prefix from the module
         parts = fqn.split('.')
         if len(parts) > 1:
-            module_prefix = self._sanitize_mermaid_id(parts[-2]) # e.g., 'core' from 'code_flow_graph.core.func'
+            module_prefix = self._sanitize_mermaid_id(parts[-2]) # e.g., 'core' from 'code_flow.core.func'
             alias_candidate = f"{module_prefix}_{simple_name}"
             if alias_candidate not in existing_aliases:
                 return alias_candidate

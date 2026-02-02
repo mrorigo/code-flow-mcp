@@ -92,7 +92,7 @@ This revision prioritizes MCP protocol compliance and agent interaction, treatin
 
 ### 1. Server Core
 - **FR-1.1:** Implement using `mcp.server.lowlevel.Server` with stdio (default) and SSE transports (via FastAPI/Starlette as in example).
-- **FR-1.2:** Start server via CLI (`python -m code_flow_graph.mcp_server --watch <dir> --transport stdio|sse`).
+- **FR-1.2:** Start server via CLI (`python -m code_flow.mcp_server --watch <dir> --transport stdio|sse`).
 - **FR-1.3:** On startup, perform initial full indexing (using existing `analyze()` pipeline).
 - **FR-1.4:** Use file watchers (`watchdog`) to detect Python file changes (create/modify/delete) in watch directories.
 - **FR-1.5:** On change: Incrementally re-extract elements from affected file, update call graph, re-embed in ChromaDB (skip unchanged via `hash_body`).

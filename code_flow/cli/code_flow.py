@@ -19,7 +19,7 @@ from core.models import FunctionElement, ClassElement, CodeElement
 from core.call_graph_builder import CallGraphBuilder, FunctionNode # Import FunctionNode here
 from core.vector_store import CodeVectorStore
 from core.drift_analyzer import DriftAnalyzer
-from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
+from code_flow.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 def resolve_embedding_model(model_name: str) -> str:
     """
@@ -115,7 +115,7 @@ class CodeGraphAnalyzer:
         elif self.language == "typescript":
             return TreeSitterTypeScriptExtractor()
         elif self.language == "rust":
-            from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
+            from code_flow.core.treesitter.rust_extractor import TreeSitterRustExtractor
             return TreeSitterRustExtractor()
         else:
             raise ValueError(f"Unsupported language: {self.language}")
@@ -447,7 +447,7 @@ class CodeGraphAnalyzer:
             print(f"❌ Error writing report to {output_path}: {e}", file=sys.stderr)
 
 def _memory_command(config, args) -> int:
-    from code_flow_graph.core.cortex_memory import CortexMemoryStore
+    from code_flow.core.cortex_memory import CortexMemoryStore
 
     if not config.memory_enabled:
         print("❌ Cortex memory is disabled in config.", file=sys.stderr)
@@ -552,7 +552,7 @@ def main():
 
         args = memory_parser.parse_args()
 
-        from code_flow_graph.core.config import load_config
+        from code_flow.core.config import load_config
         config = load_config(config_path=args.config, cli_args={})
         return_code = _memory_command(config, args)
         sys.exit(return_code)
@@ -601,7 +601,7 @@ def main():
         cli_overrides['max_tokens'] = args.max_tokens
 
     # Load config
-    from code_flow_graph.core.config import load_config
+    from code_flow.core.config import load_config
     config = load_config(config_path=args.config, cli_args=cli_overrides)
 
     # Determine root directory

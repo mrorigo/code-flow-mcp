@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from typing import List, Dict, Any
 
-from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
 
 
 class TestExpressTypeScriptAPI:

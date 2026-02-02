@@ -8,7 +8,7 @@ import tempfile
 import shutil
 from typing import Generator, List
 
-from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
+from code_flow.core.treesitter.python_extractor import TreeSitterPythonExtractor
 
 
 @pytest.fixture

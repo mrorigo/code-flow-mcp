@@ -1,4 +1,4 @@
-watch_directories: ["code_flow_graph"]
+watch_directories: ["code_flow"]
 ignored_patterns: ["venv", "**/__pycache__"]
 ignored_filenames: ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock"]  # Specific files to ignore
 chromadb_path: "./code_vectors_chroma"

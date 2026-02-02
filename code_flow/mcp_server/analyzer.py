@@ -10,15 +10,15 @@ import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
 
-from code_flow_graph.core.treesitter.python_extractor import TreeSitterPythonExtractor
-from code_flow_graph.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
-from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
-from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
-from code_flow_graph.core.structured_extractor import StructuredDataExtractor
-from code_flow_graph.core.call_graph_builder import CallGraphBuilder
-from code_flow_graph.core.vector_store import CodeVectorStore
-from code_flow_graph.core.cortex_memory import CortexMemoryStore
-from code_flow_graph.mcp_server.llm import SummaryGenerator, SummaryProcessor
+from code_flow.core.treesitter.python_extractor import TreeSitterPythonExtractor
+from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
+from code_flow.core.treesitter.rust_extractor import TreeSitterRustExtractor
+from code_flow.core.treesitter.rust_extractor import TreeSitterRustExtractor
+from code_flow.core.structured_extractor import StructuredDataExtractor
+from code_flow.core.call_graph_builder import CallGraphBuilder
+from code_flow.core.vector_store import CodeVectorStore
+from code_flow.core.cortex_memory import CortexMemoryStore
+from code_flow.mcp_server.llm import SummaryGenerator, SummaryProcessor
 
 class AnalysisState(Enum):
     """Enum representing the current state of code analysis."""
@@ -120,15 +120,18 @@ class MCPAnalyzer:
         # Initialize Summary Processor if enabled
         self.summary_processor = None
         if config.get('summary_generation_enabled', False):
-            llm_config = config.get('llm_config', {})
-            self.summary_generator = SummaryGenerator(config)
-            self.summary_processor = SummaryProcessor(
-                generator=self.summary_generator,
-                builder=self.builder,
-                vector_store=self.vector_store,
-                concurrency=llm_config.get('concurrency', 5),
-                prioritize_entry_points=llm_config.get('prioritize_entry_points', False)
-            )
+            if not self.vector_store:
+                logging.warning("Summary generation enabled but vector store is not initialized, disabling summary generation")
+            else:
+                llm_config = config.get('llm_config', {})
+                self.summary_generator = SummaryGenerator(config)
+                self.summary_processor = SummaryProcessor(
+                    generator=self.summary_generator,
+                    builder=self.builder,
+                    vector_store=self.vector_store,
+                    concurrency=llm_config.get('concurrency', 5),
+                    prioritize_entry_points=llm_config.get('prioritize_entry_points', False)
+                )
         else:
             logging.info("Summary generation disabled")
 
@@ -169,7 +172,7 @@ class MCPAnalyzer:
         if self.memory_store:
             def memory_cleanup_worker():
                 """Background worker function that prunes stale cortex memory."""
-                while not self.memory_cleanup_shutdown_event.is_set():
+                while not self.memory_cleanup_shutdown_event.is_set() and self.memory_store:
                     try:
                         logging.info("Running background cleanup of cortex memory")
                         stats = self.memory_store.cleanup_stale_memory(
@@ -326,6 +329,10 @@ class MCPAnalyzer:
     def _populate_vector_store(self) -> None:
         """Populate the vector store with functions and edges from the builder."""
         graph_functions = list(self.builder.functions.values())
+
+        if not self.vector_store:
+            logging.warning("Vector store not initialized, cannot populate")
+            return
 
         # Read all source files first
         sources = {}

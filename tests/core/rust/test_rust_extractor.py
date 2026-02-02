@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from code_flow_graph.core.treesitter.rust_extractor import TreeSitterRustExtractor
+from code_flow.core.treesitter.rust_extractor import TreeSitterRustExtractor
 
 
 def test_rust_extractor_parses_sample():

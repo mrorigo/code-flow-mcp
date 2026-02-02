@@ -2,25 +2,25 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 import asyncio
-from code_flow_graph.core.models import FunctionElement
-from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
+from code_flow.core.models import FunctionElement
+from code_flow.mcp_server.analyzer import MCPAnalyzer
 
 
 @pytest.fixture
 def mock_core_components():
     """Mock core components to avoid actual initialization."""
-    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
-         patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
-         patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+    with patch('code_flow.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_extractor, \
+         patch('code_flow.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
+         patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
         yield mock_extractor, mock_builder, mock_store
 
 
 @pytest.fixture
 def mock_core_components_rust():
     """Mock core components for Rust analyzer initialization."""
-    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterRustExtractor') as mock_extractor, \
-         patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
-         patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+    with patch('code_flow.mcp_server.analyzer.TreeSitterRustExtractor') as mock_extractor, \
+         patch('code_flow.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
+         patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
         yield mock_extractor, mock_builder, mock_store
 
 
@@ -66,8 +66,8 @@ def test_mcp_analyzer_init_with_existing_store():
         'embedding_model': 'all-MiniLM-L6-v2'
     }
 
-    with patch('code_flow_graph.mcp_server.analyzer.Path.exists', return_value=True):
-        with patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store:
+    with patch('code_flow.mcp_server.analyzer.Path.exists', return_value=True):
+        with patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
             analyzer = MCPAnalyzer(config)
             mock_store.assert_called_once_with(
                 persist_directory='./code_vectors_chroma',
@@ -170,7 +170,7 @@ async def test_populate_vector_store(mock_core_components):
     mock_store_instance = MagicMock()
     mock_store.return_value = mock_store_instance
 
-    with patch('code_flow_graph.mcp_server.analyzer.Path.exists', return_value=True):
+    with patch('code_flow.mcp_server.analyzer.Path.exists', return_value=True):
         analyzer = MCPAnalyzer(config)
 
     # Mock builder with functions and edges
@@ -231,7 +231,7 @@ async def test_watcher_handler_on_modified(mock_core_components):
     analyzer.vector_store.get_all_nodes.return_value = []
 
     # Create handler
-    from code_flow_graph.mcp_server.analyzer import WatcherHandler
+    from code_flow.mcp_server.analyzer import WatcherHandler
     handler = WatcherHandler(analyzer=analyzer)
 
     # Mock event

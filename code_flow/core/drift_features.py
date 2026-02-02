@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Iterable, Tuple
 from pathlib import Path
 
-from code_flow_graph.core.call_graph_builder import FunctionNode, CallEdge
-from code_flow_graph.core.drift_models import DriftFeatureVector
+from code_flow.core.call_graph_builder import FunctionNode, CallEdge
+from code_flow.core.drift_models import DriftFeatureVector
 
 
 @dataclass

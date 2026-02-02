@@ -2,16 +2,16 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 import asyncio
-from code_flow_graph.mcp_server.analyzer import MCPAnalyzer
-from code_flow_graph.core.models import StructuredDataElement
+from code_flow.mcp_server.analyzer import MCPAnalyzer
+from code_flow.core.models import StructuredDataElement
 
 @pytest.fixture
 def mock_dependencies():
-    with patch('code_flow_graph.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_py_ext, \
-         patch('code_flow_graph.mcp_server.analyzer.TreeSitterTypeScriptExtractor') as mock_ts_ext, \
-         patch('code_flow_graph.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
-         patch('code_flow_graph.mcp_server.analyzer.CodeVectorStore') as mock_store, \
-         patch('code_flow_graph.mcp_server.analyzer.StructuredDataExtractor') as mock_struct_ext:
+    with patch('code_flow.mcp_server.analyzer.TreeSitterPythonExtractor') as mock_py_ext, \
+         patch('code_flow.mcp_server.analyzer.TreeSitterTypeScriptExtractor') as mock_ts_ext, \
+         patch('code_flow.mcp_server.analyzer.CallGraphBuilder') as mock_builder, \
+         patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store, \
+         patch('code_flow.mcp_server.analyzer.StructuredDataExtractor') as mock_struct_ext:
         yield mock_py_ext, mock_ts_ext, mock_builder, mock_store, mock_struct_ext
 
 @pytest.mark.asyncio
