@@ -9,6 +9,8 @@ from enum import Enum
 import watchdog.observers
 from watchdog.events import FileSystemEventHandler
 
+from code_flow.core.utils import get_gitignore_patterns, match_file_against_pattern
+
 
 from code_flow.core.treesitter.python_extractor import TreeSitterPythonExtractor
 from code_flow.core.treesitter.typescript_extractor import TreeSitterTypeScriptExtractor
@@ -42,6 +44,13 @@ class WatcherHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if any(event.src_path.endswith(ext) for ext in self.supported_extensions):
+            file_path = Path(event.src_path)
+            if not file_path.is_absolute():
+                file_path = (self.analyzer.project_root / file_path).resolve()
+            if self.analyzer._is_ignored_path(file_path):
+                logging.info("Ignoring gitignored path: %s", file_path)
+                return
+
             logging.info(f"File modified: {event.src_path}")
             loop = getattr(self.analyzer, "loop", None)
             if not loop or loop.is_closed() or not loop.is_running():
@@ -64,6 +73,7 @@ class MCPAnalyzer:
         """
         self.config = config
         root = Path(config.get('project_root', '.')).resolve()
+        self.project_root = root
         language = config.get('language', 'python').lower()
         logging.info(f"Initializing MCPAnalyzer with root: {root}, language: {language}")
         
@@ -380,6 +390,13 @@ class MCPAnalyzer:
                     logging.warning(f"Could not add edge {edge.caller} -> {edge.callee}: {e2}")
 
     async def _incremental_update(self, file_path: str):
+        resolved_path = Path(file_path)
+        if not resolved_path.is_absolute():
+            resolved_path = (self.project_root / resolved_path).resolve()
+        if self._is_ignored_path(resolved_path):
+            logging.info("Skipping incremental update for gitignored path: %s", resolved_path)
+            return
+
         logging.info(f"Starting incremental update for {file_path}")
         await asyncio.sleep(1)  # Debounce stub
         
@@ -408,6 +425,13 @@ class MCPAnalyzer:
                 # Enqueue for summarization if enabled
                 if self.summary_processor:
                     self.summary_processor.enqueue(element.fqn)
+
+    def _is_ignored_path(self, file_path: Path) -> bool:
+        patterns_with_dirs = get_gitignore_patterns(file_path.parent)
+        return any(
+            match_file_against_pattern(file_path, pattern, gitignore_dir, self.project_root)
+            for pattern, gitignore_dir in patterns_with_dirs
+        )
 
     async def cleanup_stale_references(self) -> Dict[str, Any]:
         """
