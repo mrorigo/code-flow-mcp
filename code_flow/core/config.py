@@ -22,7 +22,7 @@ from code_flow.core.drift_config import (
 DEFAULT_CONFIG_PATH = "codeflow.config.yaml"
 DEFAULT_WATCH_DIRECTORIES = ["."]
 DEFAULT_IGNORED_PATTERNS = ["venv", "**/__pycache__", ".git", ".idea", ".vscode", "node_modules"]
-DEFAULT_CHROMADB_PATH = "./code_vectors_chroma"
+DEFAULT_CHROMADB_PATH = "./.codeflow/chroma"
 DEFAULT_PROJECT_ROOT = None
 DEFAULT_CODEFLOW_DIR = ".codeflow"
 DEFAULT_MAX_GRAPH_DEPTH = 3

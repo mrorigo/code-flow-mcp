@@ -49,7 +49,6 @@ def test_config_load():
         "chroma_dir": "./.codeflow/chroma",
         "memory_dir": "./.codeflow/memory",
         "reports_dir": "./.codeflow/reports",
-        "chromadb_path": "./code_vectors_chroma",
         "max_graph_depth": 3
     }
     with patch('yaml.safe_load', return_value=mock_config) as mock_yaml:

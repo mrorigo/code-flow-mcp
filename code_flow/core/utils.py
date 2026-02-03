@@ -240,6 +240,19 @@ def get_gitignore_patterns(directory: Path) -> List[Tuple[str, Path]]:
     return patterns_with_dirs
 
 
+def _normalize_gitignore_path(path_str: str) -> str:
+    """
+    Normalize paths for gitignore-style matching.
+
+    - Convert Windows separators to POSIX
+    - Trim leading './'
+    """
+    normalized = path_str.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
 def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Path, root_directory: Path) -> bool:
     """
     Match a file path against a gitignore pattern, considering the pattern's origin directory
@@ -254,6 +267,12 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
     Returns:
         True if file matches pattern (should be ignored), False otherwise
     """
+    pattern = pattern.strip()
+    if not pattern:
+        return False
+
+    pattern = pattern.replace("\\", "/")
+
     # Handle root-relative patterns (starting with /)
     is_root_relative = pattern.startswith('/')
     if is_root_relative:
@@ -263,7 +282,7 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
     try:
         # Path relative to where the .gitignore file lives
         relative_to_gitignore_dir = file_path.relative_to(gitignore_dir)
-        rel_str_gitignore = str(relative_to_gitignore_dir)
+        rel_str_gitignore = _normalize_gitignore_path(str(relative_to_gitignore_dir))
     except ValueError:
         # File is not within the directory containing the .gitignore, so it can't be ignored by it.
         return False
@@ -271,15 +290,26 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
     # Path relative to the main analysis root directory (for patterns like 'docs/conf.py')
     try:
         relative_to_root_dir = file_path.relative_to(root_directory)
-        rel_str_root = str(relative_to_root_dir)
+        rel_str_root = _normalize_gitignore_path(str(relative_to_root_dir))
     except ValueError:
         # This should generally not happen if file_path is within root_directory
         rel_str_root = rel_str_gitignore  # Fallback, though less precise
 
     # Check if the pattern is a directory (ends with /)
     if pattern.endswith('/'):
-        # Match against path relative to gitignore_dir
-        return rel_str_gitignore.startswith(pattern[:-1] + os.sep) or rel_str_gitignore == pattern[:-1]
+        dir_pattern = _normalize_gitignore_path(pattern[:-1])
+        if not dir_pattern:
+            return False
+
+        if is_root_relative:
+            return rel_str_root == dir_pattern or rel_str_root.startswith(dir_pattern + "/")
+
+        # Non-root directory pattern: if it has no slash, match any directory segment
+        if "/" not in dir_pattern:
+            return dir_pattern in rel_str_gitignore.split("/")
+
+        # Otherwise, match relative to the gitignore directory
+        return rel_str_gitignore == dir_pattern or rel_str_gitignore.startswith(dir_pattern + "/")
     else:
         # For root-relative patterns, we need to match against the root-relative path
         if is_root_relative:
@@ -301,7 +331,7 @@ def match_file_against_pattern(file_path: Path, pattern: str, gitignore_dir: Pat
             # if any part of the path (relative to gitignore_dir) matches it.
             # E.g., pattern 'build' should match 'path/to/build/file.py' or 'path/to/build.py'
             if '/' not in pattern and relative_to_gitignore_dir.parts:
-                for part in relative_to_gitignore_dir.parts:
+                for part in rel_str_gitignore.split("/"):
                     if fnmatch.fnmatch(part, pattern):
                         return True
 
@@ -1248,3 +1278,4 @@ def extract_typescript_dependencies(func_source: str, file_level_imports: Option
                 dependencies.add(import_name)
 
     return sorted(list(dependencies))
+

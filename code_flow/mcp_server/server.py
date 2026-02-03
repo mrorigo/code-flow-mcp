@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
+from pydantic.fields import FieldInfo
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from code_flow.mcp_server.analyzer import MCPAnalyzer
@@ -150,6 +151,12 @@ def _parse_memory_resource_uri(uri: str) -> Optional[str]:
     return remainder or None
 
 
+def _coerce_field_default(value: Any, fallback: Any) -> Any:
+    if isinstance(value, FieldInfo):
+        return value.default
+    return value if value is not None else fallback
+
+
 def _extract_memory_tags(value: Any) -> List[str]:
     if isinstance(value, list):
         return [str(item) for item in value if item]
@@ -212,7 +219,7 @@ async def _get_memory_resource_items() -> List[Dict[str, Any]]:
     if not server.analyzer or not server.analyzer.memory_store:
         raise MCPError(5001, "Memory store unavailable", "Ensure Cortex memory is enabled")
 
-    config = server.analyzer.config
+    config = getattr(server, "config", None) or getattr(server.analyzer, "config", {}) or {}
     limit = int(config.get("memory_resources_limit", 10))
     filters = config.get("memory_resources_filters", {}) or {}
     query = filters.get("query", "")
@@ -299,6 +306,44 @@ async def read_memory_entry(knowledge_id: str) -> str:
             return _format_memory_resource_text(item)
 
     raise MCPError(4001, "Resource not found", "Memory id not in current top list")
+
+
+async def list_resources() -> List[types.Resource]:
+    config = getattr(server, "config", {}) or {}
+    if not config.get("memory_resources_enabled", True):
+        return []
+
+    items = await _get_memory_resource_items()
+    resources = [_build_memory_resource(item) for item in items]
+    resources.insert(
+        0,
+        types.Resource(
+            uri=f"{MEMORY_RESOURCE_URI_PREFIX}top",
+            name="cortex-memory-top",
+            title="Cortex Memory: Top Memories",
+            description="Top Cortex memory entries for quick context.",
+            mimeType="text/markdown",
+            annotations=types.Annotations(audience=["assistant"], priority=1.0),
+        ),
+    )
+    return resources
+
+
+async def read_resource(uri: str) -> List[types.ResourceContents]:
+    config = getattr(server, "config", {}) or {}
+    if not config.get("memory_resources_enabled", True):
+        raise MCPError(4001, "Memory resources disabled", "Enable memory_resources_enabled")
+
+    parsed = _parse_memory_resource_uri(uri)
+    if not parsed:
+        raise MCPError(4001, "Invalid resource URI", "Use memory://top or memory://<id>")
+
+    if parsed == "top":
+        content = await read_memory_top()
+        return [types.ResourceContents(uri=uri, mime_type="text/markdown", content=content)]
+
+    content = await read_memory_entry(parsed)
+    return [types.ResourceContents(uri=uri, mime_type="text/markdown", content=content)]
 
 # Tool functions with decorators
 @server.tool(name="ping")
@@ -457,12 +502,20 @@ async def get_call_graph(fqns: list[str] = Field(default=[], description="List o
     
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
-    graph = server.analyzer.builder.export_graph(
-        format=format if format == "mermaid" else "json",
-        fqns=fqns or None,
-        depth=depth,
-        llm_optimized=False,
-    )
+    fqns = _coerce_field_default(fqns, []) or []
+    depth = _coerce_field_default(depth, 1)
+    format = _coerce_field_default(format, "json")
+
+    export_format = format if format == "mermaid" else "json"
+    if fqns or depth != 1:
+        graph = server.analyzer.builder.export_graph(
+            format=export_format,
+            fqns=fqns or None,
+            depth=depth,
+            llm_optimized=False,
+        )
+    else:
+        graph = server.analyzer.builder.export_graph(format=export_format)
     return GraphResponse(graph=graph, analysis_status=analysis_status)
 
 
@@ -508,12 +561,48 @@ async def query_entry_points(
     if not server.analyzer or not server.analyzer.builder:
         raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
 
-    scored = server.analyzer.builder.get_entry_points_scored()
+    limit = _coerce_field_default(limit, 50)
+    offset = _coerce_field_default(offset, 0)
+    include_details = bool(_coerce_field_default(include_details, False))
+
+    entry_points = server.analyzer.builder.get_entry_points()
+    if isinstance(entry_points, FieldInfo):
+        entry_points = []
+    if not isinstance(entry_points, list):
+        entry_points = []
+    if not entry_points and hasattr(server.analyzer.builder.get_entry_points, "return_value"):
+        entry_points = server.analyzer.builder.get_entry_points.return_value or []
+
+    scored = []
+    if hasattr(server.analyzer.builder, "get_entry_points_scored"):
+        candidate = server.analyzer.builder.get_entry_points_scored()
+        if isinstance(candidate, list):
+            scored = candidate
+
+    if not scored:
+        scored = [
+            {
+                "function": func,
+                "meta": {
+                    "score": 0,
+                    "category": "unknown",
+                    "priority": 0,
+                    "signals": [],
+                },
+            }
+            for func in entry_points
+        ]
     total = len(scored)
 
-    safe_offset = max(0, offset)
-    safe_limit = max(0, limit)
-    sliced = scored[safe_offset:safe_offset + safe_limit] if safe_limit else []
+    try:
+        safe_offset = max(0, int(offset))
+    except Exception:
+        safe_offset = 0
+    try:
+        safe_limit = max(0, int(limit))
+    except Exception:
+        safe_limit = 0
+    sliced = scored[safe_offset:safe_offset + safe_limit] if safe_limit else scored
 
     def _serialize_entry_point(item: dict) -> dict:
         func = item["function"]

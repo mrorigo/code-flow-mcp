@@ -3,103 +3,100 @@
     "total_functions": 15,
     "total_methods": 14,
     "total_async": 12,
-    "total_edges": 79,
+    "total_edges": 67,
     "total_modules": 1,
     "entry_points_count": 15,
-    "avg_degree": 5.27
+    "avg_degree": 4.47
   },
   "entry_points": [
     {
-      "name": "findUser",
-      "fully_qualified_name": "src.index.ts.findUser",
+      "name": "main",
+      "fully_qualified_name": "src.index.ts.main",
       "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 21,
-      "line_end": 24,
+      "line_number": 161,
+      "line_end": 183,
+      "is_method": false,
+      "class_name": null,
+      "is_async": true,
+      "has_docstring": false,
+      "incoming_connections": 2,
+      "outgoing_connections": 12,
+      "parameters": [],
+      "complexity": 2,
+      "nloc": 16,
+      "external_dependencies": [],
+      "decorators": [],
+      "catches_exceptions": [],
+      "local_variables_declared": [],
+      "hash_body": "ea430035c1cdad94a7453a25eebc59b6",
+      "entry_point_score": 1,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "runtime_name",
+        "top_level",
+        "high_fanout"
+      ]
+    },
+    {
+      "name": "initialize",
+      "fully_qualified_name": "src.index.ts.initialize",
+      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+      "line_number": 110,
+      "line_end": 117,
       "is_method": true,
-      "class_name": "Database",
+      "class_name": "Application",
+      "is_async": true,
+      "has_docstring": false,
+      "incoming_connections": 0,
+      "outgoing_connections": 3,
+      "parameters": [],
+      "complexity": 2,
+      "nloc": 4,
+      "external_dependencies": [],
+      "decorators": [],
+      "catches_exceptions": [],
+      "local_variables_declared": [],
+      "hash_body": "b7d1f0939ccb40e4c174f95d979ba552",
+      "entry_point_score": -4,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "no_incoming",
+        "moderate_fanout",
+        "method_penalty"
+      ]
+    },
+    {
+      "name": "createSampleData",
+      "fully_qualified_name": "src.index.ts.createSampleData",
+      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+      "line_number": 119,
+      "line_end": 149,
+      "is_method": true,
+      "class_name": "Application",
       "is_async": true,
       "has_docstring": false,
       "incoming_connections": 5,
-      "outgoing_connections": 2,
-      "parameters": [
-        "id: number"
-      ],
+      "outgoing_connections": 10,
+      "parameters": [],
       "complexity": 2,
-      "nloc": 3,
+      "nloc": 23,
       "external_dependencies": [],
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "4c2d24960e86ea2465c4944fdd3f0e8e"
-    },
-    {
-      "name": "findUsersByName",
-      "fully_qualified_name": "src.index.ts.findUsersByName",
-      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 26,
-      "line_end": 28,
-      "is_method": true,
-      "class_name": "Database",
-      "is_async": true,
-      "has_docstring": false,
-      "incoming_connections": 8,
-      "outgoing_connections": 2,
-      "parameters": [
-        "name: string"
-      ],
-      "complexity": 2,
-      "nloc": 2,
-      "external_dependencies": [],
-      "decorators": [],
-      "catches_exceptions": [],
-      "local_variables_declared": [],
-      "hash_body": "fbf1e1449e7f671d5821f363c6f5a086"
-    },
-    {
-      "name": "createUser",
-      "fully_qualified_name": "src.index.ts.createUser",
-      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 30,
-      "line_end": 39,
-      "is_method": true,
-      "class_name": "Database",
-      "is_async": true,
-      "has_docstring": false,
-      "incoming_connections": 5,
-      "outgoing_connections": 2,
-      "parameters": [
-        "userData: Omit<User, 'id' | 'createdAt'>"
-      ],
-      "complexity": 2,
-      "nloc": 7,
-      "external_dependencies": [],
-      "decorators": [],
-      "catches_exceptions": [],
-      "local_variables_declared": [],
-      "hash_body": "f5b957479d17b351650f4f36a73ee6cb"
-    },
-    {
-      "name": "findProduct",
-      "fully_qualified_name": "src.index.ts.findProduct",
-      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 41,
-      "line_end": 44,
-      "is_method": true,
-      "class_name": "Database",
-      "is_async": true,
-      "has_docstring": false,
-      "incoming_connections": 5,
-      "outgoing_connections": 2,
-      "parameters": [
-        "id: number"
-      ],
-      "complexity": 2,
-      "nloc": 3,
-      "external_dependencies": [],
-      "decorators": [],
-      "catches_exceptions": [],
-      "local_variables_declared": [],
-      "hash_body": "ee64c4a2580dfe3fe5154fc2e3707e7d"
+      "hash_body": "b924bde3588e45c34edb52a91ace869a",
+      "entry_point_score": -4,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "high_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "createProduct",
@@ -111,8 +108,8 @@
       "class_name": "ProductService",
       "is_async": true,
       "has_docstring": false,
-      "incoming_connections": 13,
-      "outgoing_connections": 7,
+      "incoming_connections": 10,
+      "outgoing_connections": 6,
       "parameters": [
         "productData: Omit<Product, 'id'>"
       ],
@@ -122,7 +119,15 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "f815902afe680ec5548c3f8bf6f3c60f"
+      "hash_body": "f815902afe680ec5548c3f8bf6f3c60f",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "constructor",
@@ -143,7 +148,15 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "219d3898d23189c18fef7fe2ee797043"
+      "hash_body": "219d3898d23189c18fef7fe2ee797043",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "getUserById",
@@ -156,7 +169,7 @@
       "is_async": true,
       "has_docstring": false,
       "incoming_connections": 2,
-      "outgoing_connections": 5,
+      "outgoing_connections": 4,
       "parameters": [
         "id: number"
       ],
@@ -166,7 +179,15 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "f3ea37a4011feaf643253faf44513c47"
+      "hash_body": "f3ea37a4011feaf643253faf44513c47",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "searchUsers",
@@ -178,8 +199,8 @@
       "class_name": "UserService",
       "is_async": true,
       "has_docstring": false,
-      "incoming_connections": 5,
-      "outgoing_connections": 5,
+      "incoming_connections": 4,
+      "outgoing_connections": 4,
       "parameters": [
         "query: string"
       ],
@@ -189,7 +210,15 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "d91b51bb65578735bea2a226d3ecacb3"
+      "hash_body": "d91b51bb65578735bea2a226d3ecacb3",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "registerUser",
@@ -201,8 +230,8 @@
       "class_name": "UserService",
       "is_async": true,
       "has_docstring": false,
-      "incoming_connections": 8,
-      "outgoing_connections": 8,
+      "incoming_connections": 6,
+      "outgoing_connections": 6,
       "parameters": [
         "userData: Omit<User, 'id' | 'createdAt'>"
       ],
@@ -212,7 +241,15 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "1f98bb778ebd2209230d84fe6d6c70bf"
+      "hash_body": "1f98bb778ebd2209230d84fe6d6c70bf",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
       "name": "getProductById",
@@ -225,7 +262,7 @@
       "is_async": true,
       "has_docstring": false,
       "incoming_connections": 6,
-      "outgoing_connections": 5,
+      "outgoing_connections": 4,
       "parameters": [
         "id: number"
       ],
@@ -235,49 +272,135 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "9b1539b509f40e0cf34dd2d4de1303ca"
+      "hash_body": "9b1539b509f40e0cf34dd2d4de1303ca",
+      "entry_point_score": -5,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "moderate_fanout",
+        "method_penalty"
+      ]
     },
     {
-      "name": "initialize",
-      "fully_qualified_name": "src.index.ts.initialize",
+      "name": "findUser",
+      "fully_qualified_name": "src.index.ts.findUser",
       "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 110,
-      "line_end": 117,
+      "line_number": 21,
+      "line_end": 24,
       "is_method": true,
-      "class_name": "Application",
+      "class_name": "Database",
       "is_async": true,
       "has_docstring": false,
-      "incoming_connections": 1,
-      "outgoing_connections": 3,
-      "parameters": [],
+      "incoming_connections": 4,
+      "outgoing_connections": 2,
+      "parameters": [
+        "id: number"
+      ],
       "complexity": 2,
-      "nloc": 4,
+      "nloc": 3,
       "external_dependencies": [],
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "b7d1f0939ccb40e4c174f95d979ba552"
+      "hash_body": "4c2d24960e86ea2465c4944fdd3f0e8e",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
     },
     {
-      "name": "createSampleData",
-      "fully_qualified_name": "src.index.ts.createSampleData",
+      "name": "findUsersByName",
+      "fully_qualified_name": "src.index.ts.findUsersByName",
       "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 119,
-      "line_end": 149,
+      "line_number": 26,
+      "line_end": 28,
       "is_method": true,
-      "class_name": "Application",
+      "class_name": "Database",
       "is_async": true,
       "has_docstring": false,
-      "incoming_connections": 5,
-      "outgoing_connections": 14,
-      "parameters": [],
+      "incoming_connections": 6,
+      "outgoing_connections": 2,
+      "parameters": [
+        "name: string"
+      ],
       "complexity": 2,
-      "nloc": 23,
+      "nloc": 2,
       "external_dependencies": [],
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "b924bde3588e45c34edb52a91ace869a"
+      "hash_body": "fbf1e1449e7f671d5821f363c6f5a086",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
+    },
+    {
+      "name": "createUser",
+      "fully_qualified_name": "src.index.ts.createUser",
+      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+      "line_number": 30,
+      "line_end": 39,
+      "is_method": true,
+      "class_name": "Database",
+      "is_async": true,
+      "has_docstring": false,
+      "incoming_connections": 4,
+      "outgoing_connections": 2,
+      "parameters": [
+        "userData: Omit<User, 'id' | 'createdAt'>"
+      ],
+      "complexity": 2,
+      "nloc": 7,
+      "external_dependencies": [],
+      "decorators": [],
+      "catches_exceptions": [],
+      "local_variables_declared": [],
+      "hash_body": "f5b957479d17b351650f4f36a73ee6cb",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
+    },
+    {
+      "name": "findProduct",
+      "fully_qualified_name": "src.index.ts.findProduct",
+      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+      "line_number": 41,
+      "line_end": 44,
+      "is_method": true,
+      "class_name": "Database",
+      "is_async": true,
+      "has_docstring": false,
+      "incoming_connections": 4,
+      "outgoing_connections": 2,
+      "parameters": [
+        "id: number"
+      ],
+      "complexity": 2,
+      "nloc": 3,
+      "external_dependencies": [],
+      "decorators": [],
+      "catches_exceptions": [],
+      "local_variables_declared": [],
+      "hash_body": "ee64c4a2580dfe3fe5154fc2e3707e7d",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
     },
     {
       "name": "getUserService",
@@ -298,7 +421,14 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "d1de7078b3d644df35ab89b485300164"
+      "hash_body": "d1de7078b3d644df35ab89b485300164",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
     },
     {
       "name": "getProductService",
@@ -319,32 +449,18 @@
       "decorators": [],
       "catches_exceptions": [],
       "local_variables_declared": [],
-      "hash_body": "5cc99004d17e9e868b293d3cffeea3b5"
-    },
-    {
-      "name": "main",
-      "fully_qualified_name": "src.index.ts.main",
-      "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-      "line_number": 161,
-      "line_end": 183,
-      "is_method": false,
-      "class_name": null,
-      "is_async": true,
-      "has_docstring": false,
-      "incoming_connections": 2,
-      "outgoing_connections": 14,
-      "parameters": [],
-      "complexity": 2,
-      "nloc": 16,
-      "external_dependencies": [],
-      "decorators": [],
-      "catches_exceptions": [],
-      "local_variables_declared": [],
-      "hash_body": "ea430035c1cdad94a7453a25eebc59b6"
+      "hash_body": "5cc99004d17e9e868b293d3cffeea3b5",
+      "entry_point_score": -6,
+      "entry_point_category": "test",
+      "entry_point_priority": "low",
+      "entry_point_signals": [
+        "test_path",
+        "method_penalty"
+      ]
     }
   ],
   "classes_summary": {
-    "total": 4,
+    "total": 6,
     "with_methods": 4,
     "with_inheritance": 0
   },
@@ -369,7 +485,7 @@
           "id: number"
         ],
         "docstring": null,
-        "incoming_count": 5,
+        "incoming_count": 4,
         "outgoing_count": 2,
         "return_type": ": Promise<User | null>",
         "access_modifier": "public",
@@ -395,7 +511,7 @@
           "name: string"
         ],
         "docstring": null,
-        "incoming_count": 8,
+        "incoming_count": 6,
         "outgoing_count": 2,
         "return_type": ": Promise<User[]>",
         "access_modifier": "public",
@@ -421,7 +537,7 @@
           "userData: Omit<User, 'id' | 'createdAt'>"
         ],
         "docstring": null,
-        "incoming_count": 5,
+        "incoming_count": 4,
         "outgoing_count": 2,
         "return_type": ": Promise<User>",
         "access_modifier": "public",
@@ -447,7 +563,7 @@
           "id: number"
         ],
         "docstring": null,
-        "incoming_count": 5,
+        "incoming_count": 4,
         "outgoing_count": 2,
         "return_type": ": Promise<Product | null>",
         "access_modifier": "public",
@@ -473,8 +589,8 @@
           "productData: Omit<Product, 'id'>"
         ],
         "docstring": null,
-        "incoming_count": 13,
-        "outgoing_count": 7,
+        "incoming_count": 10,
+        "outgoing_count": 6,
         "return_type": ": Promise<Product>",
         "access_modifier": "public",
         "complexity": 3,
@@ -524,7 +640,7 @@
         ],
         "docstring": null,
         "incoming_count": 2,
-        "outgoing_count": 5,
+        "outgoing_count": 4,
         "return_type": ": Promise<User | null>",
         "access_modifier": "public",
         "complexity": 2,
@@ -549,8 +665,8 @@
           "query: string"
         ],
         "docstring": null,
-        "incoming_count": 5,
-        "outgoing_count": 5,
+        "incoming_count": 4,
+        "outgoing_count": 4,
         "return_type": ": Promise<User[]>",
         "access_modifier": "public",
         "complexity": 2,
@@ -575,8 +691,8 @@
           "userData: Omit<User, 'id' | 'createdAt'>"
         ],
         "docstring": null,
-        "incoming_count": 8,
-        "outgoing_count": 8,
+        "incoming_count": 6,
+        "outgoing_count": 6,
         "return_type": ": Promise<User>",
         "access_modifier": "public",
         "complexity": 4,
@@ -602,7 +718,7 @@
         ],
         "docstring": null,
         "incoming_count": 6,
-        "outgoing_count": 5,
+        "outgoing_count": 4,
         "return_type": ": Promise<Product | null>",
         "access_modifier": "public",
         "complexity": 2,
@@ -625,7 +741,7 @@
         "class_name": "Application",
         "parameters": [],
         "docstring": null,
-        "incoming_count": 1,
+        "incoming_count": 0,
         "outgoing_count": 3,
         "return_type": ": Promise<void>",
         "access_modifier": "public",
@@ -650,7 +766,7 @@
         "parameters": [],
         "docstring": null,
         "incoming_count": 5,
-        "outgoing_count": 14,
+        "outgoing_count": 10,
         "return_type": ": Promise<void>",
         "access_modifier": "public",
         "complexity": 2,
@@ -722,7 +838,7 @@
         "parameters": [],
         "docstring": null,
         "incoming_count": 2,
-        "outgoing_count": 14,
+        "outgoing_count": 12,
         "return_type": ": Promise<void>",
         "access_modifier": "public",
         "complexity": 2,
@@ -742,7 +858,7 @@
         "line_number": 38,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.findUser",
@@ -751,7 +867,7 @@
         "line_number": 38,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.findUsersByName",
@@ -760,7 +876,7 @@
         "line_number": 43,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.findUsersByName",
@@ -769,7 +885,7 @@
         "line_number": 43,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createUser",
@@ -778,7 +894,7 @@
         "line_number": 47,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createUser",
@@ -787,7 +903,7 @@
         "line_number": 47,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.findProduct",
@@ -796,7 +912,7 @@
         "line_number": 58,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.findProduct",
@@ -805,7 +921,7 @@
         "line_number": 58,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createProduct",
@@ -814,7 +930,7 @@
         "line_number": 63,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createProduct",
@@ -823,7 +939,7 @@
         "line_number": 63,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
@@ -832,22 +948,13 @@
         "line_number": 62,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
         "callee": "src.index.ts.constructor",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
         "line_number": 62,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.getUserById",
-        "callee": "src.index.ts.findUser",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 140,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -859,7 +966,7 @@
         "line_number": 77,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getUserById",
@@ -868,7 +975,7 @@
         "line_number": 154,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getUserById",
@@ -877,7 +984,7 @@
         "line_number": 77,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getUserById",
@@ -886,13 +993,22 @@
         "line_number": 154,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
+      },
+      {
+        "caller": "src.index.ts.searchUsers",
+        "callee": "src.index.ts.searchUsers",
+        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+        "line_number": 81,
+        "call_type": "method",
+        "parameters": [],
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.searchUsers",
         "callee": "src.index.ts.findUsersByName",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 142,
+        "line_number": 156,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -904,49 +1020,13 @@
         "line_number": 81,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.searchUsers",
-        "callee": "src.index.ts.findUsersByName",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 156,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.searchUsers",
-        "callee": "src.index.ts.searchUsers",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 81,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.searchUsers",
-        "callee": "src.index.ts.findUsersByName",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 156,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.registerUser",
-        "callee": "src.index.ts.findUsersByName",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 383,
-        "call_type": "method",
-        "parameters": [],
         "confidence": 0.95
       },
       {
-        "caller": "src.index.ts.registerUser",
-        "callee": "src.index.ts.createUser",
+        "caller": "src.index.ts.searchUsers",
+        "callee": "src.index.ts.findUsersByName",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 590,
+        "line_number": 156,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -958,7 +1038,7 @@
         "line_number": 85,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.registerUser",
@@ -967,7 +1047,7 @@
         "line_number": 397,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.registerUser",
@@ -976,7 +1056,7 @@
         "line_number": 604,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.registerUser",
@@ -985,7 +1065,7 @@
         "line_number": 85,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.registerUser",
@@ -994,7 +1074,7 @@
         "line_number": 397,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.registerUser",
@@ -1003,7 +1083,7 @@
         "line_number": 604,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
@@ -1012,22 +1092,13 @@
         "line_number": 89,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
         "callee": "src.index.ts.constructor",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
         "line_number": 89,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.getProductById",
-        "callee": "src.index.ts.findProduct",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 173,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -1039,7 +1110,7 @@
         "line_number": 104,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getProductById",
@@ -1048,7 +1119,7 @@
         "line_number": 187,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getProductById",
@@ -1057,22 +1128,13 @@
         "line_number": 104,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getProductById",
         "callee": "src.index.ts.findProduct",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
         "line_number": 187,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.createProduct",
-        "callee": "src.index.ts.createProduct",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 336,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -1084,7 +1146,7 @@
         "line_number": 108,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createProduct",
@@ -1093,7 +1155,7 @@
         "line_number": 350,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createProduct",
@@ -1102,7 +1164,7 @@
         "line_number": 108,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createProduct",
@@ -1111,7 +1173,7 @@
         "line_number": 350,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
@@ -1120,7 +1182,7 @@
         "line_number": 108,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.constructor",
@@ -1129,7 +1191,7 @@
         "line_number": 108,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.initialize",
@@ -1138,7 +1200,7 @@
         "line_number": 254,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.initialize",
@@ -1147,49 +1209,13 @@
         "line_number": 259,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.initialize",
         "callee": "src.index.ts.createSampleData",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
         "line_number": 259,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.createSampleData",
-        "callee": "src.index.ts.registerUser",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 240,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.95
-      },
-      {
-        "caller": "src.index.ts.createSampleData",
-        "callee": "src.index.ts.registerUser",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 383,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.95
-      },
-      {
-        "caller": "src.index.ts.createSampleData",
-        "callee": "src.index.ts.createProduct",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 566,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.95
-      },
-      {
-        "caller": "src.index.ts.createSampleData",
-        "callee": "src.index.ts.createProduct",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 740,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -1201,7 +1227,7 @@
         "line_number": 137,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1210,7 +1236,7 @@
         "line_number": 257,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1219,7 +1245,7 @@
         "line_number": 400,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1228,7 +1254,7 @@
         "line_number": 586,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1237,7 +1263,7 @@
         "line_number": 760,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1246,7 +1272,7 @@
         "line_number": 137,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1255,7 +1281,7 @@
         "line_number": 257,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1264,7 +1290,7 @@
         "line_number": 400,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1273,7 +1299,7 @@
         "line_number": 586,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.createSampleData",
@@ -1282,58 +1308,40 @@
         "line_number": 760,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.getUserService",
         "callee": "src.index.ts.getUserService",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
         "line_number": 162,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.getUserService",
-        "callee": "src.index.ts.getUserService",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 162,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.getProductService",
-        "callee": "src.index.ts.getProductService",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 166,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.getProductService",
-        "callee": "src.index.ts.getProductService",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 166,
-        "call_type": "method",
-        "parameters": [],
-        "confidence": 0.85
-      },
-      {
-        "caller": "src.index.ts.main",
-        "callee": "src.index.ts.initialize",
-        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 261,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
       },
       {
-        "caller": "src.index.ts.main",
-        "callee": "src.index.ts.searchUsers",
+        "caller": "src.index.ts.getUserService",
+        "callee": "src.index.ts.getUserService",
         "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
-        "line_number": 358,
+        "line_number": 162,
+        "call_type": "method",
+        "parameters": [],
+        "confidence": 0.95
+      },
+      {
+        "caller": "src.index.ts.getProductService",
+        "callee": "src.index.ts.getProductService",
+        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+        "line_number": 166,
+        "call_type": "method",
+        "parameters": [],
+        "confidence": 0.95
+      },
+      {
+        "caller": "src.index.ts.getProductService",
+        "callee": "src.index.ts.getProductService",
+        "file_path": "/Users/origo/src/flowcode/code-flow-mcp/tests/typescript/sample_projects/basic/src/index.ts",
+        "line_number": 166,
         "call_type": "method",
         "parameters": [],
         "confidence": 0.95
@@ -1345,7 +1353,7 @@
         "line_number": 183,
         "call_type": "direct",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1354,7 +1362,7 @@
         "line_number": 318,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1363,7 +1371,7 @@
         "line_number": 376,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1372,7 +1380,7 @@
         "line_number": 478,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1381,7 +1389,7 @@
         "line_number": 571,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1390,7 +1398,7 @@
         "line_number": 617,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1399,7 +1407,7 @@
         "line_number": 183,
         "call_type": "direct",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1408,7 +1416,7 @@
         "line_number": 318,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1417,7 +1425,7 @@
         "line_number": 376,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1426,7 +1434,7 @@
         "line_number": 478,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1435,7 +1443,7 @@
         "line_number": 571,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       },
       {
         "caller": "src.index.ts.main",
@@ -1444,7 +1452,7 @@
         "line_number": 617,
         "call_type": "method",
         "parameters": [],
-        "confidence": 0.85
+        "confidence": 0.95
       }
     ],
     "entry_points": [
@@ -1468,10 +1476,11 @@
       "total_functions": 15,
       "total_methods": 14,
       "total_async": 12,
-      "total_edges": 79,
+      "total_edges": 67,
       "total_modules": 1,
       "entry_points_count": 15,
-      "avg_degree": 5.27
+      "avg_degree": 4.47
     }
-  }
+  },
+  "vector_store_enabled": true
 }

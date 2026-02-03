@@ -294,6 +294,23 @@ def root_dist_function():
         assert 'nested_build_function' in func_names   # Should NOT be ignored by /build/
         assert 'root_dist_function' not in func_names  # Should be ignored by /dist/
 
+    def test_gitignore_directory_patterns_with_leading_dot_slash(self, python_extractor, temp_dir):
+        """Test directory patterns with leading ./ for path normalization."""
+        gitignore = temp_dir / ".gitignore"
+        gitignore.write_text("./node_modules/\n")
+
+        root_node_modules = temp_dir / "node_modules"
+        root_node_modules.mkdir()
+        (root_node_modules / "package.py").write_text('''
+def package_function():
+    return "package"
+''')
+
+        elements = python_extractor.extract_from_directory(temp_dir)
+
+        func_names = {e.name for e in elements if e.kind == 'function'}
+        assert 'package_function' not in func_names  # Should be ignored by ./node_modules/
+
     def test_extract_from_nested_directory(self, python_extractor, temp_dir):
         """Test extraction from nested directory structure."""
         # Create nested structure

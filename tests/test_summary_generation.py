@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
-from code_flow.mcp_server.llm import SummaryGenerator, SummaryProcessor
+from code_flow.core.llm_summary import SummaryGenerator, SummaryProcessor
 from code_flow.core.call_graph_builder import FunctionNode
 
 class TestSummaryGeneration(unittest.IsolatedAsyncioTestCase):

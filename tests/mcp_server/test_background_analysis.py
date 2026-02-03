@@ -20,8 +20,7 @@ def test_analyzer_initial_state(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -38,8 +37,7 @@ def test_is_ready_before_analysis(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -57,8 +55,7 @@ async def test_start_analysis_creates_task(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -89,8 +86,7 @@ async def test_analysis_state_transitions(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -125,8 +121,7 @@ async def test_analysis_failure_handling(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -160,8 +155,7 @@ async def test_wait_for_analysis(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)
@@ -240,8 +234,7 @@ async def test_start_analysis_only_once(mock_core_components):
         'watch_directories': ['.'],
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
-        'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'reports_dir': './.codeflow/reports'
     }
     
     analyzer = MCPAnalyzer(config)

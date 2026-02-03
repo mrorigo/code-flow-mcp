@@ -43,7 +43,14 @@ class WatcherHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if any(event.src_path.endswith(ext) for ext in self.supported_extensions):
             logging.info(f"File modified: {event.src_path}")
-            asyncio.run_coroutine_threadsafe(self.analyzer._incremental_update(event.src_path), self.analyzer.loop)
+            loop = getattr(self.analyzer, "loop", None)
+            if not loop or loop.is_closed() or not loop.is_running():
+                logging.debug("Skipping incremental update: event loop is not available")
+                return
+            asyncio.run_coroutine_threadsafe(
+                self.analyzer._incremental_update(event.src_path),
+                loop,
+            )
 
 
 class MCPAnalyzer:
@@ -53,10 +60,10 @@ class MCPAnalyzer:
         """Initialize the analyzer with configuration.
 
         Args:
-            config: Configuration dictionary containing watch_directories, chromadb_path, and optional language
+            config: Configuration dictionary containing watch_directories, chroma_dir, and optional language
         """
         self.config = config
-        root = Path(config['project_root']).resolve()
+        root = Path(config.get('project_root', '.')).resolve()
         language = config.get('language', 'python').lower()
         logging.info(f"Initializing MCPAnalyzer with root: {root}, language: {language}")
         
@@ -87,23 +94,27 @@ class MCPAnalyzer:
         self.analysis_error: Optional[Exception] = None
 
         # Initialize vector store if path exists
-        chroma_path = Path(config['chroma_dir'])
-        chroma_path.mkdir(parents=True, exist_ok=True)
-        self.vector_store = CodeVectorStore(
-            persist_directory=str(chroma_path),
-            embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
-            max_tokens=config.get('max_tokens', 256)
-        )
+        chroma_dir = config.get('chroma_dir')
+        if chroma_dir:
+            chroma_path = Path(chroma_dir)
+            chroma_path.mkdir(parents=True, exist_ok=True)
+            self.vector_store = CodeVectorStore(
+                persist_directory=str(chroma_path),
+                embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
+                max_tokens=config.get('max_tokens', 256)
+            )
 
         # Initialize memory store if enabled
         if config.get('memory_enabled', True):
-            memory_path = Path(config['memory_dir'])
-            memory_path.mkdir(parents=True, exist_ok=True)
-            self.memory_store = CortexMemoryStore(
-                persist_directory=str(memory_path),
-                embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
-                collection_name=config.get('memory_collection_name', 'cortex_memory_v1'),
-            )
+            memory_dir = config.get('memory_dir')
+            if memory_dir:
+                memory_path = Path(memory_dir)
+                memory_path.mkdir(parents=True, exist_ok=True)
+                self.memory_store = CortexMemoryStore(
+                    persist_directory=str(memory_path),
+                    embedding_model_name=config.get('embedding_model', 'all-MiniLM-L6-v2'),
+                    collection_name=config.get('memory_collection_name', 'cortex_memory_v1'),
+                )
         elif not config.get('memory_enabled', True):
             logging.info("Cortex memory disabled")
 

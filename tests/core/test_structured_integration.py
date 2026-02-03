@@ -20,8 +20,8 @@ async def test_analyze_with_structured_data(mock_dependencies):
     
     config = {
         'watch_directories': ['.'],
-        'chromadb_path': './test_chroma',
-        'ignored_filenames': ['ignore.json']
+        'ignored_filenames': ['ignore.json'],
+        'memory_enabled': False
     }
     
     # Mock structured extractor
@@ -66,7 +66,7 @@ async def test_incremental_update_structured(mock_dependencies):
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'memory_enabled': False
     }
     
     with patch('pathlib.Path.exists', return_value=True):

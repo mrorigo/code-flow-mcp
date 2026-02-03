@@ -31,10 +31,9 @@ def test_mcp_analyzer_init(mock_core_components):
     config = {
         'project_root': '.',
         'watch_directories': ['.'],
-        'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'memory_enabled': False
     }
 
     analyzer = MCPAnalyzer(config)
@@ -42,20 +41,19 @@ def test_mcp_analyzer_init(mock_core_components):
     assert analyzer.config == config
     assert analyzer.extractor == mock_extractor.return_value
     assert analyzer.builder == mock_builder.return_value
-    assert analyzer.vector_store is None  # Since path doesn't exist
+    assert analyzer.vector_store is None
 
 
 def test_mcp_analyzer_init_rust(mock_core_components_rust):
     """Test MCPAnalyzer initialization for Rust."""
-    mock_extractor, mock_builder, _ = mock_core_components_rust
+    mock_extractor, mock_builder, mock_store = mock_core_components_rust
     config = {
         'project_root': '.',
         'watch_directories': ['.'],
-        'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma',
-        'language': 'rust'
+        'language': 'rust',
+        'memory_enabled': False
     }
 
     analyzer = MCPAnalyzer(config)
@@ -74,18 +72,16 @@ def test_mcp_analyzer_init_with_existing_store():
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './code_vectors_chroma',  # legacy field
-        'embedding_model': 'all-MiniLM-L6-v2'
+        'embedding_model': 'all-MiniLM-L6-v2',
+        'memory_enabled': False
     }
 
     with patch('code_flow.mcp_server.analyzer.Path.exists', return_value=True):
         with patch('code_flow.mcp_server.analyzer.CodeVectorStore') as mock_store:
             analyzer = MCPAnalyzer(config)
-            mock_store.assert_called_once_with(
-                persist_directory='./.codeflow/chroma',
-                embedding_model_name='all-MiniLM-L6-v2',
-                max_tokens=256
-            )
+            assert Path(mock_store.call_args.kwargs["persist_directory"]).as_posix().endswith(".codeflow/chroma")
+            assert mock_store.call_args.kwargs["embedding_model_name"] == "all-MiniLM-L6-v2"
+            assert mock_store.call_args.kwargs["max_tokens"] == 256
             assert analyzer.vector_store is not None
 
 
@@ -100,7 +96,7 @@ async def test_analyze(mock_core_components):
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'memory_enabled': False
     }
 
     # Mock elements
@@ -122,9 +118,11 @@ async def test_analyze(mock_core_components):
     ]
 
     analyzer = MCPAnalyzer(config)
+    analyzer.start_background_cleanup = MagicMock()
 
     # Mock the extractor
     analyzer.extractor.extract_from_directory = MagicMock(return_value=mock_elements)
+    analyzer.structured_extractor.extract_from_directory = MagicMock(return_value=[])
 
     # Mock builder
     analyzer.builder.build_from_elements = MagicMock()
@@ -132,10 +130,12 @@ async def test_analyze(mock_core_components):
 
     # Mock vector store if present
     if analyzer.vector_store:
-        analyzer.vector_store.add_function_node = MagicMock()
-        analyzer.vector_store.add_edge = MagicMock()
+        analyzer.vector_store.add_function_nodes_batch = MagicMock()
+        analyzer.vector_store.add_edges_batch = MagicMock()
 
-    await analyzer.analyze()
+    with patch('code_flow.mcp_server.analyzer.watchdog.observers.Observer') as mock_observer:
+        mock_observer.return_value = MagicMock()
+        await analyzer.analyze()
 
     # Verify calls
     analyzer.extractor.extract_from_directory.assert_called_once()
@@ -143,8 +143,8 @@ async def test_analyze(mock_core_components):
 
     # If vector store exists, check populate was called
     if analyzer.vector_store:
-        analyzer.vector_store.add_function_node.assert_called()
-        analyzer.vector_store.add_edge.assert_called()
+        analyzer.vector_store.add_function_nodes_batch.assert_called()
+        analyzer.vector_store.add_edges_batch.assert_called()
 
 
 @pytest.mark.asyncio
@@ -155,21 +155,24 @@ async def test_analyze_no_vector_store(mock_core_components):
     config = {
         'project_root': '.',
         'watch_directories': ['.'],
-        'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './nonexistent'
+        'memory_enabled': False
     }
 
     analyzer = MCPAnalyzer(config)
+    analyzer.start_background_cleanup = MagicMock()
     assert analyzer.vector_store is None
 
     # Mock extractor and builder
     analyzer.extractor.extract_from_directory = MagicMock(return_value=[])
+    analyzer.structured_extractor.extract_from_directory = MagicMock(return_value=[])
     analyzer.builder.build_from_elements = MagicMock()
 
     # Should not raise error
-    await analyzer.analyze()
+    with patch('code_flow.mcp_server.analyzer.watchdog.observers.Observer') as mock_observer:
+        mock_observer.return_value = MagicMock()
+        await analyzer.analyze()
 
     analyzer.extractor.extract_from_directory.assert_called_once()
     analyzer.builder.build_from_elements.assert_called_once()
@@ -186,8 +189,8 @@ async def test_populate_vector_store(mock_core_components):
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './code_vectors_chroma',
-        'embedding_model': 'all-MiniLM-L6-v2'
+        'embedding_model': 'all-MiniLM-L6-v2',
+        'memory_enabled': False
     }
 
     # Mock the store initialization
@@ -226,7 +229,7 @@ async def test_watcher_handler_on_modified(mock_core_components):
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
-        'chromadb_path': './test_chroma'
+        'memory_enabled': False
     }
 
     analyzer = MCPAnalyzer(config)

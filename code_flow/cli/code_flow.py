@@ -363,6 +363,8 @@ class CodeGraphAnalyzer:
 
     def _export_metrics(self, report: Dict[str, Any]) -> None:
         config = load_config()
+        if self.root_directory:
+            config.project_root = str(self.root_directory)
         config.reports_dir().mkdir(parents=True, exist_ok=True)
         metrics_path = config.reports_dir() / "call_graph_metrics.json"
         markdown_path = config.reports_dir() / "call_graph_metrics.md"
@@ -518,6 +520,10 @@ class CodeGraphAnalyzer:
             print(f"📄 Report exported to {output_path}")
         except Exception as e:
             print(f"❌ Error writing report to {output_path}: {e}", file=sys.stderr)
+        try:
+            self._export_metrics(report)
+        except Exception as e:
+            print(f"⚠️  Skipping metrics export: {e}", file=sys.stderr)
 
 def _memory_command(config, args) -> int:
     from code_flow.core.cortex_memory import CortexMemoryStore
@@ -611,7 +617,9 @@ def _add_common_flags(parser: argparse.ArgumentParser) -> None:
 
 def _resolve_config_and_root(args: argparse.Namespace):
     cli_overrides = {}
+    explicit_directory = getattr(args, "directory", None)
     if getattr(args, "directory", None):
+        cli_overrides['project_root'] = str(Path(args.directory).resolve())
         cli_overrides['watch_directories'] = [str(Path(args.directory).resolve())]
     if getattr(args, "language", None):
         cli_overrides['language'] = args.language
@@ -624,6 +632,9 @@ def _resolve_config_and_root(args: argparse.Namespace):
     config = load_config(config_path=getattr(args, "config", None), cli_args=cli_overrides)
 
     root_dir = config.require_project_root()
+    if explicit_directory:
+        root_dir = Path(explicit_directory).resolve()
+        config.project_root = str(root_dir)
 
     if not config.project_root:
         raise ValueError("project_root is required; set it in codeflow.config.yaml")
@@ -647,22 +658,26 @@ def _init_analyzer(root_dir: Path, config, enable_summaries: bool) -> CodeGraphA
 
 def _run_analyze(args: argparse.Namespace) -> int:
     config, root_dir = _resolve_config_and_root(args)
-    config.chroma_dir().mkdir(parents=True, exist_ok=True)
-    config.reports_dir().mkdir(parents=True, exist_ok=True)
     if not root_dir.is_dir():
         print(f"❌ Error: {root_dir} is not a valid directory for analysis.", file=sys.stderr)
         return 1
+
+    config.chroma_dir().mkdir(parents=True, exist_ok=True)
+    config.reports_dir().mkdir(parents=True, exist_ok=True)
 
     enable_summaries = args.summaries or getattr(config, "summary_generation_enabled", False)
     analyzer = _init_analyzer(root_dir, config, enable_summaries=enable_summaries)
 
     output_path = args.output
     if not Path(args.output).is_absolute():
-        output_path = str(config.reports_dir() / args.output)
+        if args.output == "code_analysis_report.json":
+            output_path = str(root_dir / args.output)
+        else:
+            output_path = str(config.reports_dir() / args.output)
 
     analyzer.export_report(output_path)
 
-    drift_enabled = args.drift or getattr(config, "drift_enabled", False)
+    drift_enabled = bool(args.drift)
     if drift_enabled:
         drift_report = DriftAnalyzer(
             project_root=str(root_dir),
