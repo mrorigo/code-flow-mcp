@@ -50,7 +50,7 @@ The tool provides three main interfaces:
 - **Background Maintenance:** Automatic cleanup of stale file references in the vector store to maintain index accuracy.
 - **Tool-based API:** Exposes analysis capabilities through MCP tools for AI assistants.
 - **Session Context:** Maintains per-session state for complex analysis workflows.
-- **Comprehensive Tools:** Semantic search, call graph generation, function metadata retrieval, entry point identification, and Mermaid graph generation.
+- **Comprehensive Tools:** Semantic search, call graph generation, function metadata retrieval, entry point identification, impact analysis, and Mermaid graph generation.
 
 ### CLI Tool Features
 - **Batch Analysis:** Complete codebase analysis with report generation.

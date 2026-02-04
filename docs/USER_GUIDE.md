@@ -23,6 +23,7 @@ This guide explains how to install, configure, and use CodeFlow’s CLI and MCP 
   - [Semantic Search](#semantic-search)
   - [Call Graphs and Mermaid](#call-graphs-and-mermaid)
   - [Entry Points and Function Metadata](#entry-points-and-function-metadata)
+  - [Impact Analysis (MCP)](#impact-analysis-mcp)
   - [Structured Data Indexing](#structured-data-indexing)
   - [Drift Detection](#drift-detection)
     - [Enabling Drift](#enabling-drift)
@@ -381,6 +382,45 @@ Entry points are derived from call graph analysis and scored for priority.
   - Returns minimal fields by default; set `include_details=true` for full function metadata.
   - Includes `entry_point_score`, `entry_point_category`, `entry_point_priority`, and `entry_point_signals` in each result.
 - MCP tool: `get_function_metadata`
+
+## Impact Analysis (MCP)
+
+The MCP server provides `impact_analysis` to compute impacted nodes from a change set using the call graph. It accepts explicit file lists (primary input) and falls back to files modified since the last analysis if no list is provided.
+
+**Tool:** `impact_analysis`
+
+**Inputs:**
+- `changed_files` (list of paths; optional)
+- `depth` (int, default 2)
+- `direction` (`up` | `down` | `both`)
+- `include_paths` (bool, default false)
+
+**Example (explicit files):**
+
+```json
+{
+  "tool": "impact_analysis",
+  "input": {
+    "changed_files": ["src/services/user_service.py"],
+    "depth": 2,
+    "direction": "both",
+    "include_paths": false
+  }
+}
+```
+
+**Example (watch events since last analysis):**
+
+```json
+{
+  "tool": "impact_analysis",
+  "input": {
+    "depth": 2,
+    "direction": "up",
+    "include_paths": true
+  }
+}
+```
 
 ## Structured Data Indexing
 

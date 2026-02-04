@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional, Dict, Any
+from datetime import datetime, timezone
 import asyncio
 import logging
 import threading
@@ -102,6 +103,9 @@ class MCPAnalyzer:
         self.analysis_state = AnalysisState.NOT_STARTED
         self.analysis_task: Optional[asyncio.Task] = None
         self.analysis_error: Optional[Exception] = None
+
+        # Track changed files since last analysis (for impact analysis)
+        self.changed_files_since_analysis: Dict[str, float] = {}
 
         # Initialize vector store if path exists
         chroma_dir = config.get('chroma_dir')
@@ -312,6 +316,9 @@ class MCPAnalyzer:
         # Build call graph with all elements
         self.builder.build_from_elements(all_elements)
 
+        # Reset change tracking after a full analysis run
+        self.changed_files_since_analysis.clear()
+
         # Populate vector store if available
         if self.vector_store:
             await asyncio.to_thread(self._populate_vector_store)
@@ -398,6 +405,7 @@ class MCPAnalyzer:
             return
 
         logging.info(f"Starting incremental update for {file_path}")
+        self._record_changed_file(resolved_path)
         await asyncio.sleep(1)  # Debounce stub
         
         # Handle structured data files
@@ -432,6 +440,10 @@ class MCPAnalyzer:
             match_file_against_pattern(file_path, pattern, gitignore_dir, self.project_root)
             for pattern, gitignore_dir in patterns_with_dirs
         )
+
+    def _record_changed_file(self, file_path: Path) -> None:
+        normalized = file_path.resolve().as_posix()
+        self.changed_files_since_analysis[normalized] = datetime.now(timezone.utc).timestamp()
 
     async def cleanup_stale_references(self) -> Dict[str, Any]:
         """

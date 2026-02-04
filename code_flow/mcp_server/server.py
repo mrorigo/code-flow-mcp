@@ -98,6 +98,14 @@ class DriftResponse(BaseModel):
     report: dict
     analysis_status: Optional[str] = None
 
+
+class ImpactAnalysisResponse(BaseModel):
+    inputs: dict
+    impacted_nodes: list[dict]
+    summary: dict
+    paths: Optional[list[dict]] = None
+    analysis_status: Optional[str] = None
+
 # Global logger for MCP
 logger = logging.getLogger("mcp")
 logger.addHandler(logging.StreamHandler(sys.stderr))
@@ -155,6 +163,65 @@ def _coerce_field_default(value: Any, fallback: Any) -> Any:
     if isinstance(value, FieldInfo):
         return value.default
     return value if value is not None else fallback
+
+
+def _build_impact_summary(nodes: list[dict]) -> dict:
+    summary = {
+        "total": len(nodes),
+        "by_kind": {},
+    }
+    for node in nodes:
+        kind = node.get("kind") or "unknown"
+        summary["by_kind"][kind] = summary["by_kind"].get(kind, 0) + 1
+    return summary
+
+
+def _serialize_node(node: Any) -> dict:
+    return {
+        "name": getattr(node, "name", None),
+        "fully_qualified_name": getattr(node, "fully_qualified_name", None),
+        "file_path": getattr(node, "file_path", None),
+        "line_start": getattr(node, "line_start", None),
+        "line_end": getattr(node, "line_end", None),
+        "kind": "function",
+    }
+
+
+def _compute_impacts(builder, changed_files: list[str], depth: int, direction: str, include_paths: bool):
+    changed_set = {Path(path).resolve().as_posix() for path in changed_files}
+    seed_nodes = [node for node in builder.functions.values() if Path(node.file_path).resolve().as_posix() in changed_set]
+
+    impacted_fqns = {node.fully_qualified_name for node in seed_nodes}
+    impacted_nodes = {node.fully_qualified_name: node for node in seed_nodes}
+    paths = []
+
+    def _record_path(from_node, to_node):
+        if not include_paths:
+            return
+        paths.append({
+            "from": getattr(from_node, "fully_qualified_name", None),
+            "to": getattr(to_node, "fully_qualified_name", None),
+        })
+
+    frontier = list(seed_nodes)
+    for _ in range(max(0, int(depth))):
+        next_frontier = []
+        for node in frontier:
+            neighbors = []
+            if direction in ("up", "both"):
+                neighbors.extend([builder.functions.get(edge.caller) for edge in node.incoming_edges])
+            if direction in ("down", "both"):
+                neighbors.extend([builder.functions.get(edge.callee) for edge in node.outgoing_edges])
+            neighbors = [neighbor for neighbor in neighbors if neighbor]
+            for neighbor in neighbors:
+                if neighbor.fully_qualified_name not in impacted_fqns:
+                    impacted_fqns.add(neighbor.fully_qualified_name)
+                    impacted_nodes[neighbor.fully_qualified_name] = neighbor
+                    next_frontier.append(neighbor)
+                _record_path(node, neighbor)
+        frontier = next_frontier
+
+    return list(impacted_nodes.values()), paths
 
 
 def _extract_memory_tags(value: Any) -> List[str]:
@@ -643,6 +710,42 @@ async def query_entry_points(
         limit=safe_limit,
         offset=safe_offset,
         include_details=include_details,
+        analysis_status=analysis_status,
+    )
+
+
+@server.tool(name="impact_analysis")
+async def impact_analysis(
+    changed_files: list[str] = Field(default_factory=list, description="Changed file paths"),
+    depth: int = Field(default=2, description="Call graph traversal depth"),
+    direction: str = Field(default="both", description="Traversal direction: up|down|both"),
+    include_paths: bool = Field(default=False, description="Include call paths in response"),
+) -> ImpactAnalysisResponse:
+    analysis_status = server.analyzer.analysis_state.value if hasattr(server, 'analyzer') and server.analyzer else None
+
+    if not server.analyzer or not server.analyzer.builder:
+        raise MCPError(5001, "Builder unavailable", "Ensure the call graph builder is properly initialized")
+
+    normalized_files = [str(Path(path).resolve()) for path in (changed_files or [])]
+    if not normalized_files:
+        normalized_files = list(server.analyzer.changed_files_since_analysis.keys())
+
+    inputs = {
+        "changed_files": normalized_files,
+        "source": "explicit" if changed_files else "watch",
+        "depth": depth,
+        "direction": direction,
+        "include_paths": include_paths,
+    }
+
+    impacted_nodes, paths = _compute_impacts(server.analyzer.builder, normalized_files, depth, direction, include_paths)
+    serialized_nodes = [_serialize_node(node) for node in impacted_nodes]
+
+    return ImpactAnalysisResponse(
+        inputs=inputs,
+        impacted_nodes=serialized_nodes,
+        summary=_build_impact_summary(serialized_nodes),
+        paths=paths if include_paths else None,
         analysis_status=analysis_status,
     )
 

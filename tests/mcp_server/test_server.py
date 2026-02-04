@@ -1,5 +1,6 @@
 import pytest
 import sys
+from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 import logging
 import uuid
@@ -608,6 +609,42 @@ async def test_generate_mermaid_graph_tool_no_builder():
         assert exc_info.value.code == 5001
         assert "Builder unavailable" in str(exc_info.value)
         assert exc_info.value.data["hint"] == "Ensure the call graph builder is properly initialized"
+    finally:
+        if hasattr(server, 'analyzer'):
+            delattr(server, 'analyzer')
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_tool_success():
+    """Test impact_analysis tool with explicit changed files."""
+    from code_flow.mcp_server.server import impact_analysis, ImpactAnalysisResponse, server
+
+    mock_node = MagicMock()
+    mock_node.name = "func"
+    mock_node.fully_qualified_name = "module.func"
+    mock_node.file_path = "/tmp/test.py"
+    mock_node.line_start = 1
+    mock_node.line_end = 2
+    mock_node.incoming_edges = []
+    mock_node.outgoing_edges = []
+
+    mock_builder = MagicMock()
+    mock_builder.functions = {"module.func": mock_node}
+
+    mock_analyzer = MagicMock()
+    mock_analyzer.analysis_state = AnalysisState.COMPLETED
+    mock_analyzer.builder = mock_builder
+    mock_analyzer.changed_files_since_analysis = {}
+
+    server.analyzer = mock_analyzer
+
+    try:
+        response = await impact_analysis(changed_files=["/tmp/test.py"], depth=1, direction="both")
+
+        assert isinstance(response, ImpactAnalysisResponse)
+        assert response.inputs["changed_files"] == [str(Path("/tmp/test.py").resolve())]
+        assert response.summary["total"] == 1
+        assert response.impacted_nodes[0]["fully_qualified_name"] == "module.func"
     finally:
         if hasattr(server, 'analyzer'):
             delattr(server, 'analyzer')

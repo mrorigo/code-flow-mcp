@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "code-flow"
 requires-python = ">=3.11"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
     "mcp[cli]",
     "pyyaml",

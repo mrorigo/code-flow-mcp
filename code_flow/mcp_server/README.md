@@ -166,6 +166,22 @@ Notes:
 - Requires `drift_enabled: true` in config.
 - Uses the current analysis state; run after initial indexing completes.
 
+### impact_analysis
+Compute impacted nodes from a change set using the call graph.
+```json
+{
+  "input": {
+    "changed_files": ["src/services/user_service.py"],
+    "depth": 2,
+    "direction": "both",
+    "include_paths": false
+  }
+}
+```
+Notes:
+- `changed_files` is optional; if omitted, the server uses files modified since the last analysis.
+- `include_paths=true` returns call paths explaining the impact.
+
 ### reinforce_memory
 Create or reinforce a memory entry in Cortex.
 ```json
@@ -235,3 +251,4 @@ Retrieve current session context.
     "key": "value"
   }
 }
+
