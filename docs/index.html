@@ -242,6 +242,20 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mt-8">
+                <a href="#feature-impact-analysis"
+                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
+                    <div
+                        class="w-12 h-12 bg-teal-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Impact Analysis</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Trace downstream and upstream impact from changed
+                        files with call graph traversal.</p>
+                </a>
+
                 <a href="#feature-call-graph"
                     class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
                     <div
@@ -285,19 +299,6 @@
                         analyzes Python, TypeScript/TSX, and Rust codebases.</p>
                 </a>
 
-                <a href="#feature-meta-rag"
-                    class="glass-panel p-6 rounded-2xl hover:bg-slate-800/50 transition-colors group block">
-                    <div
-                        class="w-12 h-12 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-500/20 transition-colors">
-                        <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M7 8h10M7 12h6m-6 4h10M5 6h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-semibold text-white mb-2">Meta-RAG Summaries</h3>
-                    <p class="text-slate-400 text-sm leading-relaxed">Optional Meta-RAG summaries for compact
-                        retrieval and lower token cost.</p>
-                </a>
             </div>
         </div>
     </div>
@@ -359,12 +360,13 @@
                                 <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor"
                                     viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        d="M4 6h16M4 12h10M4 18h16"></path>
                                 </svg>
                             </div>
                             <div>
-                                <h4 class="text-white font-medium">Analysis Status Awareness</h4>
-                                <p class="text-slate-500 text-sm">Tools respond with progress while indexing runs.</p>
+                                <h4 class="text-white font-medium">Impact Analysis</h4>
+                                <p class="text-slate-500 text-sm">Map downstream and upstream impacts from changed
+                                    files.</p>
                             </div>
                         </li>
                     </ul>
@@ -616,6 +618,60 @@
                             <li class="flex items-start gap-3">
                                 <span class="mt-1 w-2 h-2 rounded-full bg-pink-400"></span>
                                 Reports surface actionable findings with ownership metadata.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail: Impact Analysis -->
+    <div id="feature-impact-analysis" class="py-24 bg-slate-950 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row-reverse items-center gap-16">
+                <div class="lg:w-1/2">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-sm text-teal-400 mb-6">
+                        Change Intelligence
+                    </div>
+                    <h2 class="text-3xl font-bold text-white mb-6">Impact Analysis</h2>
+                    <p class="text-slate-400 text-lg mb-8">
+                        Convert change sets into affected call paths. The MCP server traverses the call graph to surface
+                        upstream and downstream impacts.
+                    </p>
+                    <ul class="space-y-3 text-slate-300">
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                            Highlight callers and callees tied to changed files.
+                        </li>
+                        <li class="flex items-center gap-3">
+                            <svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Includes structured file impacts when provided.
+                        </li>
+                    </ul>
+                </div>
+                <div class="lg:w-1/2 w-full">
+                    <div class="glass-panel p-6 rounded-2xl bg-slate-900/60 border border-white/5">
+                        <h3 class="text-lg font-semibold text-white mb-4">Impact signals</h3>
+                        <ul class="space-y-3 text-slate-300">
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-teal-400"></span>
+                                File-to-function mapping anchors the impact set.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-teal-400"></span>
+                                Traverse incoming or outgoing edges by depth.
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1 w-2 h-2 rounded-full bg-teal-400"></span>
+                                Optional path tracking for audit and reviews.
                             </li>
                         </ul>
                     </div>
