@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 import asyncio
+import time
+from typing import Any, cast
 from code_flow.core.models import FunctionElement
 from code_flow.mcp_server.analyzer import MCPAnalyzer
 
@@ -143,8 +145,8 @@ async def test_analyze(mock_core_components):
 
     # If vector store exists, check populate was called
     if analyzer.vector_store:
-        analyzer.vector_store.add_function_nodes_batch.assert_called()
-        analyzer.vector_store.add_edges_batch.assert_called()
+        cast(Any, analyzer.vector_store.add_function_nodes_batch).assert_called()
+        cast(Any, analyzer.vector_store.add_edges_batch).assert_called()
 
 
 @pytest.mark.asyncio
@@ -229,11 +231,13 @@ async def test_watcher_handler_on_modified(mock_core_components):
         'chroma_dir': './.codeflow/chroma',
         'memory_dir': './.codeflow/memory',
         'reports_dir': './.codeflow/reports',
+        'incremental_debounce_seconds': 0.05,
         'memory_enabled': False
     }
 
     analyzer = MCPAnalyzer(config)
     analyzer.loop = asyncio.get_running_loop()
+    analyzer._is_ignored_path = MagicMock(return_value=False)
 
     # Mock the extractor for incremental update
     mock_elements = [
@@ -253,7 +257,7 @@ async def test_watcher_handler_on_modified(mock_core_components):
         )
     ]
     # Set fqn for the element
-    mock_elements[0].fqn = 'new_func'
+    cast(Any, mock_elements[0]).fqn = 'new_func'
     analyzer.extractor.extract_from_file = MagicMock(return_value=mock_elements)
     analyzer.builder.functions = {}  # Empty initially
 
@@ -280,7 +284,7 @@ async def test_watcher_handler_on_modified(mock_core_components):
         handler.on_modified(mock_event)
 
         # Wait for the task to complete
-        await asyncio.sleep(2)  # Since debounce sleeps 1s
+        await asyncio.sleep(0.2)
 
         # Assert _incremental_update was called (via the task)
         analyzer.extractor.extract_from_file.assert_called_once_with(Path('test.py'))
@@ -288,3 +292,104 @@ async def test_watcher_handler_on_modified(mock_core_components):
         assert 'new_func' in analyzer.builder.functions
         # Since vector store is mocked, check add_function_node was called
         analyzer.vector_store.add_function_node.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_watcher_handler_rapid_duplicate_events_debounced(mock_core_components):
+    """Rapid duplicate events for one file should result in one extraction pass."""
+    mock_extractor, mock_builder, mock_store = mock_core_components
+
+    config = {
+        'project_root': '.',
+        'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
+        'incremental_debounce_seconds': 0.05,
+        'memory_enabled': False
+    }
+
+    analyzer = MCPAnalyzer(config)
+    analyzer.loop = asyncio.get_running_loop()
+    analyzer._is_ignored_path = MagicMock(return_value=False)
+
+    mock_elements = [
+        FunctionElement(
+            name='new_func',
+            kind='function',
+            file_path='test.py',
+            line_start=1,
+            line_end=5,
+            full_source='def new_func(): pass',
+            parameters=[],
+            return_type=None,
+            is_async=False,
+            docstring=None,
+            is_method=False,
+            class_name=None
+        )
+    ]
+    cast(Any, mock_elements[0]).fqn = 'new_func'
+    analyzer.extractor.extract_from_file = MagicMock(return_value=mock_elements)
+    analyzer.builder.functions = {}
+
+    analyzer.vector_store = MagicMock()
+    analyzer.vector_store.add_function_node = MagicMock()
+
+    from code_flow.mcp_server.analyzer import WatcherHandler
+    handler = WatcherHandler(analyzer=analyzer)
+
+    mock_event = MagicMock()
+    mock_event.src_path = 'test.py'
+    mock_event.is_directory = False
+
+    with patch('builtins.open', MagicMock()) as mock_open:
+        mock_file = MagicMock()
+        mock_file.read.return_value = 'def new_func(): pass'
+        mock_open.return_value.__enter__.return_value = mock_file
+
+        handler.on_modified(mock_event)
+        handler.on_modified(mock_event)
+        handler.on_modified(mock_event)
+
+        await asyncio.sleep(0.25)
+
+    analyzer.extractor.extract_from_file.assert_called_once_with(Path('test.py'))
+    analyzer.vector_store.add_function_node.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_inflight_dedupe_schedules_single_follow_up(mock_core_components):
+    """A duplicate event during in-flight processing should schedule at most one follow-up pass."""
+    mock_extractor, mock_builder, mock_store = mock_core_components
+
+    config = {
+        'project_root': '.',
+        'watch_directories': ['.'],
+        'chroma_dir': './.codeflow/chroma',
+        'memory_dir': './.codeflow/memory',
+        'reports_dir': './.codeflow/reports',
+        'incremental_debounce_seconds': 0.01,
+        'incremental_inflight_dedupe_enabled': True,
+        'incremental_max_pending_per_file': 1,
+        'memory_enabled': False
+    }
+
+    analyzer = MCPAnalyzer(config)
+    analyzer._is_ignored_path = MagicMock(return_value=False)
+    analyzer.schedule_incremental_update = MagicMock()
+
+    def slow_extract(_path):
+        time.sleep(0.05)
+        return []
+
+    analyzer.extractor.extract_from_file = MagicMock(side_effect=slow_extract)
+
+    task1 = asyncio.create_task(analyzer._run_incremental_update('test.py'))
+    await asyncio.sleep(0.01)
+    task2 = asyncio.create_task(analyzer._run_incremental_update('test.py'))
+
+    await asyncio.gather(task1, task2)
+
+    analyzer.extractor.extract_from_file.assert_called_once_with(Path('test.py'))
+    analyzer.schedule_incremental_update.assert_called_once_with('test.py')

@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 from datetime import datetime, timezone
 import asyncio
 import logging
 import threading
 import time
+import concurrent.futures
 from enum import Enum
 
 import watchdog.observers
@@ -57,10 +58,7 @@ class WatcherHandler(FileSystemEventHandler):
             if not loop or loop.is_closed() or not loop.is_running():
                 logging.debug("Skipping incremental update: event loop is not available")
                 return
-            asyncio.run_coroutine_threadsafe(
-                self.analyzer._incremental_update(event.src_path),
-                loop,
-            )
+            self.analyzer.schedule_incremental_update(event.src_path)
 
 
 class MCPAnalyzer:
@@ -106,6 +104,21 @@ class MCPAnalyzer:
 
         # Track changed files since last analysis (for impact analysis)
         self.changed_files_since_analysis: Dict[str, float] = {}
+
+        # Incremental update dedupe/debounce configuration
+        self.incremental_debounce_seconds = float(config.get('incremental_debounce_seconds', 0.5))
+        self.incremental_inflight_dedupe_enabled = bool(config.get('incremental_inflight_dedupe_enabled', True))
+        self.incremental_max_pending_per_file = int(config.get('incremental_max_pending_per_file', 1))
+
+        # Incremental update runtime state
+        self._incremental_state_lock = threading.Lock()
+        self._pending_update_versions: Dict[str, int] = {}
+        self._pending_update_futures: Dict[str, concurrent.futures.Future] = {}
+        self._inflight_files = set()
+        self._pending_after_inflight: Dict[str, int] = {}
+
+        # Keep loop reference nullable until analyze() sets it.
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Initialize vector store if path exists
         chroma_dir = config.get('chroma_dir')
@@ -396,43 +409,121 @@ class MCPAnalyzer:
                 except Exception as e2:
                     logging.warning(f"Could not add edge {edge.caller} -> {edge.callee}: {e2}")
 
-    async def _incremental_update(self, file_path: str):
+    def _normalize_file_path(self, file_path: str) -> Path:
         resolved_path = Path(file_path)
         if not resolved_path.is_absolute():
             resolved_path = (self.project_root / resolved_path).resolve()
+        return resolved_path
+
+    def schedule_incremental_update(self, file_path: str) -> None:
+        """Schedule a per-file debounced incremental update."""
+        loop = getattr(self, "loop", None)
+        if not loop or loop.is_closed() or not loop.is_running():
+            logging.debug("Skipping incremental update scheduling: event loop is not available")
+            return
+
+        normalized = self._normalize_file_path(file_path).as_posix()
+
+        with self._incremental_state_lock:
+            next_version = self._pending_update_versions.get(normalized, 0) + 1
+            self._pending_update_versions[normalized] = next_version
+
+            existing = self._pending_update_futures.get(normalized)
+            if existing and not existing.done():
+                existing.cancel()
+
+            future = asyncio.run_coroutine_threadsafe(
+                self._debounced_incremental_update(file_path=file_path, normalized=normalized, version=next_version),
+                loop,
+            )
+            self._pending_update_futures[normalized] = future
+
+    async def _debounced_incremental_update(self, file_path: str, normalized: str, version: int) -> None:
+        try:
+            await asyncio.sleep(self.incremental_debounce_seconds)
+            await self._run_incremental_update(file_path)
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logging.exception("Incremental update failed for %s", file_path)
+        finally:
+            with self._incremental_state_lock:
+                if self._pending_update_versions.get(normalized) == version:
+                    self._pending_update_versions.pop(normalized, None)
+                    self._pending_update_futures.pop(normalized, None)
+
+    async def _run_incremental_update(self, file_path: str):
+        resolved_path = self._normalize_file_path(file_path)
         if self._is_ignored_path(resolved_path):
             logging.info("Skipping incremental update for gitignored path: %s", resolved_path)
             return
 
-        logging.info(f"Starting incremental update for {file_path}")
-        self._record_changed_file(resolved_path)
-        await asyncio.sleep(1)  # Debounce stub
-        
-        # Handle structured data files
-        if any(file_path.endswith(ext) for ext in ['.json', '.yaml', '.yml']):
-            elements = await asyncio.to_thread(self.structured_extractor.extract_from_file, Path(file_path))
-            logging.info(f"Extracted {len(elements)} structured elements from {file_path}")
-            if self.vector_store:
-                await asyncio.to_thread(self.vector_store.add_structured_elements_batch, elements)
-            return
+        normalized = resolved_path.as_posix()
+        if self.incremental_inflight_dedupe_enabled:
+            with self._incremental_state_lock:
+                if normalized in self._inflight_files:
+                    pending = self._pending_after_inflight.get(normalized, 0)
+                    if pending < self.incremental_max_pending_per_file:
+                        self._pending_after_inflight[normalized] = pending + 1
+                    return
+                self._inflight_files.add(normalized)
 
-        elements = await asyncio.to_thread(self.extractor.extract_from_file, Path(file_path))
-        logging.info(f"Extracted {len(elements)} elements from {file_path}")
-        # Update builder/store incrementally (add new, skip same hash); if delete, remove by fqn.
-        # For simplicity, re-analyze the file and update
-        # Assuming elements have hash or something, but for now, just add/update
-        for element in elements:
-            if element.fqn not in self.builder.functions:
-                self.builder.functions[element.fqn] = element
-            # For vector store, if available, add if not present
-            if self.vector_store and element.fqn not in [n.fqn for n in self.vector_store.get_all_nodes()]:
-                with open(element.file_path, 'r', encoding='utf-8') as f:
-                    source = f.read()
-                self.vector_store.add_function_node(element, source)
-                
-                # Enqueue for summarization if enabled
-                if self.summary_processor:
-                    self.summary_processor.enqueue(element.fqn)
+        try:
+            logging.info(f"Starting incremental update for {file_path}")
+            self._record_changed_file(resolved_path)
+
+            # Handle structured data files
+            if any(file_path.endswith(ext) for ext in ['.json', '.yaml', '.yml']):
+                elements = await asyncio.to_thread(self.structured_extractor.extract_from_file, Path(file_path))
+                logging.info(f"Extracted {len(elements)} structured elements from {file_path}")
+                if self.vector_store:
+                    await asyncio.to_thread(self.vector_store.add_structured_elements_batch, elements)
+                return
+
+            elements = await asyncio.to_thread(self.extractor.extract_from_file, Path(file_path))
+            logging.info(f"Extracted {len(elements)} elements from {file_path}")
+            # Update builder/store incrementally (add new, skip same hash); if delete, remove by fqn.
+            # For simplicity, re-analyze the file and update
+            # Assuming elements have hash or something, but for now, just add/update
+            for element in elements:
+                element_fqn = getattr(element, "fqn", None)
+                if not element_fqn:
+                    continue
+
+                if element_fqn not in self.builder.functions:
+                    builder_functions = cast(Dict[str, Any], self.builder.functions)
+                    builder_functions[element_fqn] = element
+
+                # For vector store, if available, add if not present
+                if self.vector_store:
+                    with open(element.file_path, 'r', encoding='utf-8') as f:
+                        source = f.read()
+
+                    add_function_node = getattr(self.vector_store, "add_function_node", None)
+                    if callable(add_function_node):
+                        add_function_node(cast(Any, element), source)
+
+                    # Enqueue for summarization if enabled
+                    if self.summary_processor:
+                        self.summary_processor.enqueue(element_fqn)
+        finally:
+            if self.incremental_inflight_dedupe_enabled:
+                should_schedule_follow_up = False
+                with self._incremental_state_lock:
+                    self._inflight_files.discard(normalized)
+                    pending = self._pending_after_inflight.get(normalized, 0)
+                    if pending > 0:
+                        self._pending_after_inflight[normalized] = pending - 1
+                        should_schedule_follow_up = True
+                    if self._pending_after_inflight.get(normalized, 0) <= 0:
+                        self._pending_after_inflight.pop(normalized, None)
+
+                if should_schedule_follow_up:
+                    self.schedule_incremental_update(file_path)
+
+    async def _incremental_update(self, file_path: str):
+        """Backward-compatible entrypoint for tests/callers."""
+        await self._run_incremental_update(file_path)
 
     def _is_ignored_path(self, file_path: Path) -> bool:
         patterns_with_dirs = get_gitignore_patterns(file_path.parent)
@@ -460,6 +551,16 @@ class MCPAnalyzer:
 
     def shutdown(self) -> None:
         """Shutdown the analyzer and cleanup resources."""
+        # Cancel pending incremental update futures
+        with self._incremental_state_lock:
+            for future in self._pending_update_futures.values():
+                if future and not future.done():
+                    future.cancel()
+            self._pending_update_futures.clear()
+            self._pending_update_versions.clear()
+            self._pending_after_inflight.clear()
+            self._inflight_files.clear()
+
         # Stop background cleanup
         self.stop_background_cleanup()
 

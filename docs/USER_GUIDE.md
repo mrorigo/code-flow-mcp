@@ -128,10 +128,10 @@ These defaults apply when a value is not provided in the config file or CLI args
 project_root: "/path/to/project"
 watch_directories: ["."]
 ignored_patterns: ["venv", "**/__pycache__", ".git", ".idea", ".vscode", "node_modules"]
-chromadb_path: "./code_vectors_chroma"
+chromadb_path: "./.codeflow/chroma"
 max_graph_depth: 3
-embedding_model: "all-MiniLM-L6-v2"
-max_tokens: 256
+embedding_model: "all-MiniLM-L6-v2" # Or `jinaai/jina-embeddings-v2-small-en` or `fast`
+max_tokens: 256 # Adapt to model
 language: "python"
 min_similarity: 0.1
 call_graph_confidence_threshold: 0.8

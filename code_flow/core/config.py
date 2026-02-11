@@ -31,6 +31,9 @@ DEFAULT_MAX_TOKENS = 256
 DEFAULT_LANGUAGE = "python"
 DEFAULT_MIN_SIMILARITY = 0.1
 DEFAULT_CALL_GRAPH_CONFIDENCE_THRESHOLD = 0.8
+DEFAULT_INCREMENTAL_DEBOUNCE_SECONDS = 0.5
+DEFAULT_INCREMENTAL_INFLIGHT_DEDUPE_ENABLED = True
+DEFAULT_INCREMENTAL_MAX_PENDING_PER_FILE = 1
 
 # Cortex memory defaults
 DEFAULT_MEMORY_ENABLED = True
@@ -71,6 +74,9 @@ class CodeFlowConfig(BaseModel):
     language: str = Field(default=DEFAULT_LANGUAGE)
     min_similarity: float = Field(default=DEFAULT_MIN_SIMILARITY)
     call_graph_confidence_threshold: float = Field(default=DEFAULT_CALL_GRAPH_CONFIDENCE_THRESHOLD)
+    incremental_debounce_seconds: float = Field(default=DEFAULT_INCREMENTAL_DEBOUNCE_SECONDS)
+    incremental_inflight_dedupe_enabled: bool = Field(default=DEFAULT_INCREMENTAL_INFLIGHT_DEDUPE_ENABLED)
+    incremental_max_pending_per_file: int = Field(default=DEFAULT_INCREMENTAL_MAX_PENDING_PER_FILE)
     
     # Optional LLM config for summaries (can be expanded)
     summary_generation_enabled: bool = False

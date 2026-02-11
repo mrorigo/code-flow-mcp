@@ -287,6 +287,9 @@ embedding_model: "all-MiniLM-L6-v2"  # Embedding model to use
 max_tokens: 256  # Maximum tokens per chunk
 language: "python" # Default language ("python", "typescript", or "rust")
 call_graph_confidence_threshold: 0.8
+incremental_debounce_seconds: 0.5  # Per-file debounce window for watcher events
+incremental_inflight_dedupe_enabled: true  # Prevent concurrent duplicate re-indexing for the same file
+incremental_max_pending_per_file: 1  # Max follow-up runs queued while a file is already in-flight
 ```
 
 Customize these settings by creating your own config file and passing it with `--config`.
